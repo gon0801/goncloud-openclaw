@@ -929,6 +929,31 @@ class PublicadorNativo(unittest.TestCase):
             "la copia a medias quedó tirada en la carpeta de respaldos",
         )
 
+    def test_a_failed_final_replace_restores_what_was_set_aside(self):
+        # C4 de SUA03-G5c: lo apartado (.viejo-*) se borra solo después de que entra
+        # el os.replace final; si ese replace falla, lo apartado vuelve a su lugar.
+        origen = self.tmp / "origen-c4"
+        (origen / "intern").mkdir(parents=True)
+        (origen / "SKILL.md").write_text("nueva\n", encoding="utf-8")
+        destino = self.tmp / "respaldos" / "poteto-mode"
+        destino.mkdir(parents=True)
+        (destino / "SKILL.md").write_text("de antes\n", encoding="utf-8")
+        reemplazo_real = os.replace
+        llamadas = []
+
+        def reemplazo_que_falla_en_la_segunda(fuente, meta, **kwargs):
+            llamadas.append(1)
+            if len(llamadas) == 2:
+                raise OSError("replace final roto")
+            return reemplazo_real(fuente, meta, **kwargs)
+
+        with mock.patch.object(self.armador.os, "replace", reemplazo_que_falla_en_la_segunda):
+            with self.assertRaises(OSError):
+                self.armador.respalda_carpeta(origen, destino)
+        self.assertEqual(len(llamadas), 2)
+        self.assertEqual((destino / "SKILL.md").read_bytes(), b"de antes\n")
+        self.assertEqual([p.name for p in destino.parent.iterdir()], ["poteto-mode"])
+
     def test_two_reverts_in_a_row_do_not_invent_a_conflict(self):
         # C1a (R1 del veredicto r3): una edición del dueño fuera del bloque entre la gen 2
         # y la gen 3 que pasó por --leer no conflicta la segunda reversa.
