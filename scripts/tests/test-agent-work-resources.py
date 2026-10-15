@@ -237,7 +237,7 @@ class ResourceTests(unittest.TestCase):
         host.report("host-test", {
             "schema": "agent-work.result.v1", "kind": "produced", "hostId": "host-test", "taskId": "task-1",
             "generation": 1, "instanceId": "instance-1", "producerId": "opencode", "capability": "cap-task-1",
-            "observedRevision": abandoned.input_revision, "typedPayload": {"verdict": "approved"},
+            "observedRevision": abandoned.input_revision, "typedPayload": {"verdict": "approved", "evidenceRef": "evidence.txt"},
             "artifactRef": str(artifact), "digest": hashlib.sha256(artifact.read_bytes()).hexdigest()})
         self.assertEqual(host.spool.get(operation_id(self.key))["status"], "abandoned",
                          "a late result put the abandoned operation back on the instance")
@@ -274,7 +274,7 @@ class ResourceTests(unittest.TestCase):
         self.host.report("host-test", {
             "schema": "agent-work.result.v1", "kind": "produced", "hostId": "host-test", "taskId": "task-1",
             "generation": 1, "instanceId": "instance-1", "producerId": "opencode", "capability": "cap-task-1",
-            "observedRevision": operation.input_revision, "typedPayload": {"verdict": "approved"},
+            "observedRevision": operation.input_revision, "typedPayload": {"verdict": "approved", "evidenceRef": "evidence.txt"},
             "artifactRef": str(artifact), "digest": hashlib.sha256(artifact.read_bytes()).hexdigest()})
         self.assertFalse(manager.can_take("instance-1"))
 
@@ -1654,7 +1654,7 @@ class LegacyAdoptionTests(unittest.TestCase):
         result = {"schema": "agent-work.result.v1", "kind": "produced", "hostId": "host-test", "taskId": task_id,
                   "generation": 1, "instanceId": instance_id, "producerId": "opencode",
                   "capability": f"cap-{task_id}", "observedRevision": operation.input_revision,
-                  "typedPayload": {"verdict": "approved"}, "artifactRef": str(artifact),
+                  "typedPayload": {"verdict": "approved", "evidenceRef": "evidence.txt"}, "artifactRef": str(artifact),
                   "digest": hashlib.sha256(artifact.read_bytes()).hexdigest()}
         host.report("host-test", result)
         host.flush("host-test", lambda result, _: {
