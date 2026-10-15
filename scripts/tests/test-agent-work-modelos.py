@@ -762,7 +762,8 @@ class Plans(Policies):
                                          "inputRevision": revision or {"kind": "code", "repository": str(self.repo),
                                                                        "sha": "a" * 40},
                                          "resultContract": contract})
-        return self.plan(brief, package=self.package(), **kwargs)
+        kwargs.setdefault("package", self.package())
+        return self.plan(brief, **kwargs)
 
     def test_the_run_folder_is_private_and_holds_the_four_protocol_files(self):
         self.assertEqual(self.run.path, self.root / "spool/runs" / self.OPERATION)
