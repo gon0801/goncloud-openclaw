@@ -389,6 +389,34 @@ def _valida_perfiles(documento: object) -> dict:
             raise ValueError(
                 f"el perfil {perfil.get('id', '?')} no trae resultContracts como lista"
             )
+        # La forma completa que perfiles() lee (B1, Minor de CodeRabbit en #307): routes
+        # lista de objetos con via lista, competence objeto de objetos, agents lista de
+        # objetos con agentId si viene.
+        if not isinstance(perfil["routes"], list) or not all(
+            isinstance(ruta, dict) for ruta in perfil["routes"]
+        ):
+            raise ValueError(
+                f"el perfil {perfil.get('id', '?')} no trae routes como lista de objetos"
+            )
+        for ruta in perfil["routes"]:
+            if not isinstance(ruta.get("via"), list):
+                raise ValueError(
+                    f"el perfil {perfil.get('id', '?')} tiene una ruta sin via como lista"
+                )
+        if not isinstance(perfil["competence"], dict) or not all(
+            isinstance(dato, dict) for dato in perfil["competence"].values()
+        ):
+            raise ValueError(
+                f"el perfil {perfil.get('id', '?')} no trae competence como objeto de objetos"
+            )
+        agentes = perfil.get("agents")
+        if agentes is not None and (
+            not isinstance(agentes, list)
+            or not all(isinstance(agente, dict) and "agentId" in agente for agente in agentes)
+        ):
+            raise ValueError(
+                f"el perfil {perfil.get('id', '?')} no trae agents como lista de objetos con agentId"
+            )
     return documento
 
 
