@@ -47,10 +47,11 @@ class Manifiesto(unittest.TestCase):
         manifiesto, _ = real()
         generaciones = contexto.leer_json(contexto.GENERACIONES)
         contexto.comprobar_generacion(manifiesto, generaciones)
+        # La generación vigente es la 2 (G5d); la 1 queda fijada como historia.
         self.assertEqual(
             (manifiesto["generation"], manifiesto["source"]),
             (
-                1,
+                2,
                 {
                     "repo": "https://github.com/poteto/pstack-claude",
                     "commit": "990cd7b02ac6f3e8f825716f7c72e2f06d8f4a92",
@@ -67,11 +68,11 @@ class Manifiesto(unittest.TestCase):
             contexto.GeneracionSinSubir, "ya está fijada con otro contenido: sube"
         ):
             contexto.comprobar_generacion(otro, generaciones)
-        otro["generation"] = 2
+        otro["generation"] = 3
         otro["digest"] = contexto.digest_de(otro)
-        with self.assertRaisesRegex(contexto.GeneracionSinSubir, "la generación 2 no está fijada"):
+        with self.assertRaisesRegex(contexto.GeneracionSinSubir, "la generación 3 no está fijada"):
             contexto.comprobar_generacion(otro, generaciones)
-        contexto.comprobar_generacion(otro, {**generaciones, "2": otro["digest"]})
+        contexto.comprobar_generacion(otro, {**generaciones, "3": otro["digest"]})
 
     def test_the_texts_of_g_are_the_ones_the_manifest_pins(self):
         manifiesto, _ = real()
@@ -281,7 +282,7 @@ class Construir(unittest.TestCase):
             contexto.archivos_de_la_fuente(self.fuente, ["how", "tdd"])
 
     @unittest.skipUnless(PSTACK.is_dir(), "pide pstack 0.9.84 instalado en esta Mac")
-    def test_the_pinned_source_matches_generation_1(self):
+    def test_the_pinned_source_matches_the_pinned_generation(self):
         manifiesto, perfiles = real()
         destino = self.tmp / "ingenieria"
         contexto.construir(
@@ -296,7 +297,7 @@ class Construir(unittest.TestCase):
             PSTACK,
             perfiles,
             **manifiesto["source"],
-            generation=1,
+            generation=manifiesto["generation"],
             adaptaciones=contexto.leer_adaptaciones(),
             bloque=contexto.BLOQUE.read_bytes(),
         )
@@ -541,7 +542,7 @@ class Textos(unittest.TestCase):
         for texto in (con, sin):
             self.assertTrue(
                 texto.startswith(
-                    f"<!-- sua-contexto inicio generación=1 digest=sha256:{hexa} -->\n"
+                    f"<!-- sua-contexto inicio generación=2 digest=sha256:{hexa} -->\n"
                 )
             )
             self.assertTrue(texto.endswith("\n<!-- sua-contexto fin -->\n"))
