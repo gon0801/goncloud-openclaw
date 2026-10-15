@@ -219,9 +219,10 @@ def repo_photo(repo: str, *, ignored: bool = False) -> dict:
 
 
 def photo_changes(before: dict, after: dict) -> list[str]:
-    # Un campo que la foto previa no tiene no se compara (F4 de DeepSeek en #305): una foto grabada
-    # por un host anterior a `exclude` contaría cualquier foto nueva como cambio de ese campo.
-    return [field for field in PHOTO_FIELDS if field in before and before.get(field) != after.get(field)]
+    # Un campo que la foto previa no tiene SÍ se compara (C7, F2 de DeepSeek en #306, que
+    # revierte el F4 de #305): una foto vieja incompleta no puede dejar la comparación en
+    # [], porque escondería un cambio real detrás de la foto desactualizada.
+    return [field for field in PHOTO_FIELDS if before.get(field) != after.get(field)]
 
 
 class DeliveryDeferred(Exception):
