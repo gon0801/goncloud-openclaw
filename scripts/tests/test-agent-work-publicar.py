@@ -205,6 +205,32 @@ class PublicadorNativo(unittest.TestCase):
         self.publicacion = carpeta
         return carpeta
 
+    def armar_sin_skill(self, generation, nombre):
+        """Publicación de una generación de la que sale una skill: fuera de la fuente y de
+        las skills que declaran los perfiles, como una skill que deja de administrarse."""
+        fuente = self.tmp / f"fuente-{generation}"
+        shutil.copytree(self.fuente, fuente)
+        shutil.rmtree(fuente / "skills" / nombre)
+        perfiles = copy.deepcopy(self.perfiles)
+        for perfil in perfiles["profiles"]:
+            perfil["skills"] = [s for s in perfil["skills"] if s != nombre]
+        manifiesto = contexto.manifiesto(
+            fuente,
+            perfiles,
+            repo="t",
+            commit="t",
+            version="0",
+            generation=generation,
+            adaptaciones=self.adaptaciones,
+            bloque=contexto.BLOQUE.read_bytes(),
+        )
+        carpeta = self.tmp / f"publicacion-{next(self._contador)}"
+        self.armador.armar_publicacion(
+            carpeta, manifiesto, perfiles, self.agentes, fuente=fuente, script=MODULO
+        )
+        self.publicacion = carpeta
+        return carpeta
+
     def skill_del_home(self, nombre):
         return self.home / ".openclaw" / "skills" / nombre / "SKILL.md"
 
@@ -805,6 +831,52 @@ class PublicadorNativo(unittest.TestCase):
             self.estado_del_home()["skills"]["poteto-mode"],
             self.armador.digest_de_carpeta(self.publicacion / "skills" / "poteto-mode"),
         )
+
+    def test_a_skill_that_leaves_the_manifest_is_removed_with_its_backup(self):
+        # C8 (fila L2 de G5): una skill administrada que la generación nueva ya no trae
+        # sale del home y del estado, con su respaldo para la reversa.
+        self.armar()
+        self.publicar("leer")
+        self.publicar("aplicar")
+        self.armar_sin_skill(2, "principle-x")
+        self.publicar("leer")
+        codigo, aplicar = self.publicar("aplicar")
+        self.assertEqual(aplicar["skills"]["principle-x"], "quitado")
+        self.assertEqual(codigo, 0)
+        self.assertFalse((self.home / ".openclaw" / "skills" / "principle-x").exists())
+        estado = self.estado_del_home()
+        self.assertNotIn("principle-x", estado["skills"])
+        respaldo = self.respaldo_de_generacion(2, "principle-x")
+        self.assertEqual(respaldo.read_bytes(), b"principio de juguete\n")
+
+    def test_a_dropped_skill_edited_on_the_mini_is_a_conflict(self):
+        self.armar()
+        self.publicar("leer")
+        self.publicar("aplicar")
+        editada = self.skill_del_home("principle-x")
+        editada.write_bytes(editada.read_bytes() + EDICION_AJENA)
+        self.armar_sin_skill(2, "principle-x")
+        self.publicar("leer")
+        codigo, aplicar = self.publicar("aplicar")
+        self.assertEqual(aplicar["skills"]["principle-x"], "conflicto: cambió después de publicar")
+        self.assertEqual((aplicar["conflictos"], codigo), (1, 4))
+        self.assertIn(EDICION_AJENA, editada.read_bytes())
+        self.assertIn("principle-x", self.estado_del_home()["skills"])
+
+    def test_the_revert_brings_back_a_skill_that_left_the_manifest(self):
+        self.armar()
+        self.publicar("leer")
+        self.publicar("aplicar")
+        self.armar_sin_skill(2, "principle-x")
+        self.publicar("leer")
+        self.publicar("aplicar")
+        self.assertFalse((self.home / ".openclaw" / "skills" / "principle-x").exists())
+        codigo, revertir = self.publicar("revertir")
+        self.assertEqual(revertir["skills"]["principle-x"], "revertido")
+        self.assertEqual((revertir["conflictos"], codigo), (0, 0))
+        self.assertEqual(self.skill_del_home("principle-x").read_bytes(), b"principio de juguete\n")
+        self.assertEqual(self.estado_del_home()["generacion"], 1)
+        self.assertIn("principle-x", self.estado_del_home()["skills"])
 
     def test_a_foreign_skill_with_a_managed_name_stops_that_skill(self):
         self.armar()
