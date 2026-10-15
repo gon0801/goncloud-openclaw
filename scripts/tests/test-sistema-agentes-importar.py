@@ -199,6 +199,34 @@ class Importar(unittest.TestCase):
                 PLANS.replace("| - | cc:完了 |", "| 7.3–7.2 | cc:完了 |"), ["7.1"], ALCANCE, PEDIDO
             )
 
+    def test_un_rango_se_expande_por_numero_de_fila_no_por_posicion_en_el_ledger(self):
+        # En el Plans.md real la 9.9 se define después de la 9.12 (Plans.md:434-435): un rango
+        # leído por posición en el ledger omitía la 9.9 en silencio (9.0–9.12) y arrastraba de
+        # más (9.5–9.9 traía también la 9.10, la 9.11 y la 9.12).
+        orden = list(filas_de(PLANS_REAL))
+        self.assertGreater(orden.index("9.9"), orden.index("9.12"))
+        self.assertEqual(
+            dependencias("9.16", "9.0–9.12", orden),
+            [
+                "9.0",
+                "9.1",
+                "9.2",
+                "9.3",
+                "9.4",
+                "9.5",
+                "9.6",
+                "9.7",
+                "9.8",
+                "9.9",
+                "9.10",
+                "9.11",
+                "9.12",
+            ],
+        )
+        self.assertEqual(
+            dependencias("9.16", "9.5–9.9", orden), ["9.5", "9.6", "9.7", "9.8", "9.9"]
+        )
+
     def test_un_id_repetido_en_una_resumen_anterior_no_mueve_a_nadie(self):
         plan = importar(
             PLANS, ["7.11", "7.12", "7.1", "7.2", "7.3", "7.4", "7.5"], ALCANCE, PEDIDO
