@@ -471,6 +471,14 @@ class BancoE2E(unittest.TestCase):
         deadline = time.monotonic() + 5
         while self.slot.boundary() and time.monotonic() < deadline:
             time.sleep(0.05)
+        restantes = self.slot.boundary()
+        if restantes:
+            # B2 de G5d: un caso que deja procesos vivos no sale OK en silencio
+            # mientras los siguientes se saltan por el grupo ocupado.
+            self.fail(
+                "el caso dejó procesos vivos en el slot: "
+                + ",".join(str(proceso.pid) for proceso in restantes)
+            )
 
     def reached(self, predicate, seconds, what):
         value = wait_for(predicate, seconds)
