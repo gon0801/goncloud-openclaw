@@ -270,18 +270,26 @@ def cli_protocol(assignment: dict, *, run: bool = False, state_dir: Path | None 
                  operation: OperationKey | None = None) -> dict:
     """The assignment spells out what a CLI writes, because the CLI has nothing else to go on. A review
     with a run folder leaves its artifact there, never in the repo it reviews (SUA-03, 4.8)."""
+    escribe = writes_source(assignment, state_dir=state_dir, operation=operation)
     artifact_home = ("inside the directory that holds resultRef, never inside workspaceRef"
-                     if run and not writes_source(assignment, state_dir=state_dir, operation=operation)
+                     if run and not escribe
                      else "inside workspaceRef")
     # La forma exacta según el contrato (C2): el modelo no depende solo de la prosa
-    # de main para armar el typedPayload que R valida estrictamente.
-    forma_de_carga = (
-        'exactly {"verdict": "approved", "evidenceRef": "<artifactRef>"} or {"verdict": '
-        '"changes", "findingsRef": "<artifactRef>"}, with no other field'
-        if assignment["resultContract"] == "review.v1"
-        else 'exactly {"evidenceRef": "<path, relative to workspaceRef, of the file that '
-        'proves the work>"}, with no other field'
-    )
+    # de main para armar el typedPayload que R valida estrictamente. Un ready.v1 que
+    # no escribe fuente deja su artefacto en la carpeta de la corrida (B de G5c), así
+    # que su evidenceRef es <artifactRef>, como en review.v1.
+    if assignment["resultContract"] == "review.v1":
+        forma_de_carga = (
+            'exactly {"verdict": "approved", "evidenceRef": "<artifactRef>"} or {"verdict": '
+            '"changes", "findingsRef": "<artifactRef>"}, with no other field'
+        )
+    elif not escribe:
+        forma_de_carga = 'exactly {"evidenceRef": "<artifactRef>"}, with no other field'
+    else:
+        forma_de_carga = (
+            'exactly {"evidenceRef": "<path, relative to workspaceRef, of the file that '
+            'proves the work>"}, with no other field'
+        )
     return {
         "steps": [
             "Before any other work, write the accept object as JSON to acceptRef, atomically: create the "
