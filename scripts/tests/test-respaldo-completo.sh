@@ -4,7 +4,8 @@
 # recibe-respaldo) con el nombre como SSH_ORIGINAL_COMMAND, como el command= forzado.
 #
 #   1. Corrida buena: backup y extras llegan al servidor con el sha256 local, sin aviso;
-#      el backup se crea con --verify; ssh va con la llave, IdentitiesOnly y BatchMode.
+#      el backup se crea con --verify; ssh va con la llave, IdentitiesOnly, BatchMode y
+#      StrictHostKeyChecking=yes (una llave de servidor desconocida no se acepta nunca).
 #   2. Extras: los plists ai.openclaw.* y ai.goncloud.* sí, otros no; sin sockets; lo que
 #      falta queda anotado en el log y en RESPALDO-EXTRAS.txt; incluye este script.
 #   3. En la Mac quedan los 2 más nuevos de cada tipo.
@@ -118,7 +119,7 @@ tar -tzf "$L/openclaw-backup-$F.tar.gz" | grep -q '^\.openclaw/openclaw.json$' |
 [ "$(avisos)" = 0 ] || fail "una corrida buena avisó"
 grep -q -- "^backup create --output $L/.tmp.[^ ]*/crear --verify --json$" "$SB/oc-llamadas" \
   || fail "backup create no se llamó como se espera: $(cat "$SB/oc-llamadas")"
-[ "$(head -1 "$SB/ssh-llamadas")" = "-i $H/.ssh/claw_goncloud -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=4 clawbackup@10.13.13.1 openclaw-backup-$F.tar.gz" ] \
+[ "$(head -1 "$SB/ssh-llamadas")" = "-i $H/.ssh/claw_goncloud -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=4 clawbackup@10.13.13.1 openclaw-backup-$F.tar.gz" ] \
   || fail "ssh no se llamó como se espera: $(head -1 "$SB/ssh-llamadas")"
 grep -q "terminado sin fallas" "$SB/log" || fail "el log no cierra la corrida buena"
 ls -A "$L" | grep -q '^\.' && fail "quedó el lock o un temporal: $(ls -A "$L" | tr '\n' ' ')"

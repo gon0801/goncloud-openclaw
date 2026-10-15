@@ -110,13 +110,15 @@ TMP="$(mktemp -d "$RC_DIR/.tmp.XXXXXX")"
 log "inicio $RC_FECHA"
 
 # $1 archivo local. Lo sube con su nombre y compara el sha256 que contesta el servidor.
+# StrictHostKeyChecking=yes: known_hosts de la Mini tiene que traer la llave de las dos
+# direcciones de RC_SERVIDORES (cómo agregarla, en el runbook).
 subir() {
   local archivo="$1" nombre local_sha remoto rc intento=1 host causa
   nombre="$(basename "$archivo")"; local_sha="$(sha256 "$archivo")"
   while :; do
     host="$(echo "$RC_SERVIDORES" | awk -v i="$intento" '{ print $((i - 1) % NF + 1) }')"
     con_tope "$RC_TOPE" "$RC_SSH" -i "$RC_LLAVE" -o IdentitiesOnly=yes -o BatchMode=yes \
-      -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20 -o ServerAliveInterval=15 \
+      -o StrictHostKeyChecking=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 \
       -o ServerAliveCountMax=4 "$RC_USUARIO@$host" "$nombre" < "$archivo" > "$TMP/ssh.out" 2> "$TMP/ssh.err"
     rc=$?; remoto="$(cat "$TMP/ssh.out")"
     if [ "$rc" -eq 0 ] && [ "$remoto" = "$local_sha" ]; then
