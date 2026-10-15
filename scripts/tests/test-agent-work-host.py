@@ -507,6 +507,30 @@ class GitPhoto(unittest.TestCase):
             with self.assertRaisesRegex(OSError, "timed out"):
                 host._git(str(self.repo), "rev-parse", "HEAD")
 
+    def test_a_timed_out_git_status_kills_its_child_and_raises_oserror(self):
+        # El mismo contrato que _git: un git status que no termina (un lock, un disco lento) no
+        # cuelga la pasada del host para siempre. Al vencer el plazo, el hijo muere a la fuerza y
+        # el fallo sale como OSError, que repo_photo convierte en PhotoFailed.
+        falso = self.root / "bin"
+        falso.mkdir()
+        (falso / "git").write_text("#!/bin/sh\nprintf '?? borrador.txt\\0'\nexec sleep 8\n")
+        (falso / "git").chmod(0o755)
+        with mock.patch.dict(os.environ, {"PATH": f"{falso}{os.pathsep}{os.environ['PATH']}"}):
+            spawned = []
+            real_popen = host.subprocess.Popen
+
+            def registrar(*args, **kwargs):
+                hijo = real_popen(*args, **kwargs)
+                spawned.append(hijo)
+                return hijo
+
+            with mock.patch.object(host.subprocess, "Popen", side_effect=registrar):
+                with self.assertRaisesRegex(OSError, "git status timed out in"):
+                    host._status_digest(str(self.repo), "status", "--porcelain=v1", "-z",
+                                        "--untracked-files=all", timeout=2)
+        self.assertIsNotNone(spawned[0].poll(), "the timed-out git status child stayed alive")
+        self.assertLess(spawned[0].returncode, 0, "the child died of old age, not of the kill")
+
     def test_inherited_git_repository_variables_do_not_move_the_photo(self):
         other = self.root / "otro"
         other.mkdir()

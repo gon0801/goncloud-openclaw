@@ -5,6 +5,7 @@ import hashlib
 import hmac
 import json
 import os
+import select
 import stat
 import subprocess
 import sys
@@ -121,19 +122,25 @@ def _hash_into(total, path: Path) -> None:
         pass
 
 
-def _status_digest(repo: str, *args: str) -> str:
+def _status_digest(repo: str, *args: str, timeout: float = 60) -> str:
     """El sha256 de la salida entera del status, leída en streaming —los ignorados de un
     node_modules son más de cien MB y nada de eso se carga entero en memoria— más, por cada
     archivo NO rastreado que lista, sus bytes: un revisor que reescribe un archivo no rastreado
     cambia la foto sin cambiar sus rutas (SUA-03, bots). Los ignorados (marcados `!!`) siguen
     viajando solo por su ruta: su contenido cambia legítimamente (`__pycache__`) y no debe
-    negar un resultado bueno."""
+    negar un resultado bueno. El mismo plazo que _git: un git que no termina (un lock, un disco
+    lento) muere a la fuerza y su fallo sale como OSError, no como una pasada colgada."""
     total = hashlib.sha256()
     pending = b""
     env = {name: value for name, value in os.environ.items() if name not in GIT_REPO_VARS}
     with subprocess.Popen(["git", "-C", repo, *args], stdout=subprocess.PIPE,
                           stderr=subprocess.DEVNULL, env=env) as done:
-        while chunk := done.stdout.read(1 << 20):
+        deadline = time.monotonic() + timeout
+        fd = done.stdout.fileno()
+        while select.select([fd], [], [], max(deadline - time.monotonic(), 0.0))[0]:
+            chunk = os.read(fd, 1 << 20)
+            if not chunk:
+                break
             total.update(chunk)
             pending += chunk
             start = 0
@@ -143,8 +150,16 @@ def _status_digest(repo: str, *args: str) -> str:
                 if record.startswith(b"?? "):
                     _hash_into(total, Path(repo) / record[3:].decode("utf-8", "surrogateescape"))
             pending = pending[start:]
-        if done.wait() != 0:
-            raise OSError(f"git {args[0]} failed in {repo}")
+        else:
+            done.kill()
+            raise OSError(f"git {args[0]} timed out in {repo}")
+        try:
+            code = done.wait(timeout=max(deadline - time.monotonic(), 0.0))
+        except subprocess.TimeoutExpired:
+            done.kill()
+            raise OSError(f"git {args[0]} timed out in {repo}") from None
+    if code != 0:
+        raise OSError(f"git {args[0]} failed in {repo}")
     return total.hexdigest()
 
 
