@@ -502,6 +502,9 @@ class Explicar(Policies):
             modelos.MalformedHeader("llave desconocida: effort"): "cabecera-mal-formada",
             modelos.WorkspaceRefused("/tmp/x", "outside-root"): "carpeta-no-permitida",
             modelos.RouteNotCertified("1.18.36", ("1.18.35",)): "ruta-no-certificada",
+            modelos.GenerationNotCertified(2, (1,)): "generacion-no-certificada",
+            modelos.ContextoIncompleto("skills/how/SKILL.md no coincide con el manifiesto"): "contexto-incompleto",
+            modelos.PerfilRechazado("perfil-ausente", "el brief no trae perfil"): "perfil-ausente",
             modelos.HostDown(None): "sin-host",
             modelos.HostMismatch("policy", "aaaa", "bbbb"): "host-desfasado",
             modelos.SlotBlocked(("123 Mon Oct 12 sleep 300",)): "slot-bloqueado",
@@ -513,6 +516,13 @@ class Explicar(Policies):
                          {type(case).__name__: causa for case, causa in cases.items()})
         with self.assertRaises(TypeError):
             explicar(DefaultModel())
+
+    def test_a_profile_refusal_keeps_the_cause_the_admission_answered(self):
+        caso = modelos.PerfilRechazado("perfil-sin-competencia",
+                                       "el perfil meli no tiene competencia vigente en la ruta mac-local/opencode")
+        self.assertEqual(explicar(caso), modelos.Explicacion(caso.causa, caso.frase, "no-registrar"))
+        self.assertEqual(explicar(caso, registrado=True),
+                         modelos.Explicacion(caso.causa, caso.frase, "cancelar"))
 
     def test_words_that_match_nothing_name_the_providers_david_can_ask_for_not_every_model(self):
         answer = explicar(authorize(ByName("no existe tal"), self.policy, catalog()))
@@ -527,6 +537,16 @@ class Explicar(Policies):
                          "Ruta certificada para 1.18.35, la Mac tiene opencode 1.18.36.")
         self.assertEqual(explicar(modelos.RouteNotCertified("1.18.35", ())).frase,
                          "La ruta de encargos por opencode todavía no está certificada. La Mac tiene opencode 1.18.35.")
+        self.assertEqual(explicar(modelos.GenerationNotCertified(2, (1,))).frase,
+                         "El paquete de poteto de la generación 2 no está certificado para encargos; "
+                         "certificadas: 1.")
+        self.assertEqual(explicar(modelos.GenerationNotCertified(2, ())).frase,
+                         "El paquete de poteto de la generación 2 no está certificado para encargos; "
+                         "certificadas: ninguna.")
+        self.assertEqual(explicar(modelos.ContextoIncompleto("skills/how/SKILL.md no coincide con el "
+                                                             "manifiesto")).frase,
+                         "El paquete de poteto no coincide con su manifiesto: skills/how/SKILL.md no coincide con "
+                         "el manifiesto. No se lanza nada.")
         self.assertEqual(explicar(modelos.HostDown(600.0)).frase, "El host de encargos no corre desde hace 10 min.")
         self.assertEqual(explicar(modelos.HostDown(None)).frase, "El host de encargos nunca corrió en esta Mac.")
         self.assertEqual(explicar(modelos.HostMismatch("policy", "aaaa", "bbbb")).frase,

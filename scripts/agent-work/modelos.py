@@ -489,9 +489,34 @@ class RouteNotCertified:
     certified_versions: tuple[str, ...]
 
 
+@dataclass(frozen=True)
+class GenerationNotCertified:
+    """La ruta está abierta para opencode, pero no para el paquete de poteto de esa generación (SUA-03,
+    4.5): coverage.json no la certifica todavía."""
+    generation: int
+    certified: tuple[int, ...]
+
+
+@dataclass(frozen=True)
+class ContextoIncompleto:
+    """El paquete de poteto del checkout no coincide con su manifiesto, o el manifiesto no está (SUA-03,
+    4.5). Lo contestan las dos fronteras con disco: quien planea, que lee la fuente, y el paso de
+    lanzamiento, que copia y relee."""
+    why: str
+
+
+@dataclass(frozen=True)
+class PerfilRechazado:
+    """Lo que la admisión del perfil contestó (SUA-03, 4.4): la causa ya tiene nombre propio
+    (perfil-ausente, perfil-desconocido, perfil-no-atiende-ruta, perfil-no-admite-contrato,
+    perfil-sin-competencia, herramienta-negada, revisor-con-escritura) y su frase nombra al perfil."""
+    causa: str
+    frase: str
+
+
 Refusal = Union[MalformedModel, PolicyUnreadable, ProviderNotAllowed, ProviderNotConfigured, ModelNotListed,
                 ModelOutsideGrant, NameMatchesNothing, NameIsAmbiguous, MalformedHeader, WorkspaceRefused,
-                RouteNotCertified]
+                RouteNotCertified, GenerationNotCertified, ContextoIncompleto, PerfilRechazado]
 
 
 @dataclass(frozen=True)
@@ -720,6 +745,12 @@ def _frase_ruta(caso: RouteNotCertified) -> tuple[str, tuple[str, ...]]:
             f"La Mac tiene opencode {caso.cli_version}."), ()
 
 
+def _frase_generacion(caso: GenerationNotCertified) -> tuple[str, tuple[str, ...]]:
+    certificadas = _lista([str(generation) for generation in caso.certified]) or "ninguna"
+    return (f"El paquete de poteto de la generación {caso.generation} no está certificado para encargos; "
+            f"certificadas: {certificadas}."), ()
+
+
 def _frase_sin_host(caso: HostDown) -> tuple[str, tuple[str, ...]]:
     if caso.beat_age_seconds is None:
         return "El host de encargos nunca corrió en esta Mac.", ()
@@ -741,6 +772,9 @@ _RECHAZOS: "dict[type, tuple[str, Callable[..., tuple[str, tuple[str, ...]]]]]" 
         f"La cabecera de lanzamiento del brief está mal formada: {caso.why}.", ())),
     WorkspaceRefused: ("carpeta-no-permitida", lambda caso: (f"{caso.path} {_CARPETA[caso.why]}.", ())),
     RouteNotCertified: ("ruta-no-certificada", _frase_ruta),
+    GenerationNotCertified: ("generacion-no-certificada", _frase_generacion),
+    ContextoIncompleto: ("contexto-incompleto", lambda caso: (
+        f"El paquete de poteto no coincide con su manifiesto: {caso.why}. No se lanza nada.", ())),
     HostDown: ("sin-host", _frase_sin_host),
     HostMismatch: ("host-desfasado", lambda caso: (
         f"El host de encargos corre con {_DESFASE[caso.what]}: el host tiene {caso.host} y aquí hay {caso.local}.",
@@ -787,6 +821,9 @@ def explicar(caso: "Refusal | str | HostDown | HostMismatch | SlotBlocked", *, r
         if eventos is not None and caso in ("launch-failed", "session-closed"):
             frase += _causa_de_opencode(eventos)
         return Explicacion(caso, frase, "cancelar")
+    if isinstance(caso, PerfilRechazado):
+        # La admisión del perfil ya trae su causa con nombre propio y su frase (SUA-03, 4.4).
+        return Explicacion(caso.causa, caso.frase, "cancelar" if registrado else "no-registrar")
     if type(caso) not in _RECHAZOS:
         raise TypeError(f"explicar no conoce {type(caso).__name__}")
     causa, redactar = _RECHAZOS[type(caso)]
