@@ -515,12 +515,17 @@ class Host:
     def _check_repo(self, op_id: str) -> None:
         """The real repo of a run that may not write it is as its photo before launch said. A run launched
         without a photo (by a host from before SUA-03, or in a folder that is not a git repo) has nothing to
-        compare."""
+        compare. A change already measured (repo_after on disk) is not measured again: a refused result
+        stays in awaiting_results, and re-photographing the real repo on every pass cost six git commands
+        twice per pass (SUA-03, bots); the recorded verdict is raised as it was recorded."""
         record = SessionRecord.locate(self.state_dir, op_id)
         try:
             before = json.loads(record.repo_before.read_text(encoding="utf-8"))
         except FileNotFoundError:
             return
+        recorded = _json_recorded(record.repo_after).get("changed")
+        if isinstance(recorded, list) and recorded and all(isinstance(field, str) for field in recorded):
+            raise ReviewerWroteSource(recorded)
         after = repo_photo(before["repo"], ignored=bool(before.get("ignored")))
         changed = photo_changes(before["photo"], after)
         if changed:

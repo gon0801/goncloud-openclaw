@@ -35,6 +35,7 @@ sys.path.insert(0, str(ROOT / "scripts" / "agent-work"))
 sys.path.insert(0, str(ROOT / "scripts"))
 import contexto  # noqa: E402
 import encargo  # noqa: E402
+import host as host_mod  # noqa: E402
 import sesion  # noqa: E402
 from contracts import HostBeat, OperationKey, RunDir, SessionRecord, operation_id  # noqa: E402
 from host import Host  # noqa: E402
@@ -1083,6 +1084,23 @@ class Decisions(Slot):
             "frase": "El revisor dejó cambiado el repo del encargo, y el host no aceptó su resultado. "
                      f"En {self.repo} cambió el status. El host no deshizo nada."})
         self.assertTrue((self.repo / "nuevo.py").exists(), "the host undid what the reviewer wrote")
+
+    def test_a_refused_review_is_not_measured_again_on_every_pass(self):
+        # El resultado de un revisor que cambió el repo nunca se registra: se queda en
+        # awaiting_results, y volver a fotografiar el repo en cada pasada costaba seis comandos
+        # git, dos veces por pasada, para siempre (bots de #303). El repo_after ya grabado se
+        # relanza tal cual, sin tocar el repo.
+        self.r.offer("task-1", b"revisa el saludo\n", self.revision, contract="review.v1")
+        self.launched()
+        (self.repo / "nuevo.py").write_text("escrito por el revisor\n")
+        self.review_writes(self.run_dir().path / "hallazgos.md")
+        self.left(0)
+        self.one_pass()
+        self.assertEqual(self.r.incidents, [("task-1", "invalid-result", "reviewer-wrote-source")])
+        with mock.patch.object(host_mod, "repo_photo", wraps=host_mod.repo_photo) as foto:
+            self.one_pass()
+        self.assertEqual(foto.call_count, 0, "the refused repo was photographed again")
+        self.assertEqual(self.r.incidents, [("task-1", "invalid-result", "reviewer-wrote-source")])
 
     def test_a_reviewer_that_only_left_ignored_files_or_committed_is_told_apart(self):
         # A review without a profile works in the real repo: its photo is the G2 one, without ignored
