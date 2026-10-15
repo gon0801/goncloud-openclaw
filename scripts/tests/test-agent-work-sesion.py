@@ -786,13 +786,19 @@ class Decisions(Slot):
                 f"modelID={name} session.id=ses_ecd56a597ffe6GHqp405Otldki small={small} agent={agent} mode=primary\n")
 
     def packaged(self, profile="ingenieria"):
-        """What G3's launcher leaves for a run with a package: the copy in the run, and the digests it took."""
+        """What G3's launcher leaves for a run with a package: the copy in the run, and what the host
+        recorded of it at launch."""
         run = self.run_dir()
-        run.context.mkdir()
+        run.context.mkdir(parents=True, exist_ok=True)
         (run.context / "poteto.v1.json").write_text(json.dumps({"generation": 1}))
         perfil = contexto.perfil(contexto.leer_json(contexto.PERFILES), profile)
         (run.context / "perfil.json").write_bytes(contexto.canonico(perfil))
-        self.record().context.write_text(json.dumps({"poteto": "sha256:" + "a" * 64, "tools": "sha256:" + "b" * 64}))
+        record = self.record()
+        record.context.parent.mkdir(parents=True, exist_ok=True)
+        record.context.write_text(json.dumps({
+            "poteto": "sha256:" + "a" * 64, "tools": "sha256:" + "b" * 64,
+            "writesSource": perfil["writesSource"], "specialist": perfil["id"], "generation": 1,
+            "profile": contexto.digest_de_perfil(perfil)}))
         return perfil
 
     def checkout_contexto(self):
@@ -837,7 +843,9 @@ class Decisions(Slot):
         self.assertEqual(sorted(path.name for path in run.context.iterdir()),
                          ["AGENTS.md", "perfil.json", "poteto.v1.json", "skills"])
         digests = json.loads(self.record().context.read_text())
-        self.assertEqual(set(digests), {"poteto", "tools"})
+        self.assertEqual(set(digests), {"poteto", "tools", "writesSource", "specialist", "generation", "profile"})
+        self.assertEqual((digests["writesSource"], digests["specialist"], digests["generation"]),
+                         (True, "ingenieria", 1))
         self.cli_writes()
         self.left(0)
         self.backend.survivors = ("4321 Tue Oct 13 00:58:21 2026 /bin/sleep 300",)
@@ -861,6 +869,8 @@ class Decisions(Slot):
         self.assertNotIn(str(self.repo), common, "the reviewer's clone shares nothing with the real .git")
         launched2 = self.backend.launches[1]
         self.assertEqual((launched2["cwd"], launched2["env"]["PWD"]), (str(clone), str(clone)))
+        digests2 = json.loads(self.record("task-2").context.read_text())
+        self.assertEqual(digests2["writesSource"], False, "the reviewer's run may not write source")
         assignment2 = json.loads(run2.assignment.read_text())
         self.assertEqual(assignment2["workspaceRef"], str(clone))
         photo = json.loads(self.record("task-2").repo_before.read_text())
@@ -974,6 +984,23 @@ class Decisions(Slot):
             **assignment["protocol"]["result"], "typedPayload": {"verdict": "approved"},
             "artifactRef": str(artifact), "digest": hashlib.sha256(b"sin hallazgos\n").hexdigest()}))
         return assignment
+
+    def test_a_profile_the_session_edited_decides_nothing(self):
+        # runs/<op>/ is the one folder the session may write (B22-S7): whether its run may write the repo
+        # is what the host recorded in sessions/<op>, which the session cannot reach (SUA-03, 4.8).
+        self.r.offer("task-1", b"revisa el saludo\n", self.revision, contract="review.v1")
+        self.packaged("revision")
+        perfil_path = self.run_dir().context / "perfil.json"
+        perfil = json.loads(perfil_path.read_text())
+        perfil["writesSource"] = True
+        perfil_path.write_bytes(contexto.canonico(perfil))
+        self.launched()
+        (self.repo / "nuevo.py").write_text("escrito por el revisor\n")
+        self.review_writes(self.run_dir().path / "hallazgos.md")
+        self.left(0)
+        self.one_pass()
+        self.assertEqual(self.r.reports, [], "a flipped profile in the run copy changed nothing")
+        self.assertEqual(self.r.incidents, [("task-1", "invalid-result", "reviewer-wrote-source")])
 
     def test_a_review_artifact_lives_in_the_run_folder(self):
         self.r.offer("task-1", b"revisa el saludo\n", self.revision, contract="review.v1")
@@ -1241,6 +1268,25 @@ class Decisions(Slot):
         self.r.cancel("task-1")
         self.one_pass()
         self.assertEqual(self.held(), ("cancelled", "AbsenceVerified", ""))
+
+    @unittest.skipUnless(PSTACK.is_dir(), "pide pstack 0.9.84 instalado en esta Mac")
+    def test_a_profiled_launch_deferred_by_a_busy_boundary_retries_with_the_same_assignment(self):
+        # exploracion is the one CLI profile whose writesSource disagrees with its contract: the protocol
+        # the assignment spells out must not change between the attempt and its retry (SU A-03, 4.5).
+        self.checkout_contexto()
+        self.start(ScriptedBackend(), canary=True)
+        revision = {"kind": "code", "repository": str(self.repo),
+                    "sha": self.git_out("-C", str(self.repo), "rev-parse", "HEAD")}
+        self.r.offer("task-1", b"agent-work.launch.v1\nprofile: exploracion\n---\nexplora\n", revision)
+        self.backend.foreign = lambda: ("9001 Tue Oct 13 00:58:21 2026 /bin/sleep 600",) if self.r.claims else ()
+        outcome = self.one_pass()
+        self.assertEqual(self.held(), ("deferred", "Reserved", ""))
+        self.assertTrue((self.run_dir().context / "perfil.json").is_file(), "the copy precedes the assignment")
+        self.assertEqual(self.one_pass()["claimed"], 1)
+        self.assertEqual(self.r.admits, ["task-1"], "the retry registered the same assignment")
+        self.backend.foreign = tuple
+        self.assertEqual(self.one_pass()["claimed"], 1)
+        self.assertEqual((len(self.backend.launches), self.r.admits), (1, ["task-1"]))
 
     def refused(self, causa, piece):
         self.assertEqual(self.changes(), {"claimed": 1})

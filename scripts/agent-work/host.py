@@ -49,6 +49,15 @@ class ReviewerWroteSource(ValueError):
         self.changed = changed
 
 
+def _json_recorded(path: Path) -> dict:
+    """What the host recorded there, or an empty dict when it wrote nothing."""
+    try:
+        recorded = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return recorded if isinstance(recorded, dict) else {}
+
+
 def run_profile(assignment: dict) -> dict | None:
     """The profile a run received in its package (SUA-03): read from the copy inside its run folder.
     None for a run without one."""
@@ -60,12 +69,16 @@ def run_profile(assignment: dict) -> dict | None:
     return profile if isinstance(profile, dict) and isinstance(profile.get("writesSource"), bool) else None
 
 
-def writes_source(assignment: dict) -> bool:
-    """Whether a run may write its task's repo. A run with its package follows its profile (SUA-03, 4.4);
-    one without keeps the G2 rule: a review never does and everything else may, as today."""
-    perfil = run_profile(assignment)
-    if perfil is not None:
-        return perfil["writesSource"]
+def writes_source(assignment: dict, *, state_dir: Path | None = None,
+                  operation: OperationKey | None = None) -> bool:
+    """Whether a run may write its task's repo. A run with a package follows what the HOST recorded of
+    its profile at launch, in sessions/<op>/contexto.json: a folder outside the run, which the session's
+    tools can neither read nor write (SUA-03, 4.8). What the session could edit decides nothing. A run
+    without a package keeps the G2 rule: a review never does and everything else may, as today."""
+    if state_dir is not None and operation is not None:
+        launched = _json_recorded(SessionRecord.locate(state_dir, operation_id(operation)).context)
+        if isinstance(launched.get("writesSource"), bool):
+            return launched["writesSource"]
     return assignment["resultContract"] != REVIEW_CONTRACT
 
 
@@ -149,11 +162,13 @@ def delivery_line(assignment_ref: str) -> str:
             "from the assignment. Then follow briefRef and write agent-work.result.v1 atomically to resultRef.")
 
 
-def cli_protocol(assignment: dict, *, run: bool = False) -> dict:
+def cli_protocol(assignment: dict, *, run: bool = False, state_dir: Path | None = None,
+                 operation: OperationKey | None = None) -> dict:
     """The assignment spells out what a CLI writes, because the CLI has nothing else to go on. A review
     with a run folder leaves its artifact there, never in the repo it reviews (SUA-03, 4.8)."""
     artifact_home = ("inside the directory that holds resultRef, never inside workspaceRef"
-                     if run and not writes_source(assignment) else "inside workspaceRef")
+                     if run and not writes_source(assignment, state_dir=state_dir, operation=operation)
+                     else "inside workspaceRef")
     return {
         "steps": [
             "Before any other work, write the accept object as JSON to acceptRef, atomically: create the "
@@ -341,7 +356,8 @@ class Host:
         assignment = self._assignment(key, replace(operation, workspace_ref=str(Path(operation.workspace_ref).resolve())),
                                       str(brief))
         if operation.adapter_id:
-            assignment["protocol"] = cli_protocol(assignment, run=run is not None)
+            assignment["protocol"] = cli_protocol(assignment, run=run is not None, state_dir=self.state_dir,
+                                                  operation=key)
         self._register(key, assignment, assignment_ref)
         if not run:
             (self.state_dir / "inbox").mkdir(parents=True, exist_ok=True)
@@ -416,7 +432,8 @@ class Host:
                 raise ValueError("recorded artifact snapshot missing")
             # A run-per-task operation keeps its result in its own run folder (RunDir).
             run_folder = Path(assignment["resultRef"]).parent
-            reviewed = run_folder == self.state_dir / "runs" / op_id and not writes_source(assignment)
+            reviewed = run_folder == self.state_dir / "runs" / op_id and not writes_source(
+                assignment, state_dir=self.state_dir, operation=key)
             if reviewed:
                 self._check_repo(op_id)
             home = str(run_folder) if reviewed else assignment["workspaceRef"]

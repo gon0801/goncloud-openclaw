@@ -379,11 +379,12 @@ CATALOG_RECHECK_SECONDS = 60.0
 def build_clone(repository: str, sha: str, destino: Path) -> None:
     """The reviewer's disposable clone (SUA-03, 4.8). No hardlinks: no object of the clone is a file of the
     real repo. No origin: a push has nowhere to go. Idempotent: a host that died after cloning finds the
-    clone detached at the very revision it asked for, and one mid-clone is rebuilt."""
+    clone detached at the very revision it asked for and with no remote, and anything else is rebuilt."""
     if destino.exists():
         head = subprocess.run(["git", "-C", str(destino), "rev-parse", "HEAD"], capture_output=True, text=True,
                               timeout=30)
-        if head.returncode == 0 and head.stdout.strip() == sha:
+        remotes = subprocess.run(["git", "-C", str(destino), "remote"], capture_output=True, text=True, timeout=30)
+        if head.returncode == 0 and head.stdout.strip() == sha and not remotes.stdout.strip():
             return
         shutil.rmtree(destino, ignore_errors=True)
     clone = subprocess.run(["git", "clone", "--no-hardlinks", "--no-checkout", repository, str(destino)],
@@ -441,19 +442,31 @@ def claim_run_once(client, *, host, manager, backend, instance_id, deps):
         if registered is not None:
             raise ValueError(f"the launch of a registered operation is now refused: {why.causa}")
         return host.refuse(key, authorized, client.admit_host, {"causa": why.causa, "frase": why.frase})
-
-    def launch(_assignment_ref, _session):
-        deps.recheck(plan)
-        if plan.perfil is not None and plan.config is not None and not record.context.exists():
-            # El paquete de la corrida, copiado y con su digest releído de la copia (SUA-03, 4.5). Un host
-            # que murió después de copiar encuentra la copia entera y solo escribe sus digests.
+    if plan.perfil is not None and plan.config is not None and not record.context.exists():
+        # El paquete de la corrida, copiado ANTES de registrar la asignación: el protocolo que la
+        # asignación le dice al CLI depende de si su perfil escribe fuente, y un protocolo que cambia
+        # entre intentos no puede registrarse dos veces (SUA-03, 4.5). Un host que murió después de
+        # copiar encuentra la copia entera y solo re-lee su digest de la copia.
+        try:
             if not run.context.exists():
                 contexto.construir(plan.package.source, plan.package.manifest, plan.perfil, run.context,
                                    adaptaciones=contexto.leer_adaptaciones())
-            atomic_json(record.context, {"poteto": contexto.digest_del_paquete(run.context),
-                                         "tools": "sha256:" + hashlib.sha256(canonical(plan.config).encode())
-                                          .hexdigest()})
-        if not writes_source(assignment) and not record.repo_before.exists():
+        except contexto.ContextoIncompleto as error:
+            why = explicar(ContextoIncompleto(str(error)), registrado=registered is not None)
+            if registered is not None:
+                raise ValueError(f"the launch of a registered operation is now refused: {why.causa}") from error
+            return host.refuse(key, authorized, client.admit_host, {"causa": why.causa, "frase": why.frase})
+        atomic_json(record.context, {"poteto": contexto.digest_del_paquete(run.context),
+                                     "tools": "sha256:" + hashlib.sha256(canonical(plan.config).encode()).hexdigest(),
+                                     "writesSource": plan.perfil["writesSource"],
+                                     "specialist": plan.perfil["id"],
+                                     "generation": plan.package.manifest["generation"],
+                                     "profile": contexto.digest_de_perfil(plan.perfil)})
+
+    def launch(_assignment_ref, _session):
+        deps.recheck(plan)
+        if not writes_source(assignment, state_dir=host.state_dir, operation=key) \
+                and not record.repo_before.exists():
             # The photo of the real repo, before the run can touch it (SUA-03, 4.8). A folder that is not a
             # git repo has no photo, and its result is not compared.
             revision = assignment["inputRevision"]
@@ -580,8 +593,9 @@ class RunHost:
             perfil = contexto.perfil(profiles, header.profile)
         except KeyError:
             return PerfilRechazado("perfil-desconocido", f"ningún perfil se llama {header.profile}")
-        fuente = contexto.fuente_del_paquete(manifest)
+        fuente = None
         try:
+            fuente = contexto.fuente_del_paquete(manifest)
             # La primera frontera con disco (4.5): cada archivo de la fuente coincide con el manifiesto
             # antes de planear. La segunda es la copia, que construye y relee el paso de lanzamiento.
             contexto.comprobar_fuente(manifest, perfil, fuente)

@@ -65,22 +65,37 @@ def documento(assignment: dict, *, state_dir: Path, policy: ProviderPolicy) -> d
         child = {"agent": call.agent, "model": call.model}
         if call.agent not in SESSION_AGENTS and child not in children:
             children.append(child)
+    # Specialist, generation and the profile digest come from what the HOST recorded at launch,
+    # not from the copy the session could have edited (4.7: the document holds what was launched).
+    specialist = (
+        launched.get("specialist") if isinstance(launched.get("specialist"), str) else profile["id"]
+    )
+    generation = (
+        launched.get("generation")
+        if isinstance(launched.get("generation"), int)
+        else manifest["generation"]
+    )
+    profile_digest = (
+        launched.get("profile")
+        if isinstance(launched.get("profile"), str)
+        else digest_de_perfil(profile)
+    )
     return {
         "schema": SCHEMA,
         # A loose task is the root of its own tree in R (4.11, conflict 2).
         "rootId": key.task_id,
         "unitId": key.task_id,
         "attempt": key.generation,
-        "specialist": profile["id"],
+        "specialist": specialist,
         "host": key.host_id,
         "executor": EXECUTOR,
         "accountRef": grant.name if grant else None,
         "model": {"id": used} if used else {"id": None, "reason": reason},
-        "generation": manifest["generation"],
+        "generation": generation,
         "permissions": list(events.evaluations) if events else [],
         "attestations": [
             {"what": "poteto", "digest": launched["poteto"]},
-            {"what": "profile", "digest": digest_de_perfil(profile)},
+            {"what": "profile", "digest": profile_digest},
             {"what": "tools", "digest": launched["tools"]},
         ],
         "children": children,

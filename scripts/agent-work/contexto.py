@@ -174,7 +174,10 @@ def comprobar_fuente(manifiesto: dict, perfil: dict, fuente: Path) -> None:
 def fuente_del_paquete(manifiesto: dict, plugins: Path | None = None) -> Path:
     """La carpeta del checkout de pstack que el manifiesto fija, tal como Claude Code la instala
     en esta Mac. Una fuente que ya no coincide lo dicen `construir` y `comprobar_fuente`."""
-    version = manifiesto["source"]["version"]
+    source = manifiesto.get("source") if isinstance(manifiesto, dict) else None
+    version = source.get("version") if isinstance(source, dict) else None
+    if not isinstance(version, str) or not version.strip():
+        raise ContextoIncompleto("el manifiesto no nombra la versión de su fuente")
     base = plugins or Path.home() / ".claude/plugins/cache/pstack-claude/pstack"
     return base / version
 
