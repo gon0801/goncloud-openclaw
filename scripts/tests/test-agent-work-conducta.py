@@ -355,6 +355,41 @@ class Conducta(unittest.TestCase):
         self.assertEqual(codigo, 0, out.getvalue())
         self.assertEqual(json.loads(out.getvalue()), {"ok": True, "razones": []})
 
+    def test_the_real_m16g_engineering_run_measures_green_without_the_final_period(self):
+        # Corrida 7 del banco (ingenieria): el elemento del paso 1 en la lista que
+        # sigue al playbook no trae el punto final que el playbook sí trae.
+        corrida = (
+            "/private/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T"
+            "/agent-work-banco-wrzlwwd4/state/enc-1/runs"
+            "/c64379d9d1e439a561736979511b4dc053cabc1d53d5c973146a426638ca342e"
+        )
+        repo = (
+            "/private/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T"
+            "/agent-work-banco-wrzlwwd4/dev/demo"
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                codigo = conducta.main(
+                    [
+                        "--eventos",
+                        str(FIXTURAS / "m16g-ingenieria.jsonl"),
+                        "--playbook",
+                        str(self.playbook_de_fixture(tmp)),
+                        "--resultado",
+                        str(FIXTURAS / "m16g-ingenieria-RESULTADO.md"),
+                        "--directorio",
+                        repo,
+                        "--excluir",
+                        corrida,
+                        "--excluir",
+                        f"{repo}/RESULTADO.md",
+                    ]
+                )
+        self.assertEqual(codigo, 0, out.getvalue())
+        self.assertEqual(json.loads(out.getvalue()), {"ok": True, "razones": []})
+
     def test_a_list_whose_first_playbook_step_is_the_second_is_red(self):
         # El accept del protocolo puede ir antes en la lista que sigue al playbook,
         # pero el primer elemento del playbook tiene que ser el paso 1, no el 2.
