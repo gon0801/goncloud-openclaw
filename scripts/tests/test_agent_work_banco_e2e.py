@@ -17,6 +17,7 @@ import io
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import sys
@@ -77,14 +78,56 @@ if __name__ == "__main__":
 FIX_BRIEF = """El repo tiene saluda.py y pruebas con test-saluda.py; la prueba está roja. Haz que pase \
 sin cambiar la prueba, con poteto-mode: sigue su playbook feature, deja la lista de pasos con \
 todowrite, corre las pruebas después del último cambio y cita su salida en tu resultado. Tu \
-asignación trae el protocolo: él dice dónde se escribe tu resultado y su artefacto; síguelo.
+asignación trae el protocolo: él dice dónde se escribe tu resultado y su artefacto; síguelo. \
+Escribe tu resultado en RESULTADO.md dentro del repo, con la salida de las pruebas citada. \
+Entrega el resultado ready.v1 con typedPayload {"evidenceRef": "RESULTADO.md"} y el artefacto \
+RESULTADO.md, como lo explica el archivo de asignación (campo protocol).
 """
 
 REVIEW_BRIEF = """Revisa el archivo saluda.py de workspaceRef y entrega review.v1. Tu artefacto va \
 dentro de la carpeta de la corrida, nunca dentro de workspaceRef: no escribas nada ahí. Si el \
 código tiene un defecto, el veredicto es "changes" y tus hallazgos lo nombran; si está sano, \
-"approved".
+"approved". El resultado es review.v1 con typedPayload {"verdict": "approved", "evidenceRef": \
+"<hallazgos>"} o {"verdict": "changes", "findingsRef": "<hallazgos>"}, donde <hallazgos> es la \
+ruta absoluta de tu artefacto, que lleva tus hallazgos; el artefacto va donde lo dice el campo \
+protocol de la asignación, dentro de la carpeta que contiene resultRef, y no tocas el repo.
 """
+
+
+CONTRATOS_DE_RESULTADO = ("ready.v1", "review.v1")
+"""Los contratos que R valida estrictamente (src/agents/tasks/managed-task.json.ts:100-104):
+ready.v1 es {"evidenceRef": <texto no vacío>}; review.v1 es {"verdict": "approved",
+"evidenceRef": <texto no vacío>} o {"verdict": "changes", "findingsRef": <texto no vacío>};
+ningún otro campo."""
+
+
+class Briefs(unittest.TestCase):
+    """Los briefs del banco piden como main (A4): cada typedPayload que nombran es un
+    objeto con exactamente las claves que R acepta para su contrato. Corre siempre, sin
+    AGENT_WORK_BANCO_REAL."""
+
+    def test_los_typed_payload_de_los_briefs_tienen_la_forma_que_r_valida(self):
+        for texto, contrato in ((FIX_BRIEF, "ready.v1"), (REVIEW_BRIEF, "review.v1")):
+            with self.subTest(contrato=contrato):
+                cargas = [json.loads(grupo) for grupo in re.findall(r"\{[^{}]*\}", texto)]
+                cargas = [carga for carga in cargas if isinstance(carga, dict)]
+                self.assertTrue(cargas, f"el brief no nombra ningún typedPayload de {contrato}")
+                for carga in cargas:
+                    esperado = (
+                        {"evidenceRef"}
+                        if contrato == "ready.v1"
+                        else (
+                            {"verdict", "evidenceRef"}
+                            if carga.get("verdict") == "approved"
+                            else {"verdict", "findingsRef"}
+                        )
+                    )
+                    self.assertEqual(set(carga), esperado, f"no es un {contrato} que R acepte")
+                    if "verdict" in carga:
+                        self.assertIn(carga["verdict"], ("approved", "changes"))
+                    for clave in esperado:
+                        self.assertIsInstance(carga[clave], str)
+                        self.assertTrue(carga[clave].strip(), f"{clave} vacío")
 
 
 def sha256(data):
@@ -304,7 +347,9 @@ class BancoE2E(unittest.TestCase):
         snapshot = self.wait_result(task_id)
         payload = snapshot["result"]["payload"]
         self.assertEqual(payload["verdict"], "changes", payload)
-        hallazgos = json.dumps(payload, ensure_ascii=False)
+        # Con R validando el payload estricto, el hallazgo viaja en el artefacto, no en el
+        # payload (A3): el brief le exige la ruta en findingsRef.
+        hallazgos = Path(snapshot["result"]["artifactRef"]).read_text(encoding="utf-8")
         self.assertIn("hello", hallazgos, "el hallazgo no nombra el defecto sembrado")
         self.assertEqual(self.photo_changes(), [], "el revisor dejó cambiado el repo real")
         self.assert_package_and_flota(task_id, "revision")
