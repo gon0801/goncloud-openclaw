@@ -741,7 +741,7 @@ class ExtractorNativo(unittest.TestCase):
         especificacion.loader.exec_module(modulo)
         filas = "[filas]\n" + self.cruda("agent:x:turno", 0, 1, {"type": "session", "version": 4})
 
-        def ssh_falso(comando, input=None, capture_output=True, text=True, timeout=None):
+        def ssh_falso(comando, input=None, capture_output=True, text=True, timeout=None, **kwargs):
             assert "python3" in comando, comando
             return subprocess.CompletedProcess(
                 comando, 0, stdout=filas.replace("[filas]\n", ""), stderr=""
@@ -788,7 +788,7 @@ class ExtractorNativo(unittest.TestCase):
         especificacion.loader.exec_module(modulo)
         filas = self.cruda("agent:x:turno", 0, 1, {"type": "session"}, comprimido=True)
 
-        def ssh_falso(comando, input=None, capture_output=True, text=True, timeout=None):
+        def ssh_falso(comando, input=None, capture_output=True, text=True, timeout=None, **kwargs):
             return subprocess.CompletedProcess(comando, 0, stdout=filas + "\n", stderr="")
 
         out = io.StringIO()
