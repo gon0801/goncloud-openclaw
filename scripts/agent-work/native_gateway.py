@@ -384,7 +384,10 @@ def build_clone(repository: str, sha: str, destino: Path) -> None:
         head = subprocess.run(["git", "-C", str(destino), "rev-parse", "HEAD"], capture_output=True, text=True,
                               timeout=30)
         remotes = subprocess.run(["git", "-C", str(destino), "remote"], capture_output=True, text=True, timeout=30)
-        if head.returncode == 0 and head.stdout.strip() == sha and not remotes.stdout.strip():
+        clean = subprocess.run(["git", "-C", str(destino), "status", "--porcelain=v1", "--untracked-files=all",
+                                "--ignored=traditional"], capture_output=True, text=True, timeout=60)
+        if (head.returncode == 0 and head.stdout.strip() == sha and not remotes.stdout.strip()
+                and clean.returncode == 0 and not clean.stdout.strip()):
             return
         shutil.rmtree(destino, ignore_errors=True)
     clone = subprocess.run(["git", "clone", "--no-hardlinks", "--no-checkout", repository, str(destino)],

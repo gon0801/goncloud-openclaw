@@ -847,6 +847,15 @@ class Plans(Policies):
         self.assertIsInstance(answer, modelos.WorkspaceRefused)
         self.assertIn(answer.why, ("invalid", "missing"))
 
+    def test_a_code_revision_without_a_usable_sha_is_refused_before_launch(self):
+        for sha in (None, 123, "zzz", "a" * 39, "a" * 65, True):
+            with self.subTest(sha=sha):
+                revision = {"kind": "code", "repository": str(self.repo), "sha": sha}
+                self.assertEqual(self.plan(revision=revision),
+                                 modelos.WorkspaceRefused(str(revision), "invalid"))
+        self.assertIsInstance(self.plan(revision={"kind": "code", "repository": str(self.repo), "sha": "b" * 40}),
+                              sesion.LaunchSpec)
+
     def test_a_task_without_repo_works_in_a_new_folder_inside_its_run(self):
         spec = self.plan(revision={"kind": "artifact", "ref": "artifact:aa", "digest": "sha256:aa"})
         self.assertEqual(spec.workspace.root, self.run.path / "work")

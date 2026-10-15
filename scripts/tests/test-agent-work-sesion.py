@@ -1417,6 +1417,38 @@ class Decisions(Slot):
                          "a clone whose origin came back is rebuilt, not reused")
         self.assertEqual(self.git_out("-C", str(destino), "rev-parse", "HEAD"), sha)
 
+    def test_a_clone_with_leftovers_is_built_again(self):
+        from native_gateway import build_clone
+
+        sha = self.git_out("-C", str(self.repo), "rev-parse", "HEAD")
+        destino = self.root / "clon-sucio"
+        build_clone(str(self.repo), sha, destino)
+        (destino / "dejado.txt").write_text("de un intento anterior\n")
+        build_clone(str(self.repo), sha, destino)
+        self.assertFalse((destino / "dejado.txt").exists(), "a dirty clone was reused")
+        self.assertEqual(self.git_out("-C", str(destino), "rev-parse", "HEAD"), sha)
+
+    def test_a_new_file_in_an_ignored_dir_that_already_existed_is_caught(self):
+        # --ignored=traditional lists the files inside an ignored directory; --ignored=matching would
+        # collapse it into one entry, and a file added inside one that the photo already held would
+        # never change it (SUA-03, 4.8).
+        (self.repo / ".gitignore").write_text("__pycache__/\n")
+        self.git("add", ".gitignore")
+        self.git("commit", "-q", "-m", "ignora")
+        (self.repo / "__pycache__").mkdir()
+        (self.repo / "__pycache__" / "viejo.pyc").write_bytes(b"\0")
+        self.r.offer("task-1", b"revisa el saludo\n", self.revision, contract="review.v1")
+        self.packaged("revision")
+        self.launched()
+        self.assertEqual(json.loads(self.record().repo_before.read_text())["repo"], str(self.repo))
+        (self.repo / "__pycache__" / "nuevo.pyc").write_bytes(b"\0")
+        self.review_writes(self.run_dir().path / "hallazgos.md")
+        self.left(0)
+        self.one_pass()
+        self.assertEqual(self.r.reports, [], "a new file inside an old ignored dir went unseen")
+        self.assertEqual(self.r.incidents, [("task-1", "invalid-result", "reviewer-wrote-source")])
+        self.assertEqual(json.loads(self.record().repo_after.read_text())["changed"], ["status"])
+
     def test_a_host_that_died_before_launching_launches_once_it_is_back(self):
         self.died("before-launching")
         self.assertEqual((self.held(), self.backend.launches), (("attempted", "Launching", ""), []))

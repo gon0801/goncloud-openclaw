@@ -132,13 +132,17 @@ class Workspace:
 
     @staticmethod
     def for_revision(input_revision: object, *, allowed_root: Path, run: RunDir) -> "Workspace | WorkspaceRefused":
-        """`input_revision` llega de R sin validar: lo que no es una revisión `code` o `artifact` se rechaza."""
+        """`input_revision` llega de R sin validar: lo que no es una revisión `code` con su sha, o
+        `artifact`, se rechaza. Sin sha usable, el paso de lanzamiento no tiene a qué hacer detach."""
         kind = input_revision.get("kind") if isinstance(input_revision, dict) else None
         if kind == "artifact":
             work = run.path / "work"
             work.mkdir(mode=0o700, exist_ok=True)
             return Workspace(work)
         if kind != "code":
+            return WorkspaceRefused(str(input_revision)[:MAX_SHOWN], "invalid")
+        sha = input_revision.get("sha")
+        if not isinstance(sha, str) or not re.fullmatch(r"[0-9a-f]{40,64}", sha):
             return WorkspaceRefused(str(input_revision)[:MAX_SHOWN], "invalid")
         return Workspace.for_repository(input_revision.get("repository"), allowed_root=allowed_root)
 

@@ -90,16 +90,18 @@ def _git_files(folder: Path) -> str:
 
 def repo_photo(repo: str) -> dict:
     """What a reviewer's run must leave as it was: HEAD, the refs, the status with untracked and ignored
-    files (a reviewer may leave a __pycache__ behind, so the photo sums those too), the diff against
-    HEAD, and inside .git its config and its hooks, which run code at the next git command.
-    OSError when the folder is not a git repo."""
+    files, the diff against HEAD, and inside .git its config and its hooks, which run code at the next
+    git command. Ignored files go with --ignored=traditional, which lists the files inside an ignored
+    directory: --ignored=matching would collapse the whole directory into one entry, and a new file
+    inside one that already existed would never change the photo. OSError when the folder is not a git
+    repo."""
     git_dir = Path(_git(repo, "rev-parse", "--absolute-git-dir").decode().strip())
     config = git_dir / "config"
     return {
         "head": _git(repo, "rev-parse", "HEAD").decode().strip(),
         "refs": hashlib.sha256(_git(repo, "for-each-ref")).hexdigest(),
         "status": hashlib.sha256(_git(repo, "status", "--porcelain=v1", "-z", "--untracked-files=all",
-                                      "--ignored=matching")).hexdigest(),
+                                      "--ignored=traditional")).hexdigest(),
         "diff": hashlib.sha256(_git(repo, "diff", "--binary", "HEAD")).hexdigest(),
         "config": hashlib.sha256(config.read_bytes() if config.is_file() else b"").hexdigest(),
         "hooks": _git_files(git_dir / "hooks"),
