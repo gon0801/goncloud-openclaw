@@ -675,7 +675,16 @@ def revertir_en_la_mini(home: Path, agentes_json: Path | None) -> int:
                 conflictos += 1
                 nuevo["skills"].pop(nombre, None)
             else:
-                shutil.copytree(respaldo, destino)
+                # La copia entra atómica (B3, Minor de CodeRabbit en #307): temporal
+                # hermano y os.replace, para que una copia a medias nunca se vea.
+                temporal = Path(
+                    tempfile.mkdtemp(dir=str(destino.parent), prefix="." + nombre + ".")
+                )
+                try:
+                    shutil.copytree(respaldo, temporal / "nueva")
+                    os.replace(temporal / "nueva", destino)
+                finally:
+                    shutil.rmtree(temporal, ignore_errors=True)
                 salida_skills[nombre] = "revertido"
                 nuevo["skills"][nombre] = digest_de_carpeta(destino)
             continue
