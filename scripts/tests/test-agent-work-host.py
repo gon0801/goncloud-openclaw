@@ -536,6 +536,35 @@ class GitPhoto(unittest.TestCase):
         self.assertEqual(spawned[0].returncode, -signal.SIGKILL,
                          "the child died of a broken pipe or of old age, not of the kill")
 
+    def test_a_silent_git_status_dies_at_its_wall_deadline_and_raises_oserror(self):
+        # El caso que faltaba (bots de #305): un git callado, esperando un lock, sin escribir nada.
+        # Dos formas de callarse, y el mismo plazo de pared para las dos: una que nunca escribe y
+        # deja la tubería abierta (el select vence), y una que escribe, cierra su stdout y se queda
+        # viva (el wait vence). Las mutaciones `select.select([fd], [], [], None)` y `done.wait()`
+        # sin plazo cuelgan aquí en vez de salir verdes.
+        formas = {"callado": "#!/bin/sh\nexec sleep 3600\n",
+                  "calla-tras-escribir": "#!/bin/sh\nprintf '?? borrador.txt\\0'\nexec 1>&-\nexec sleep 3600\n"}
+        for nombre, guion in formas.items():
+            with self.subTest(nombre):
+                falso = self.root / f"bin-{nombre}"
+                falso.mkdir()
+                (falso / "git").write_text(guion)
+                (falso / "git").chmod(0o755)
+                with mock.patch.dict(os.environ, {"PATH": f"{falso}{os.pathsep}{os.environ['PATH']}"}):
+                    spawned = []
+                    real_popen = host.subprocess.Popen
+
+                    def registrar(*args, **kwargs):
+                        hijo = real_popen(*args, **kwargs)
+                        spawned.append(hijo)
+                        return hijo
+
+                    with mock.patch.object(host.subprocess, "Popen", side_effect=registrar):
+                        with self.assertRaisesRegex(OSError, "git status timed out in"):
+                            host._status_digest(str(self.repo), "status", "--porcelain=v1", "-z",
+                                                "--untracked-files=all", timeout=2)
+                self.assertIsNotNone(spawned[0].poll(), "the silent git status child stayed alive")
+
     def test_inherited_git_repository_variables_do_not_move_the_photo(self):
         other = self.root / "otro"
         other.mkdir()
