@@ -18,6 +18,7 @@ publicadores.
 from __future__ import annotations
 
 import argparse
+import copy
 import fcntl
 import hashlib
 import json
@@ -77,14 +78,18 @@ def leer_bytes(ruta: Path) -> bytes:
     return ruta.read_bytes() if ruta.exists() else b""
 
 
-def escribir_atomico(ruta: Path, datos: bytes) -> None:
+def escribir_atomico(ruta: Path, datos: bytes, modo: int | None = None) -> None:
     """Escritura con respaldo implícito del rename (4.3 Escritura): temporal en la misma
-    carpeta y `os.replace`, para que un corte no deje el archivo a medias."""
+    carpeta y `os.replace`, para que un corte no deje el archivo a medias. El modo se
+    conserva: `modo` si viene, el que ya tenía `ruta`, o 0644 si el archivo es nuevo."""
     ruta.parent.mkdir(parents=True, exist_ok=True)
     descriptor, temporal = tempfile.mkstemp(dir=str(ruta.parent), prefix="." + ruta.name + ".")
     try:
         with os.fdopen(descriptor, "wb") as archivo:
             archivo.write(datos)
+        if modo is None:
+            modo = ruta.stat().st_mode & 0o7777 if ruta.exists() else 0o644
+        os.chmod(temporal, modo)
         os.replace(temporal, ruta)
     finally:
         if os.path.exists(temporal):
@@ -203,10 +208,13 @@ def publicar_skill(origen: Path, destino: Path) -> None:
     de_la_publicacion = {}
     for archivo in sorted(origen.rglob("*")):
         if archivo.is_file() and not archivo.is_symlink():
-            de_la_publicacion[archivo.relative_to(origen).as_posix()] = archivo.read_bytes()
+            de_la_publicacion[archivo.relative_to(origen).as_posix()] = (
+                archivo.read_bytes(),
+                archivo.stat().st_mode & 0o777,
+            )
     destino.mkdir(parents=True, exist_ok=True)
-    for ruta, datos in de_la_publicacion.items():
-        escribir_atomico(destino / ruta, datos)
+    for ruta, (datos, modo) in de_la_publicacion.items():
+        escribir_atomico(destino / ruta, datos, modo)
     for archivo in sorted(destino.rglob("*")):
         if archivo.is_file() and archivo.relative_to(destino).as_posix() not in de_la_publicacion:
             archivo.unlink()
@@ -433,10 +441,11 @@ def aplicar_en_la_mini(publicacion: Path, home: Path, agentes_json: Path | None)
                 continue
             respaldo = suya / gen / "skills" / nombre
             respaldo.parent.mkdir(parents=True, exist_ok=True)
-            if not respaldo.exists():
-                # El respaldo de la generación se escribe una sola vez: la primera vez que
-                # esta generación reescribe la skill (4.3). Reaplicarla no lo pisa.
-                shutil.copytree(destino, respaldo)
+            if respaldo.exists():
+                shutil.rmtree(respaldo)
+            # El respaldo es la foto de justo antes de esta escritura: lo que el digest
+            # del estado valida y lo que la reversa restaura (4.3).
+            shutil.copytree(destino, respaldo)
         publicar_skill(publicacion / "skills" / nombre, destino)
         salida_skills[nombre] = "publicado"
 
@@ -477,13 +486,14 @@ def aplicar_en_la_mini(publicacion: Path, home: Path, agentes_json: Path | None)
             continue
         if contenido == actual:
             salida_agentes[identificador] = "igual"
-            nuevos_workspaces[identificador] = digest
+            # "igual" no refresca el digest: el del estado es el de la última escritura
+            # del publicador, y es el que la reversa valida (4.3 CAS).
             nuevos_bloques[identificador] = sha256hex(bloques[identificador])
             continue
         respaldo = suya / gen / "workspaces" / f"{identificador}.AGENTS.md"
         respaldo.parent.mkdir(parents=True, exist_ok=True)
-        if not respaldo.exists():
-            respaldo.write_bytes(actual)
+        # La foto de justo antes de esta escritura: lo que valida el digest del estado.
+        respaldo.write_bytes(actual)
         escribir_atomico(ruta, contenido)
         releido = sha256hex(leer_bytes(ruta))
         if releido != sha256hex(contenido):
@@ -499,6 +509,12 @@ def aplicar_en_la_mini(publicacion: Path, home: Path, agentes_json: Path | None)
         or "publicado" in salida_skills.values()
         or ("publicado" in salida_agentes.values())
     )
+    # El estado anterior de la generación es el estado tal como estaba antes de esta
+    # --aplicar: se reescribe cuando la generación publicada es otra, y se queda como
+    # está cuando se reaplica la misma (4.3).
+    anterior = suya / gen / "estado-anterior.json"
+    if estado.get("generacion") != manifiesto["generation"]:
+        escribir_atomico(anterior, canonico(estado) + b"\n")
     if cambios:
         for nombre, resultado in salida_skills.items():
             if not resultado.startswith("conflicto"):
@@ -512,9 +528,6 @@ def aplicar_en_la_mini(publicacion: Path, home: Path, agentes_json: Path | None)
             "skills": nuevas_skills,
             "skills_anteriores": nombres,
         }
-        anterior = suya / gen / "estado-anterior.json"
-        if not anterior.exists():
-            escribir_atomico(anterior, canonico(estado) + b"\n")
         escribir_atomico(estado_path, canonico(nuevo_estado) + b"\n")
     linea(manifiesto["generation"], salida_agentes, salida_skills, conflictos)
     return 4 if conflictos else 0
@@ -522,9 +535,10 @@ def aplicar_en_la_mini(publicacion: Path, home: Path, agentes_json: Path | None)
 
 def revertir_en_la_mini(home: Path, agentes_json: Path | None) -> int:
     """`--revertir`: vuelve al respaldo lo que sigue igual a lo publicado; lo que cambió
-    después queda en conflicto, nombrado, y no se toca (4.3 Reversa). Una skill sin
-    respaldo es una que esta generación no reescribió: queda como está si ya estaba
-    publicada antes, y solo la quita la generación que la trajo."""
+    después queda en conflicto, nombrado, y no se toca (4.3 Reversa). Lo que esta
+    generación no reescribió no tiene respaldo: no se compara ni se toca. El estado
+    nuevo refleja el disco; con conflictos la reversa queda parcial, el estado sigue en
+    la generación revertida, y otra --revertir la termina cuando el dueño resuelva."""
     skills_dir = home / ".openclaw" / "skills"
     estado_path = skills_dir / ".sua-contexto.json"
     suya = home / ".openclaw" / "sua-contexto"
@@ -542,22 +556,28 @@ def revertir_en_la_mini(home: Path, agentes_json: Path | None) -> int:
 
     anterior_path = suya / gen / "estado-anterior.json"
     anterior = leer_json(anterior_path) if anterior_path.exists() else estado_vacio()
+    nuevo = copy.deepcopy(anterior)
     for nombre in sorted(estado["skills"]):
         destino = skills_dir / nombre
+        respaldo = suya / gen / "skills" / nombre
+        if not respaldo.exists() and nombre in anterior["skills"]:
+            salida_skills[nombre] = "igual"
+            nuevo["skills"][nombre] = estado["skills"][nombre]
+            continue
         if digest_de_carpeta(destino) != estado["skills"][nombre]:
             salida_skills[nombre] = "conflicto: cambió después de publicar"
             conflictos += 1
+            nuevo["skills"][nombre] = estado["skills"][nombre]
             continue
-        respaldo = suya / gen / "skills" / nombre
         if respaldo.exists():
             shutil.rmtree(destino)
             shutil.copytree(respaldo, destino)
             salida_skills[nombre] = "revertido"
-        elif nombre in anterior["skills"]:
-            salida_skills[nombre] = "igual"
+            nuevo["skills"][nombre] = digest_de_carpeta(destino)
         else:
             shutil.rmtree(destino)
             salida_skills[nombre] = "quitado"
+            nuevo["skills"].pop(nombre, None)
 
     respaldo_dir = suya / gen / "workspaces"
     identificadores = set(estado["workspaces"])
@@ -570,22 +590,54 @@ def revertir_en_la_mini(home: Path, agentes_json: Path | None) -> int:
         if ruta is None:
             continue
         respaldo = respaldo_dir / f"{identificador}.AGENTS.md"
-        actual = leer_bytes(ruta)
-        digest = sha256hex(actual)
-        esperado = estado["workspaces"].get(identificador)
-        if esperado is None and respaldo.exists():
-            esperado = sha256hex(respaldo.read_bytes())
-        if digest != esperado:
-            salida_agentes[identificador] = "conflicto: cambió después de publicar"
-            conflictos += 1
-            continue
-        if respaldo.exists():
-            escribir_atomico(ruta, respaldo.read_bytes())
-            salida_agentes[identificador] = "revertido"
-        else:
+        if not respaldo.exists():
             salida_agentes[identificador] = "igual"
+        else:
+            esperado = estado["workspaces"].get(identificador)
+            if esperado is None:
+                esperado = sha256hex(respaldo.read_bytes())
+            if sha256hex(leer_bytes(ruta)) != esperado:
+                salida_agentes[identificador] = "conflicto: cambió después de publicar"
+                conflictos += 1
+            else:
+                restaurados = respaldo.read_bytes()
+                escribir_atomico(ruta, restaurados)
+                salida_agentes[identificador] = "revertido"
+                if identificador in anterior["workspaces"]:
+                    nuevo["workspaces"][identificador] = sha256hex(restaurados)
+                else:
+                    nuevo["workspaces"].pop(identificador, None)
+                # El bloque vuelve a ser el del estado anterior: la copia ya lo trae.
+                continue
+        if identificador in estado["bloques"]:
+            nuevo["bloques"][identificador] = estado["bloques"][identificador]
+        else:
+            nuevo["bloques"].pop(identificador, None)
+        if identificador in estado["workspaces"]:
+            nuevo["workspaces"][identificador] = estado["workspaces"][identificador]
+        else:
+            nuevo["workspaces"].pop(identificador, None)
 
-    escribir_atomico(estado_path, canonico(anterior) + b"\n")
+    for identificador in sorted(set(estado["bloques"]) | set(estado["workspaces"])):
+        if identificador in rutas:
+            continue
+        # Un agente del estado que ya no está en la lista: el estado manda.
+        if identificador in estado["bloques"]:
+            nuevo["bloques"][identificador] = estado["bloques"][identificador]
+        else:
+            nuevo["bloques"].pop(identificador, None)
+        if identificador in estado["workspaces"]:
+            nuevo["workspaces"][identificador] = estado["workspaces"][identificador]
+        else:
+            nuevo["workspaces"].pop(identificador, None)
+
+    if conflictos:
+        # Reversa parcial: el estado sigue en la generación revertida, con lo publicado
+        # que espera resolución; el ancla y los respaldos de <gen> se conservan.
+        nuevo["generacion"] = estado["generacion"]
+        nuevo["digest"] = estado["digest"]
+        nuevo["skills_anteriores"] = estado["skills_anteriores"]
+    escribir_atomico(estado_path, canonico(nuevo) + b"\n")
     # La generación que reporta la reversa es la que revierte, la que estaba publicada.
     linea(estado["generacion"], salida_agentes, salida_skills, conflictos)
     return 4 if conflictos else 0
