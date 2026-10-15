@@ -1070,7 +1070,7 @@ class Decisions(Slot):
         self.launched()
         before = json.loads(self.record().repo_before.read_text())
         self.assertEqual((before["repo"], set(before["photo"])),
-                         (str(self.repo), {"head", "refs", "status", "diff", "config", "hooks"}))
+                         (str(self.repo), {"head", "refs", "status", "diff", "config", "hooks", "exclude"}))
         (self.repo / "nuevo.py").write_text("escrito por el revisor\n")
         self.review_writes(self.run_dir().path / "hallazgos.md")
         self.left(0)

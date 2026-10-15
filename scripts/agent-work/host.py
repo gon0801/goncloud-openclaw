@@ -89,7 +89,48 @@ def _git(repo: str, *args: str) -> bytes:
     return done.stdout
 
 
-PHOTO_FIELDS = ("head", "refs", "status", "diff", "config", "hooks")
+def _hash_into(total, path: Path) -> None:
+    """Into a sha256 en marcha: el destino de un symlink o los bytes de un archivo regular, leídos
+    en trozos; cualquier otra cosa no suma nada (su presencia ya viaja en los bytes del status)."""
+    try:
+        info = path.lstat()
+        if stat.S_ISLNK(info.st_mode):
+            total.update(os.readlink(path).encode("utf-8", "surrogateescape"))
+        elif stat.S_ISREG(info.st_mode):
+            with path.open("rb") as stream:
+                while chunk := stream.read(1 << 20):
+                    total.update(chunk)
+    except OSError:
+        pass
+
+
+def _status_digest(repo: str, *args: str) -> str:
+    """El sha256 de la salida entera del status, leída en streaming —los ignorados de un
+    node_modules son más de cien MB y nada de eso se carga entero en memoria— más, por cada
+    archivo NO rastreado que lista, sus bytes: un revisor que reescribe un archivo no rastreado
+    cambia la foto sin cambiar sus rutas (SUA-03, bots). Los ignorados (marcados `!!`) siguen
+    viajando solo por su ruta: su contenido cambia legítimamente (`__pycache__`) y no debe
+    negar un resultado bueno."""
+    total = hashlib.sha256()
+    pending = b""
+    with subprocess.Popen(["git", "-C", repo, *args], stdout=subprocess.PIPE,
+                          stderr=subprocess.DEVNULL) as done:
+        while chunk := done.stdout.read(1 << 20):
+            total.update(chunk)
+            pending += chunk
+            start = 0
+            while (nul := pending.find(b"\0", start)) >= 0:
+                record = pending[start:nul]
+                start = nul + 1
+                if record.startswith(b"?? "):
+                    _hash_into(total, Path(repo) / record[3:].decode("utf-8", "surrogateescape"))
+            pending = pending[start:]
+        if done.wait() != 0:
+            raise OSError(f"git {args[0]} failed in {repo}")
+    return total.hexdigest()
+
+
+PHOTO_FIELDS = ("head", "refs", "status", "diff", "config", "hooks", "exclude")
 
 
 def _git_files(folder: Path) -> str:
@@ -100,15 +141,17 @@ def _git_files(folder: Path) -> str:
 
 
 def repo_photo(repo: str, *, ignored: bool = False) -> dict:
-    """What a reviewer's run must leave as it was: HEAD, the refs, the status with untracked files, the
-    diff against HEAD, and inside .git its config and its hooks, which run code at the next git command.
-    Ignored files only join the status when the run works in a disposable clone (SUA-03, 4.8): a
-    reviewer without one runs its tests where it works, and a __pycache__ in the repo must not refuse a
-    good result, so its photo is the G2 one, byte for byte. Which mode applies is the launcher's call,
-    and it writes it in the before-photo so the after-photo reads the same one. OSError when the folder
-    is not a git repo."""
+    """What a reviewer's run must leave as it was: HEAD, the refs, the status with untracked files
+    (hashed with their contents, in streaming), the diff against HEAD, and inside .git its config,
+    its hooks, which run code at the next git command, and its local exclude rules, where a
+    planted path would hide a file from the status. Ignored files only join the status when the
+    run works in a disposable clone (SUA-03, 4.8): a reviewer without one runs its tests where it
+    works, and a __pycache__ in the repo must not refuse a good result, so its photo is the G2
+    one, byte for byte. Which mode applies is the launcher's call, and it writes it in the
+    before-photo so the after-photo reads the same one. OSError when the folder is not a git repo."""
     git_dir = Path(_git(repo, "rev-parse", "--absolute-git-dir").decode().strip())
     config = git_dir / "config"
+    exclude = git_dir / "info" / "exclude"
     status = ["status", "--porcelain=v1", "-z", "--untracked-files=all"]
     if ignored:
         # --ignored=traditional lists the files inside an ignored directory; --ignored=matching would
@@ -118,10 +161,11 @@ def repo_photo(repo: str, *, ignored: bool = False) -> dict:
     return {
         "head": _git(repo, "rev-parse", "HEAD").decode().strip(),
         "refs": hashlib.sha256(_git(repo, "for-each-ref")).hexdigest(),
-        "status": hashlib.sha256(_git(repo, *status)).hexdigest(),
+        "status": _status_digest(repo, *status),
         "diff": hashlib.sha256(_git(repo, "diff", "--binary", "HEAD")).hexdigest(),
         "config": hashlib.sha256(config.read_bytes() if config.is_file() else b"").hexdigest(),
         "hooks": _git_files(git_dir / "hooks"),
+        "exclude": hashlib.sha256(exclude.read_bytes() if exclude.is_file() else b"").hexdigest(),
     }
 
 

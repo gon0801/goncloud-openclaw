@@ -517,6 +517,27 @@ class GitPhoto(unittest.TestCase):
         self.assertEqual(photo["head"], host.repo_photo(str(self.repo))["head"],
                          "the photo followed the inherited GIT_DIR instead of the task's repo")
 
+    def test_the_contents_of_untracked_files_travel_in_the_status(self):
+        untracked = self.repo / "borrador.txt"
+        untracked.write_text("versión de antes\n")
+        before = host.repo_photo(str(self.repo))
+        untracked.write_text("versión que el revisor escribió\n")
+        after = host.repo_photo(str(self.repo))
+        self.assertIn("status", host.photo_changes(before, after),
+                      "overwriting an untracked file changed no field of the photo")
+        self.assertNotIn("head", host.photo_changes(before, after))
+
+    def test_the_local_exclude_rules_travel_in_the_photo(self):
+        before = host.repo_photo(str(self.repo))
+        self.assertEqual(set(before), set(host.PHOTO_FIELDS))
+        exclude = self.repo / ".git" / "info" / "exclude"
+        exclude.parent.mkdir(parents=True, exist_ok=True)
+        exclude.write_text("secreto.py\n")
+        (self.repo / "secreto.py").write_text("planted\n")
+        after = host.repo_photo(str(self.repo))
+        self.assertEqual(host.photo_changes(before, after), ["exclude"],
+                         "an exclude rule that hides a planted file changed no field of the photo")
+
 
 if __name__ == "__main__":
     unittest.main()
