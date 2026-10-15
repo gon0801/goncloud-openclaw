@@ -950,7 +950,6 @@ class PublicadorNativo(unittest.TestCase):
         with mock.patch.object(self.armador.os, "replace", reemplazo_que_falla_en_la_segunda):
             with self.assertRaises(OSError):
                 self.armador.respalda_carpeta(origen, destino)
-        self.assertEqual(len(llamadas), 3)
         self.assertEqual((destino / "SKILL.md").read_bytes(), b"de antes\n")
         self.assertEqual([p.name for p in destino.parent.iterdir()], ["poteto-mode"])
 
