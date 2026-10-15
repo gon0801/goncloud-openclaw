@@ -179,7 +179,7 @@ Del 2026-10-11 19:44:31Z a las 20:14:37Z (30 min 6 s). Antes de abrirla, los 7 t
 ## Despertares viejos (plan `:312`, `:317` y `:318`)
 
 - La entrada del canario no tenía despertares viejos: `legacyCrons: []`, así que el corte no suspendió nada (`suspended: {}`) y no hay nada que retirar.
-- Los 30 crons habilitados son los mismos antes y después de cada instalación y del corte. Ninguno estaba corriendo en la revisión de hoy.
+- El 2026-10-11, los 30 crons habilitados son los mismos antes y después de cada instalación y del corte. Ninguno estaba corriendo en esa revisión. Las cuentas de después están en cada sección de instalación: 29 en la de SUA-02. <!-- corr: DeepSeek #300 F5 -->
 - El único vigía del gateway es `bids-02-vigia`. Se conserva, porque la ruta de encargos no cubre a `bids-02`: su implementador es el CLI `muse`, fuera de la cobertura, y su revisor es la ventana abierta de Claude. Su `PROMPT.md` nombra el cron, pero no dice por qué no usa la ruta, porque se escribió el 2026-10-09, antes de que existiera.
 - El recreador de vigías era la plantilla `prompt-claw`. Su §7 (`~/.claude/skills/prompt-claw/SKILL.md`) dice ahora que un loop sobre la ruta de encargos no crea `<loop>-vigia`, y que un loop que no la puede usar conserva su vigía y lo declara, como `bids-02`.
 
