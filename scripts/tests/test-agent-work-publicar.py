@@ -218,7 +218,7 @@ class PublicadorNativo(unittest.TestCase):
             / "SKILL.md"
         )
 
-    def publicar(self, accion):
+    def publicar(self, accion, agentes_json=None):
         """Corre la mitad --local por subprocess y exige una sola línea JSON en stdout."""
         resultado = subprocess.run(
             [
@@ -232,7 +232,7 @@ class PublicadorNativo(unittest.TestCase):
                 "--home",
                 str(self.home),
                 "--agentes-json",
-                str(self.agents_json),
+                str(agentes_json or self.agents_json),
             ],
             capture_output=True,
             text=True,
@@ -242,6 +242,11 @@ class PublicadorNativo(unittest.TestCase):
         lineas = resultado.stdout.splitlines()
         self.assertEqual(len(lineas), 1, resultado.stdout)
         return resultado.returncode, json.loads(lineas[0])
+
+    def estado_del_home(self):
+        return json.loads(
+            (self.home / ".openclaw" / "skills" / ".sua-contexto.json").read_text(encoding="utf-8")
+        )
 
     def bloque_de(self, identificador, perfiles=None):
         return contexto.bloque(
@@ -630,6 +635,155 @@ class PublicadorNativo(unittest.TestCase):
         self.assertEqual(segunda["skills"]["poteto-mode"], "conflicto: cambió después de publicar")
         self.assertEqual(codigo, 4)
         self.assertEqual(ancla.read_bytes(), bytes_del_ancla)
+
+    def test_a_revert_after_reapplying_keeps_the_edit_made_after_a_previous_revert(self):
+        # CR1 del anexo de CodeRabbit: revertir, editar fuera del bloque, reaplicar la
+        # misma generación y revertir otra vez deja la línea del dueño, byte por byte.
+        self.armar()
+        self.publicar("leer")
+        self.publicar("aplicar")
+        self.armar_generacion(2, cambios={"skills/poteto-mode/SKILL.md": "poteto v2\n"})
+        self.publicar("leer")
+        self.publicar("aplicar")
+        self.publicar("revertir")
+        meli = self.home / "workspaces" / "meli" / "AGENTS.md"
+        meli.write_bytes(meli.read_bytes() + LINEA_PROPIA)
+        del_dueno = meli.read_bytes()
+        self.publicar("leer")
+        codigo, aplicar = self.publicar("aplicar")
+        self.assertEqual(aplicar["agentes"]["meli"], "publicado")
+        self.assertEqual(codigo, 0)
+        codigo, revertir = self.publicar("revertir")
+        self.assertEqual(revertir["agentes"]["meli"], "revertido")
+        self.assertIn(LINEA_PROPIA, meli.read_bytes())
+        self.assertEqual(meli.read_bytes(), del_dueno)
+
+    def test_an_edit_outside_the_block_survives_as_a_named_conflict(self):
+        # CR1b del anexo de CodeRabbit: sin reversa de por medio. Tras aplicar la gen 2,
+        # el dueño agrega una línea fuera del bloque de meli y le borra el bloque a pers;
+        # la reversa nombra el conflicto de meli, conserva su línea y el estado sigue en
+        # la generación 2.
+        self.armar()
+        self.publicar("leer")
+        self.publicar("aplicar")
+        self.armar_generacion(2)
+        self.publicar("leer")
+        self.publicar("aplicar")
+        meli = self.home / "workspaces" / "meli" / "AGENTS.md"
+        pers = self.home / "workspaces" / "pers" / "AGENTS.md"
+        meli.write_bytes(meli.read_bytes() + LINEA_PROPIA)
+        pers.write_bytes(self.texto_propio["pers"].encode("utf-8"))
+        self.publicar("leer")
+        codigo, aplicar = self.publicar("aplicar")
+        self.assertEqual(
+            aplicar["agentes"], {"meli": "igual", "pers": "publicado", "main": "igual"}
+        )
+        codigo, revertir = self.publicar("revertir")
+        self.assertEqual(revertir["agentes"]["meli"], "conflicto: cambió después de publicar")
+        self.assertEqual(revertir["agentes"]["pers"], "revertido")
+        self.assertEqual((revertir["conflictos"], codigo), (1, 4))
+        self.assertIn(LINEA_PROPIA, meli.read_bytes())
+        self.assertEqual(self.estado_del_home()["generacion"], 2)
+
+    def test_a_conflicted_revert_keeps_the_state_until_it_finishes(self):
+        # CR2 del anexo de CodeRabbit: una reversa con conflicto conserva en el estado lo
+        # que sigue publicado; deshecha la edición, otra --revertir termina y quita la skill.
+        self.armar()
+        self.publicar("leer")
+        self.publicar("aplicar")
+        publicado = self.armador.digest_de_carpeta(self.publicacion / "skills" / "poteto-mode")
+        skill = self.skill_del_home("poteto-mode")
+        skill.write_bytes(b"editada en la mini\n")
+        codigo, primera = self.publicar("revertir")
+        self.assertEqual(primera["skills"]["poteto-mode"], "conflicto: cambió después de publicar")
+        self.assertEqual((primera["conflictos"], codigo), (1, 4))
+        estado = self.estado_del_home()
+        self.assertEqual(estado["generacion"], 1)
+        self.assertEqual(estado["skills"], {"poteto-mode": publicado})
+        skill.write_bytes(b"poteto de juguete\n")
+        self.publicar("leer")
+        codigo, aplicar = self.publicar("aplicar")
+        self.assertEqual(aplicar["skills"]["poteto-mode"], "igual")
+        codigo, segunda = self.publicar("revertir")
+        self.assertEqual((segunda["conflictos"], codigo), (0, 0))
+        self.assertEqual(segunda["skills"]["poteto-mode"], "quitado")
+        self.assertFalse(skill.exists())
+        self.assertIsNone(self.estado_del_home()["generacion"])
+
+    def test_a_revert_does_not_compare_what_the_generation_did_not_rewrite(self):
+        # D3: la generación 2 solo reescribe a meli y principle-x; el dueño edita fuera
+        # del bloque de pers (que la generación no tocó) y edita poteto-mode; la reversa
+        # los deja "igual" sin compararlos y las dos ediciones quedan byte por byte.
+        self.armar()
+        self.publicar("leer")
+        self.publicar("aplicar")
+        self.armar_generacion(2, cambios={"skills/principle-x/SKILL.md": "principio v2\n"})
+        solo_meli = self.tmp / "agents-solo-meli.json"
+        solo_meli.write_text(json.dumps([self.agentes[0]]) + "\n", encoding="utf-8")
+        self.publicar("leer", solo_meli)
+        codigo, aplicar = self.publicar("aplicar", solo_meli)
+        self.assertEqual(aplicar["agentes"], {"meli": "publicado"})
+        pers = self.home / "workspaces" / "pers" / "AGENTS.md"
+        pers.write_bytes(pers.read_bytes() + LINEA_PROPIA)
+        del_dueno = pers.read_bytes()
+        skill = self.skill_del_home("poteto-mode")
+        skill.write_bytes(skill.read_bytes() + EDICION_AJENA)
+        edicion = skill.read_bytes()
+        codigo, revertir = self.publicar("revertir")
+        self.assertEqual((revertir["conflictos"], codigo), (0, 0))
+        self.assertEqual(
+            revertir["agentes"], {"meli": "revertido", "pers": "igual", "main": "igual"}
+        )
+        self.assertEqual(
+            revertir["skills"],
+            {"poteto-mode": "igual", "poteto-openclaw": "igual", "principle-x": "revertido"},
+        )
+        self.assertEqual(pers.read_bytes(), del_dueno)
+        self.assertEqual(skill.read_bytes(), edicion)
+
+    def test_reapplying_an_older_generation_reverts_back_to_the_newest(self):
+        # D5: el estado anterior de una generación se reescribe cuando la generación
+        # publicada es otra; reaplicar la gen 2 después de la 3 y revertir vuelve a la 3.
+        self.armar()
+        self.publicar("leer")
+        self.publicar("aplicar")
+        publicacion_2 = self.armar_generacion(
+            2, cambios={"skills/poteto-mode/SKILL.md": "poteto v2\n"}
+        )
+        self.publicar("leer")
+        self.publicar("aplicar")
+        self.armar_generacion(3, cambios={"skills/poteto-mode/SKILL.md": "poteto v3\n"})
+        self.publicar("leer")
+        self.publicar("aplicar")
+        self.publicacion = publicacion_2
+        self.publicar("leer")
+        codigo, aplicar = self.publicar("aplicar")
+        self.assertEqual(aplicar["skills"]["poteto-mode"], "publicado")
+        codigo, revertir = self.publicar("revertir")
+        self.assertEqual(revertir["skills"]["poteto-mode"], "revertido")
+        self.assertEqual(self.estado_del_home()["generacion"], 3)
+        self.assertEqual(self.skill_del_home("poteto-mode").read_bytes(), b"poteto v3\n")
+
+    def test_an_agents_md_keeps_its_0644_through_apply_and_revert(self):
+        # N4 (F1 de DeepSeek): la escritura atómica no baja el modo del AGENTS.md.
+        self.armar()
+        meli = self.home / "workspaces" / "meli" / "AGENTS.md"
+        self.assertEqual(meli.stat().st_mode & 0o777, 0o644)
+        self.publicar("leer")
+        self.publicar("aplicar")
+        self.assertEqual(meli.stat().st_mode & 0o777, 0o644)
+        self.publicar("revertir")
+        self.assertEqual(meli.stat().st_mode & 0o777, 0o644)
+
+    def test_an_executable_file_of_a_published_skill_arrives_executable(self):
+        # N4 (F1 de DeepSeek): el modo del archivo de la publicación llega al home.
+        self.armar()
+        ejecutable = self.publicacion / "skills" / "poteto-mode" / "playbooks" / "feature.md"
+        os.chmod(ejecutable, 0o755)
+        self.publicar("leer")
+        self.publicar("aplicar")
+        destino = self.home / ".openclaw" / "skills" / "poteto-mode" / "playbooks" / "feature.md"
+        self.assertEqual(destino.stat().st_mode & 0o777, 0o755)
 
     def test_a_foreign_skill_with_a_managed_name_stops_that_skill(self):
         self.armar()
