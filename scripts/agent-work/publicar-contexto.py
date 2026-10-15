@@ -458,6 +458,10 @@ def aplicar_en_la_mini(publicacion: Path, home: Path, agentes_json: Path | None)
 
     bytes_perfiles = (publicacion / "perfiles.v1.json").read_bytes()
     if not perfiles_dest.exists() or perfiles_dest.read_bytes() != bytes_perfiles:
+        if perfiles_dest.exists():
+            # La foto de justo antes (C5): lo que la reversa restaura; el archivo no
+            # lleva CAS porque solo lo escribe el publicador.
+            escribir_atomico(suya / gen / "perfiles.v1.json", perfiles_dest.read_bytes())
         escribir_atomico(perfiles_dest, bytes_perfiles)
 
     for nombre in nombres:
@@ -719,6 +723,14 @@ def revertir_en_la_mini(home: Path, agentes_json: Path | None) -> int:
         nuevo["digest"] = estado["digest"]
         nuevo["skills_anteriores"] = estado["skills_anteriores"]
     escribir_atomico(estado_path, canonico(nuevo) + b"\n")
+    # perfiles.v1.json también queda dentro de la reversa (C5): vuelve el de la foto de
+    # esta generación, o se quita si esta generación fue la primera publicación.
+    perfiles_dest = home / ".local" / "share" / "agent-work" / "perfiles.v1.json"
+    foto_de_perfiles = suya / gen / "perfiles.v1.json"
+    if foto_de_perfiles.exists():
+        escribir_atomico(perfiles_dest, foto_de_perfiles.read_bytes())
+    else:
+        perfiles_dest.unlink(missing_ok=True)
     # La generación que reporta la reversa es la que revierte, la que estaba publicada.
     linea(estado["generacion"], salida_agentes, salida_skills, conflictos)
     return 4 if conflictos else 0
