@@ -94,11 +94,14 @@ protocol de la asignación, dentro de la carpeta que contiene resultRef, y no to
 """
 
 
-CONTRATOS_DE_RESULTADO = ("ready.v1", "review.v1")
-"""Los contratos que R valida estrictamente (src/agents/tasks/managed-task.json.ts:100-104):
-ready.v1 es {"evidenceRef": <texto no vacío>}; review.v1 es {"verdict": "approved",
-"evidenceRef": <texto no vacío>} o {"verdict": "changes", "findingsRef": <texto no vacío>};
-ningún otro campo."""
+CONTRATOS_DE_RESULTADO = {
+    "ready.v1": ({"evidenceRef"},),
+    "review.v1": ({"verdict", "evidenceRef"}, {"verdict", "findingsRef"}),
+}
+"""Los contratos que R valida estrictamente (src/agents/tasks/managed-task.json.ts:100-104),
+como conjuntos de claves admitidos por contrato: ready.v1 es {"evidenceRef": <texto no
+vacío>}; review.v1 es {"verdict": "approved", "evidenceRef": <texto no vacío>} o
+{"verdict": "changes", "findingsRef": <texto no vacío>}; ningún otro campo."""
 
 
 class Briefs(unittest.TestCase):
@@ -113,19 +116,14 @@ class Briefs(unittest.TestCase):
                 cargas = [carga for carga in cargas if isinstance(carga, dict)]
                 self.assertTrue(cargas, f"el brief no nombra ningún typedPayload de {contrato}")
                 for carga in cargas:
-                    esperado = (
-                        {"evidenceRef"}
-                        if contrato == "ready.v1"
-                        else (
-                            {"verdict", "evidenceRef"}
-                            if carga.get("verdict") == "approved"
-                            else {"verdict", "findingsRef"}
-                        )
+                    self.assertIn(
+                        set(carga),
+                        CONTRATOS_DE_RESULTADO[contrato],
+                        f"no es un {contrato} que R acepte",
                     )
-                    self.assertEqual(set(carga), esperado, f"no es un {contrato} que R acepte")
                     if "verdict" in carga:
                         self.assertIn(carga["verdict"], ("approved", "changes"))
-                    for clave in esperado:
+                    for clave in carga:
                         self.assertIsInstance(carga[clave], str)
                         self.assertTrue(carga[clave].strip(), f"{clave} vacío")
 
