@@ -405,22 +405,21 @@ def build_clone(repository: str, sha: str, destino: Path) -> None:
         raise ValueError("git remote remove origin failed")
 
 
-def contrastar_writes_source(record: SessionRecord, perfil: dict) -> bool:
+def contrastar_writes_source(record: SessionRecord, perfil: dict) -> None:
     """Lo anotado de writesSource contrastado con el perfil que esta pasada volvió a leer del
     checkout. La sesión no queda confinada (docs/evidence/agent-work/coverage.json,
     directoryGuard.limitation), así que sessions/<op>/contexto.json está a su alcance y lo que ella
     pudo editar no decide sola: si difieren, gana el checkout — el registro se reescribe con su
-    valor y el anotado queda guardado en writesSourceRecorded. True cuando reescribió."""
+    valor y el anotado queda guardado en writesSourceRecorded."""
     try:
         grabado = json.loads(record.context.read_text(encoding="utf-8"))
     except (OSError, ValueError):
-        return False
+        return
     if not isinstance(grabado, dict) or not isinstance(grabado.get("writesSource"), bool) \
             or grabado["writesSource"] == perfil["writesSource"]:
-        return False
+        return
     atomic_json(record.context, {**grabado, "writesSource": perfil["writesSource"],
                                  "writesSourceRecorded": grabado["writesSource"]})
-    return True
 
 
 def claim_run_once(client, *, host, manager, backend, instance_id, deps):

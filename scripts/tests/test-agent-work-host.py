@@ -512,9 +512,11 @@ class GitPhoto(unittest.TestCase):
         other.mkdir()
         git(other, "init", "-q")
         git(other, "commit", "-q", "--allow-empty", "-m", "otro")
+        # Sin rastrear a propósito: el status quimérico tiene que verlo.
+        (other / "propio.txt").write_text("del otro repo\n")
         with mock.patch.dict(os.environ, {"GIT_DIR": str(other / ".git"), "GIT_WORK_TREE": str(other)}):
             photo = host.repo_photo(str(self.repo))
-        self.assertEqual(photo["head"], host.repo_photo(str(self.repo))["head"],
+        self.assertEqual(photo, host.repo_photo(str(self.repo)),
                          "the photo followed the inherited GIT_DIR instead of the task's repo")
 
     def test_the_contents_of_untracked_files_travel_in_the_status(self):

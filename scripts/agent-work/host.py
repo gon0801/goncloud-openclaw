@@ -101,7 +101,9 @@ class PhotoFailed(OSError):
 
 def _hash_into(total, path: Path) -> None:
     """Into a sha256 en marcha: el destino de un symlink o los bytes de un archivo regular, leídos
-    en trozos; cualquier otra cosa no suma nada (su presencia ya viaja en los bytes del status)."""
+    en trozos; cualquier otra cosa no suma nada (su presencia ya viaja en los bytes del status). Un
+    archivo que desaparece entre el listado y la lectura no suma: ese swallow es de la carrera, no
+    de un permiso que daba igual."""
     try:
         info = path.lstat()
         if stat.S_ISLNK(info.st_mode):
@@ -123,8 +125,9 @@ def _status_digest(repo: str, *args: str) -> str:
     negar un resultado bueno."""
     total = hashlib.sha256()
     pending = b""
+    env = {name: value for name, value in os.environ.items() if name not in GIT_REPO_VARS}
     with subprocess.Popen(["git", "-C", repo, *args], stdout=subprocess.PIPE,
-                          stderr=subprocess.DEVNULL) as done:
+                          stderr=subprocess.DEVNULL, env=env) as done:
         while chunk := done.stdout.read(1 << 20):
             total.update(chunk)
             pending += chunk
