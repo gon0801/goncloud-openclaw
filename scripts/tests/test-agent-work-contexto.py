@@ -93,6 +93,24 @@ class Manifiesto(unittest.TestCase):
         ):
             contexto.comprobar_textos(manifiesto, cambiada, contexto.BLOQUE.read_bytes())
 
+    def test_the_block_and_the_native_adaptation_name_the_playbook_and_progress_card(self):
+        # A4 de SUA03-G5d: la sonda M-17 no leyó ningún playbook ni usó
+        # progress_card, porque en OpenClaw queda detrás de tool_search y la
+        # adaptación no lo decía. El bloque y la adaptación lo nombran.
+        bloque = contexto.BLOQUE.read_text(encoding="utf-8")
+        adaptacion = contexto.ADAPTACIONES["openclaw"].read_text(encoding="utf-8")
+        self.assertIn(
+            "lee la skill `poteto-openclaw`, luego `poteto-mode` y el playbook de su tarea",
+            bloque,
+        )
+        self.assertIn("también en una tarea chica", adaptacion)
+        self.assertIn("`playbooks/bug-fix.md`", adaptacion)
+        self.assertIn("`playbooks/feature.md`", adaptacion)
+        self.assertIn("léelo con `read` en su ruta antes de tu primer cambio", adaptacion)
+        self.assertIn("búscala con `tool_search`", adaptacion)
+        self.assertIn("`progress_card`", adaptacion)
+        self.assertIn("ábrela antes de tu primer cambio", adaptacion)
+
     def test_the_openclaw_adaptation_is_the_poteto_openclaw_skill(self):
         # Residual R2: the skill is the adaptation byte for byte, so generation 1 covers it.
         texto = contexto.ADAPTACIONES["openclaw"].read_text(encoding="utf-8")
