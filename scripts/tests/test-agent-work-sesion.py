@@ -448,6 +448,15 @@ class Launch(Slot):
         token = opencode_env(self.spec(b"agent-work.launch.v1\nmodel: deepseek/deepseek-v4-pro\n---\n"))
         self.assertEqual(json.loads(token["OPENCODE_CONFIG_CONTENT"])["enabled_providers"], ["deepseek"])
 
+    def test_only_a_run_with_a_package_disables_the_external_skills(self):
+        # Medición del 2026-10-15 (SUA-03-mediciones.md, nota del punto b): la variable deja fuera
+        # ~/.agents/skills y ~/.claude/skills de opencode 1.18.35, y con skills.paths del paquete
+        # quedan solo las del paquete. Un encargo sin perfil no la lleva: su entorno es el de siempre.
+        spec = self.spec()
+        self.assertNotIn("OPENCODE_DISABLE_EXTERNAL_SKILLS", opencode_env(spec))
+        con_paquete = replace(spec, config=sesion.run_config(spec.run, spec.model.model, writes=True))
+        self.assertEqual(opencode_env(con_paquete)["OPENCODE_DISABLE_EXTERNAL_SKILLS"], "1")
+
     def launched(self, script, **environment):
         return subprocess.run(["/bin/sh"], input=script, capture_output=True, text=True, cwd="/",
                               env={**os.environ, **environment})
