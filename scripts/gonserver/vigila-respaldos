@@ -1,0 +1,113 @@
+#!/usr/bin/env python3
+"""Vigía de frescura de los respaldos en gonserver (/usr/local/bin/vigila-respaldos).
+
+Corre en el cron de root a las 09:00. Por cada familia revisa el archivo más reciente y
+avisa por Telegram si falta, si tiene más de 36 h o si pesa menos de la mitad del
+anterior. Callado cuando todo está al día.
+
+Salida: 0 todo al día, 1 hubo problemas y el aviso salió, 2 hubo problemas y el aviso no
+salió. El token del bot nunca se imprime.
+
+Variables para probarlo sin tocar nada real: VIGILA_BASE (carpeta de respaldos),
+VIGILA_ENV (archivo con las claves del bot), VIGILA_API (base de la API de Telegram).
+"""
+
+from __future__ import annotations
+
+import html
+import json
+import os
+import sys
+import time
+import urllib.request
+from pathlib import Path
+
+FAMILIAS = (
+    ("openclaw", "openclaw-backup"),
+    ("openclaw", "openclaw-extras"),
+    ("hermes", "hermes-backup"),
+)
+HORAS_MAX = 36
+
+
+def problemas(base: Path, ahora: float) -> list[str]:
+    salida = []
+    for carpeta, prefijo in FAMILIAS:
+        archivos = sorted(
+            (base / carpeta).glob(f"{prefijo}-*.tar.gz"),
+            key=lambda p: p.stat().st_mtime,
+            reverse=True,
+        )
+        if not archivos:
+            salida.append(f"{prefijo}: no hay ningún respaldo en {base / carpeta}")
+            continue
+        nuevo = archivos[0]
+        horas = (ahora - nuevo.stat().st_mtime) / 3600
+        if horas > HORAS_MAX:
+            salida.append(f"{prefijo}: el más reciente ({nuevo.name}) tiene {horas:.0f} h")
+        if len(archivos) > 1:
+            actual, previo = nuevo.stat().st_size, archivos[1].stat().st_size
+            if actual * 2 < previo:
+                salida.append(
+                    f"{prefijo}: {nuevo.name} pesa {actual} bytes, menos de la mitad "
+                    f"de {archivos[1].name} ({previo} bytes)"
+                )
+    return salida
+
+
+def leer_env(ruta: Path) -> dict[str, str]:
+    claves = {}
+    for linea in ruta.read_text().splitlines():
+        linea = linea.strip()
+        if not linea or linea.startswith("#"):
+            continue
+        k, _, v = linea.partition("=")
+        k = k.strip()
+        if k.startswith("export "):
+            k = k[len("export ") :].strip()
+        claves[k] = v.strip().strip("'\"")
+    return claves
+
+
+def enviar(texto: str, env: Path, api: str) -> None:
+    claves = leer_env(env)
+    token = claves.get("TELEGRAM_BOT_TOKEN") or claves.get("TELEGRAM_SALES_BOT_TOKEN")
+    chat = claves.get("TELEGRAM_CHAT_ID")
+    if not token or not chat:
+        raise RuntimeError(f"faltan TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID en {env}")
+    cuerpo = json.dumps({"chat_id": chat, "text": texto, "parse_mode": "HTML"}).encode()
+    req = urllib.request.Request(
+        f"{api}/bot{token}/sendMessage",
+        data=cuerpo,
+        headers={"Content-Type": "application/json"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=30) as r:
+            respuesta = json.load(r)
+    except Exception as e:
+        raise RuntimeError(f"{type(e).__name__}: {str(e).replace(token, '***')}") from None
+    if not respuesta.get("ok"):
+        raise RuntimeError("Telegram no aceptó el mensaje")
+
+
+def main() -> int:
+    base = Path(os.environ.get("VIGILA_BASE", "/mnt/data/backups"))
+    env = Path(os.environ.get("VIGILA_ENV", "/mnt/data/appdata/orbit/secrets/accounting.env"))
+    api = os.environ.get("VIGILA_API", "https://api.telegram.org")
+    hallados = problemas(base, time.time())
+    if not hallados:
+        return 0
+    print("\n".join(hallados))
+    texto = "<b>Respaldos con problema en gonserver</b>\n" + "\n".join(
+        f"• {html.escape(p, quote=False)}" for p in hallados
+    )
+    try:
+        enviar(texto, env, api)
+    except Exception as e:
+        print(f"ERROR: no se pudo avisar por Telegram: {e}", file=sys.stderr)
+        return 2
+    return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

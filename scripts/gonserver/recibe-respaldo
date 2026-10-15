@@ -1,0 +1,47 @@
+#!/bin/sh
+# Receptor de respaldos en gonserver: /usr/local/bin/recibe-respaldo <familia>.
+#
+# Lo invoca el command= forzado de la llave en ~clawbackup/.ssh/authorized_keys. El
+# cliente manda el nombre del archivo como comando remoto (llega en SSH_ORIGINAL_COMMAND)
+# y los datos por stdin; aquí no hay shell ni otro comando posible.
+#
+#   openclaw  openclaw-backup-AAAAMMDD.tar.gz y openclaw-extras-AAAAMMDD.tar.gz
+#             en $RECIBE_BASE/openclaw, se guardan los 7 más nuevos de cada prefijo.
+#   hermes    hermes-backup-AAAAMMDD.tar.gz en $RECIBE_BASE/hermes (7), y el nombre viejo
+#             claw-backup-AAAAMMDD.tar.gz en $RECIBE_BASE/claw (8) para que el script
+#             anterior de la PC siga funcionando hasta que lo reemplacen.
+#
+# Éxito: imprime el sha256 del archivo guardado y sale 0. Falla: mensaje en stderr y
+# salida distinta de 0 (2 nombre o familia inválidos, 3 archivo corrupto). Nunca deja un
+# archivo a medias: escribe a un temporal, lo valida con `gzip -t` y lo renombra.
+set -eu
+umask 077
+
+BASE="${RECIBE_BASE:-/mnt/data/backups}"
+familia="${1:-}"
+nombre="${SSH_ORIGINAL_COMMAND:-}"
+D8='[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]'
+
+# shellcheck disable=SC2254  # $D8 es un patrón, no un literal
+case "$familia:$nombre" in
+  openclaw:openclaw-backup-$D8.tar.gz | openclaw:openclaw-extras-$D8.tar.gz)
+    dir="$BASE/openclaw"; guardar=7 ;;
+  hermes:hermes-backup-$D8.tar.gz) dir="$BASE/hermes"; guardar=7 ;;
+  hermes:claw-backup-$D8.tar.gz) dir="$BASE/claw"; guardar=8 ;;
+  *) echo "ERROR: nombre invalido para la familia '$familia'" >&2; exit 2 ;;
+esac
+prefijo="${nombre%-*}"
+
+mkdir -p "$dir"
+tmp="$dir/.$nombre.tmp.$$"
+trap 'rm -f "$tmp"' EXIT
+trap 'exit 1' HUP INT TERM
+cat > "$tmp"
+gzip -t "$tmp" 2>/dev/null || { echo "ERROR: archivo corrupto o incompleto" >&2; exit 3; }
+mv -f "$tmp" "$dir/$nombre"
+
+# El nombre lleva la fecha, así que el orden por nombre es el orden por día.
+ls -1 "$dir/$prefijo"-*.tar.gz | sort -r | tail -n +"$((guardar + 1))" | while IFS= read -r viejo; do
+  rm -f "$viejo"
+done
+sha256sum "$dir/$nombre" | cut -d" " -f1
