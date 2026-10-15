@@ -273,6 +273,23 @@ class Briefs(unittest.TestCase):
             "incidente:deadline",
         )
 
+    def test_clean_slot_fails_when_processes_survive_the_kill(self):
+        # B2 de G5d: si tras el KILL el grupo sigue con procesos, el caso falla
+        # en vez de salir OK y saltar los siguientes en silencio.
+        from types import SimpleNamespace
+        from unittest import mock
+
+        banco = BancoE2E.__new__(BancoE2E)
+        banco.socket = "banco-falso"
+        banco.slot = SimpleNamespace(boundary=lambda: (SimpleNamespace(pid=4321),))
+        with mock.patch("subprocess.run", return_value=SimpleNamespace(stdout="")):
+            with mock.patch.object(
+                sys.modules[__name__], "matar_procesos_del_slot", return_value=(4321,)
+            ):
+                with self.assertRaises(AssertionError) as atrapado:
+                    banco.clean_slot()
+        self.assertIn("el caso dejó procesos vivos en el slot: 4321", str(atrapado.exception))
+
     def test_artifact_path_reads_what_the_host_recorded(self):
         # E: el inspect de R devuelve artifactRef como artifact:<sha256>; la ruta real es
         # la que el host grabó en results/<op>.json.
