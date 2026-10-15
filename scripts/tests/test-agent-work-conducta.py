@@ -621,6 +621,58 @@ class ConductaNativa(unittest.TestCase):
         self.assertFalse(respuesta["ok"])
         self.assertEqual(respuesta["razones"][0], SIN_POTETO_NATIVO)
 
+    def test_the_real_m17_probes_are_red_for_the_playbook_they_never_read(self):
+        # B de SUA03-G5d: las dos sondas nativas reales (M-17 y su repetición)
+        # quedan fijadas con sus razones exactas; ninguna leyó el playbook ni
+        # abrió lista, que es lo que la generación 2 viene a cambiar.
+        casos = (
+            (
+                "m17a-ingenieria-nativo.jsonl",
+                "Ran 4 tests in 0.000s\n\nOK\n",
+                [
+                    "falta la lectura de skills/poteto-mode/playbooks/feature.md "
+                    "antes del primer cambio",
+                    "no hay lista de pasos (todowrite)",
+                ],
+            ),
+            (
+                "m17b-ingenieria-nativo.jsonl",
+                "cualquier cosa\n",
+                [
+                    "falta la lectura de skills/poteto-mode/playbooks/feature.md "
+                    "antes del primer cambio",
+                    "no hay lista de pasos (todowrite)",
+                    "el resultado no cita la salida de las últimas pruebas",
+                ],
+            ),
+        )
+        for fixture, resultado_texto, razones_esperadas in casos:
+            with self.subTest(fixture=fixture):
+                with tempfile.TemporaryDirectory() as tmp:
+                    tmp = Path(tmp)
+                    libro = tmp / "skills" / "poteto-mode" / "playbooks" / "feature.md"
+                    libro.parent.mkdir(parents=True)
+                    shutil.copy(FIXTURAS / "m16b-feature.md", libro)
+                    (tmp / "resultado.md").write_text(resultado_texto, encoding="utf-8")
+                    out = io.StringIO()
+                    with contextlib.redirect_stdout(out):
+                        codigo = conducta.main(
+                            [
+                                "--forma",
+                                "openclaw",
+                                "--eventos",
+                                str(FIXTURAS / fixture),
+                                "--playbook",
+                                str(libro),
+                                "--resultado",
+                                str(tmp / "resultado.md"),
+                            ]
+                        )
+                self.assertEqual(codigo, 1)
+                respuesta = json.loads(out.getvalue())
+                self.assertFalse(respuesta["ok"])
+                self.assertEqual(respuesta["razones"], razones_esperadas)
+
     def test_a_native_run_whose_child_tests_after_the_change_follows_poteto(self):
         padre, hijo = "agent:x:turno", "agent:x:subagent:1"
         filas = [
