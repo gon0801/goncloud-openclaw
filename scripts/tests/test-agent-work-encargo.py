@@ -499,6 +499,17 @@ class Perfiles(Mac):
         self.assertEqual((code, out), (3, ""))
         self.assertIn("perfiles.v1.json", err)
 
+    def test_a_profiles_file_without_a_list_is_an_error_and_not_a_traceback(self):
+        ruta = self.checkout / "scripts" / "agent-work" / "contexto" / "perfiles.v1.json"
+        ruta.write_text(json.dumps({"schema": "x", "profiles": None}) + "\n", encoding="utf-8")
+        code, out, err = self.cli("perfiles")
+        self.assertEqual(code, 3)
+        self.assertEqual(out, "")
+        self.assertNotIn("Traceback", err)
+        respuesta = json.loads(err)
+        self.assertFalse(respuesta["ok"])
+        self.assertIn("profiles", respuesta["error"])
+
 
 class Permitir(Mac):
     def permitir(self, *args):
