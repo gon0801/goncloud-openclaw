@@ -1148,6 +1148,23 @@ class Decisions(Slot):
         self.assertFalse(self.record().repo_before.exists())
         self.assertEqual((len(self.r.reports), self.r.incidents), (1, []))
 
+    def test_a_photo_that_fails_in_the_task_repo_aborts_the_launch(self):
+        # Un repo git admitido sin commits no tiene foto: lanzar en él una corrida que no puede
+        # escribirlo sin foto previa aceptaría su resultado sin comparar nada, así que el
+        # lanzamiento no ocurre (bots: fallar cerrado). La entrega queda uncertain y la resuelve R.
+        por_nacer = self.root / "dev" / "por-nacer"
+        por_nacer.mkdir()
+        env = {key: value for key, value in os.environ.items() if not key.startswith("GIT_")}
+        subprocess.run(["git", "-C", str(por_nacer), "init", "-q"], check=True, env=env, capture_output=True)
+        self.r.offer("task-1", b"revisa\n", {"kind": "code", "repository": str(por_nacer), "sha": "b" * 40},
+                     contract="review.v1")
+        self.assertEqual(self.one_pass()["claimed"], 1)
+        self.assertEqual(self.backend.launches, [], "a run launched without a before-photo")
+        self.assertFalse(self.record().repo_before.exists())
+        self.assertEqual(self.held()[0], "attempted")
+        self.one_pass()
+        self.assertEqual(self.backend.launches, [], "the replayed claim launched without a photo either")
+
     def test_estado_says_why_the_launch_script_left_before_reaching_opencode(self):
         for code, why in ((96, "El host no pudo crear la carpeta temporal del encargo."),
                           (97, "El host no pudo entrar a la carpeta del encargo."),

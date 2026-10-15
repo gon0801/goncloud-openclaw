@@ -24,8 +24,8 @@ from contracts import (HOST_BEAT_FILE, AuthorizedOperation, HostBeat, HostObserv
                        RunDir, SessionRecord, operation_id)
 import contexto
 import flota
-from host import (ACCEPT_DEADLINE_SECONDS, RESULT_DEADLINE_SECONDS, DeliveryDeferred, Host, repo_photo,
-                  writes_source)
+from host import (ACCEPT_DEADLINE_SECONDS, RESULT_DEADLINE_SECONDS, DeliveryDeferred, Host, PhotoFailed,
+                  repo_photo, writes_source)
 from modelos import (POLICY_FILE, CatalogStore, CatalogUnavailable, ContextoIncompleto, ExactModel, ModelNotListed,
                      PerfilRechazado, ProviderNotConfigured, ProviderPolicy, authorize, explicar)
 from progress_bridge import transfer_host_projection, transfer_projection
@@ -481,6 +481,11 @@ def claim_run_once(client, *, host, manager, backend, instance_id, deps):
             if protected is not None:
                 try:
                     photo = repo_photo(str(protected), ignored=en_clon)
+                except PhotoFailed:
+                    # Un repo git admitido cuya foto falló (un HEAD por nacer incluido) no lanza:
+                    # sin foto previa, el resultado del revisor se aceptaría sin comparar nada
+                    # (SUA-03, bots: fallar cerrado). La entrega queda uncertain y la resuelve R.
+                    raise
                 except OSError:
                     photo = None
             if photo is not None:

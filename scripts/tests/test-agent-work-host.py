@@ -538,6 +538,21 @@ class GitPhoto(unittest.TestCase):
         self.assertEqual(host.photo_changes(before, after), ["exclude"],
                          "an exclude rule that hides a planted file changed no field of the photo")
 
+    def test_a_repo_without_commits_fails_closed_and_a_non_repo_does_not(self):
+        unborn = self.root / "por-nacer"
+        unborn.mkdir()
+        git(unborn, "init", "-q")
+        with self.assertRaises(host.PhotoFailed):
+            host.repo_photo(str(unborn))
+        self.assertTrue(issubclass(host.PhotoFailed, OSError),
+                        "the after-photo path may only catch OSError, never a bare failure")
+        vacio = self.root / "no-repo"
+        vacio.mkdir()
+        with self.assertRaises(OSError) as raised:
+            host.repo_photo(str(vacio))
+        self.assertNotIsInstance(raised.exception, host.PhotoFailed,
+                                 "a folder that is not a repo keeps the G2 path (no photo, launch proceeds)")
+
 
 if __name__ == "__main__":
     unittest.main()

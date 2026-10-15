@@ -89,6 +89,13 @@ def _git(repo: str, *args: str) -> bytes:
     return done.stdout
 
 
+class PhotoFailed(OSError):
+    """La foto de un repo git admitido no se pudo tomar (un HEAD por nacer incluido): lanzar en él
+    una corrida que no puede escribirlo sin foto previa dejaría pasar cualquier cambio, así que el
+    lanzamiento aborta (SUA-03, bots: fallar cerrado). No es "no es un repo": eso sigue siendo un
+    OSError que el lanzador trata como hoy."""
+
+
 def _hash_into(total, path: Path) -> None:
     """Into a sha256 en marcha: el destino de un symlink o los bytes de un archivo regular, leídos
     en trozos; cualquier otra cosa no suma nada (su presencia ya viaja en los bytes del status)."""
@@ -148,7 +155,8 @@ def repo_photo(repo: str, *, ignored: bool = False) -> dict:
     run works in a disposable clone (SUA-03, 4.8): a reviewer without one runs its tests where it
     works, and a __pycache__ in the repo must not refuse a good result, so its photo is the G2
     one, byte for byte. Which mode applies is the launcher's call, and it writes it in the
-    before-photo so the after-photo reads the same one. OSError when the folder is not a git repo."""
+    before-photo so the after-photo reads the same one. OSError when the folder is not a git repo,
+    PhotoFailed when it is one and the photo itself failed (a repo without commits included)."""
     git_dir = Path(_git(repo, "rev-parse", "--absolute-git-dir").decode().strip())
     config = git_dir / "config"
     exclude = git_dir / "info" / "exclude"
@@ -158,15 +166,18 @@ def repo_photo(repo: str, *, ignored: bool = False) -> dict:
         # collapse the directory into one entry, and a new file inside one that already existed would
         # never change the photo.
         status.append("--ignored=traditional")
-    return {
-        "head": _git(repo, "rev-parse", "HEAD").decode().strip(),
-        "refs": hashlib.sha256(_git(repo, "for-each-ref")).hexdigest(),
-        "status": _status_digest(repo, *status),
-        "diff": hashlib.sha256(_git(repo, "diff", "--binary", "HEAD")).hexdigest(),
-        "config": hashlib.sha256(config.read_bytes() if config.is_file() else b"").hexdigest(),
-        "hooks": _git_files(git_dir / "hooks"),
-        "exclude": hashlib.sha256(exclude.read_bytes() if exclude.is_file() else b"").hexdigest(),
-    }
+    try:
+        return {
+            "head": _git(repo, "rev-parse", "HEAD").decode().strip(),
+            "refs": hashlib.sha256(_git(repo, "for-each-ref")).hexdigest(),
+            "status": _status_digest(repo, *status),
+            "diff": hashlib.sha256(_git(repo, "diff", "--binary", "HEAD")).hexdigest(),
+            "config": hashlib.sha256(config.read_bytes() if config.is_file() else b"").hexdigest(),
+            "hooks": _git_files(git_dir / "hooks"),
+            "exclude": hashlib.sha256(exclude.read_bytes() if exclude.is_file() else b"").hexdigest(),
+        }
+    except OSError as exc:
+        raise PhotoFailed(f"la foto de {repo} falló: {exc}") from exc
 
 
 def photo_changes(before: dict, after: dict) -> list[str]:
