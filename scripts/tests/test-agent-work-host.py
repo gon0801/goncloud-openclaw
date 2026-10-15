@@ -532,7 +532,8 @@ class GitPhoto(unittest.TestCase):
                     host._status_digest(str(self.repo), "status", "--porcelain=v1", "-z",
                                         "--untracked-files=all", timeout=2)
         self.assertIsNotNone(spawned[0].poll(), "the timed-out git status child stayed alive")
-        self.assertLess(spawned[0].returncode, 0, "the child died of old age, not of the kill")
+        self.assertEqual(spawned[0].returncode, -signal.SIGKILL,
+                         "the child died of a broken pipe or of old age, not of the kill")
 
     def test_inherited_git_repository_variables_do_not_move_the_photo(self):
         other = self.root / "otro"
