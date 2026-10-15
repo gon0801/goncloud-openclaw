@@ -239,6 +239,26 @@ class Briefs(unittest.TestCase):
         self.assertEqual(matados, (4321,))
         self.assertEqual(boundary(), ())
 
+    def test_guardar_caso_copies_the_tree_without_git_or_dylib(self):
+        # R3 de SUA03-G5c-r3: la evidencia de un caso se copia sin repo/.git y
+        # sin *.dylib, para poder mirar un caso rojo sin su temporal.
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            raiz = tmp / "caso"
+            (raiz / "repo" / ".git").mkdir(parents=True)
+            (raiz / "repo" / ".git" / "HEAD").write_text("ref\n")
+            (raiz / "repo" / "saluda.py").write_text("def saluda():\n    return 'hola'\n")
+            (raiz / "lib.dylib").write_bytes(b"binario")
+            (raiz / "state").mkdir()
+            (raiz / "state" / "host.log").write_text("log\n")
+            (raiz / "state" / "otra.dylib").write_bytes(b"binario")
+            destino = guardar_caso(raiz, tmp / "guardados" / "test_x")
+            self.assertEqual((destino / "repo" / "saluda.py").exists(), True)
+            self.assertEqual((destino / "state" / "host.log").read_text(), "log\n")
+            self.assertFalse((destino / "repo" / ".git").exists())
+            self.assertFalse((destino / "lib.dylib").exists())
+            self.assertFalse((destino / "state" / "otra.dylib").exists())
+
     def test_artifact_path_reads_what_the_host_recorded(self):
         # E: el inspect de R devuelve artifactRef como artifact:<sha256>; la ruta real es
         # la que el host grabó en results/<op>.json.
