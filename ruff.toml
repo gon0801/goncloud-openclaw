@@ -7,9 +7,11 @@ include = [
     "scripts/agent-work/contexto.py",
     "scripts/agent-work/flota.py",
     "scripts/agent-work/conducta.py",
+    "scripts/agent-work/publicar-contexto.py",
     "scripts/tests/test-agent-work-contexto.py",
     "scripts/tests/test-agent-work-flota.py",
     "scripts/tests/test-agent-work-conducta.py",
+    "scripts/tests/test-agent-work-publicar.py",
 ]
 target-version = "py39"
 line-length = 100
