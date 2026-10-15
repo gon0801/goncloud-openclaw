@@ -417,6 +417,28 @@ def _valida_perfiles(documento: object) -> dict:
             raise ValueError(
                 f"el perfil {perfil.get('id', '?')} no trae agents como lista de objetos con agentId"
             )
+        for ruta in perfil["routes"]:
+            if not isinstance(ruta.get("host"), str) or not isinstance(
+                ruta.get("executor"), str
+            ):
+                raise ValueError(
+                    f"el perfil {perfil.get('id', '?')} tiene una ruta sin host o executor de texto"
+                )
+            if ruta.get("agentId") is not None and not isinstance(ruta.get("agentId"), str):
+                raise ValueError(
+                    f"el perfil {perfil.get('id', '?')} tiene una ruta con agentId que no es texto"
+                )
+    agentes_raiz = documento.get("agents")
+    if agentes_raiz is not None and (
+        not isinstance(agentes_raiz, list)
+        or not all(
+            isinstance(agente, dict) and isinstance(agente.get("agentId"), str)
+            for agente in agentes_raiz
+        )
+    ):
+        raise ValueError(
+            "perfiles.v1.json no trae agents como lista de objetos con agentId de texto"
+        )
     return documento
 
 
@@ -847,7 +869,7 @@ def _run_estado(args: argparse.Namespace, where: dict, now: float) -> int:
 def _run_perfiles(args: argparse.Namespace, where: dict, now: float) -> int:
     try:
         respuesta = perfiles(checkout=where["checkout"])
-    except (OSError, ValueError, KeyError) as error:
+    except (OSError, ValueError, KeyError, TypeError) as error:
         print(
             json.dumps(
                 {
