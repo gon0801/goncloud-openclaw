@@ -584,6 +584,11 @@ class Host:
                 raise ValueError("artifact too large")
             if hashlib.sha256(raw).hexdigest() != result["digest"]:
                 raise ValueError("artifact digest mismatch")
+            # F3: el typedPayload también se valida antes del snapshot, para que un
+            # resultado inválido no deje el artefacto guardado; la de justo antes de
+            # grabar cubre el camino donde el snapshot ya existía.
+            if not typed_payload_valido(assignment["resultContract"], result["typedPayload"]):
+                raise ValueError(f"typedPayload no cumple {assignment['resultContract']}")
             self._write_snapshot(snapshot, raw)
             self._snapshot_bytes(snapshot, result["digest"])
         # Después de la revisión del repo del revisor (ReviewWroteSource manda, es el
