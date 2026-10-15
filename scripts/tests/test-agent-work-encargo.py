@@ -49,8 +49,7 @@ PROMPTS = {
     30001: ("2026-10-20T09:00:00.000Z", "recuerda: open code go es solamente para main, ya lo dije"),
     30010: ("2026-10-21T09:00:00.000Z", "pero tengo deepseek por api, eso sí"),
 }
-DEFAULT_BRIEF_ARGS = ["--host", "mac-local", "--adapter", "opencode", "--model", "zai-coding-plan/glm-5.3-flash",
-                      "--perfil", "ingenieria"]
+DEFAULT_BRIEF_ARGS = ["--host", "mac-local", "--adapter", "opencode", "--model", "zai-coding-plan/glm-5.3-flash"]
 
 
 class Mac(unittest.TestCase):
@@ -197,29 +196,31 @@ class Proveedores(Mac):
 
 
 class Preparar(Mac):
-    def test_the_profile_travels_in_the_brief_args_and_an_unknown_one_is_refused_by_name(self):
+    def test_the_profile_travels_in_the_brief_args_only_when_it_is_asked_for(self):
         self.beat()
-        self.assertEqual(self.preparar("--perfil", "revision")["briefArgs"][-2:], ["--perfil", "revision"])
+        self.assertNotIn("--perfil", self.preparar()["briefArgs"], "a task of today carries no profile")
+        with_profile = self.preparar("--perfil", "revision")
+        self.assertEqual(with_profile["briefArgs"][-2:], ["--perfil", "revision"])
         unknown = self.preparar("--perfil", "no-existe")
         self.assertEqual((unknown["causa"], unknown["accion"]), ("perfil-desconocido", "no-registrar"))
         self.assertEqual(unknown["frase"], "ningún perfil se llama no-existe")
         malformed = self.preparar("--perfil", "Ingenieria")
         self.assertEqual(malformed["causa"], "perfil-desconocido")
 
-    def test_preparar_names_an_uncertified_package_generation_in_the_same_turn(self):
+    def test_a_profiled_pedido_names_an_uncertified_package_generation_in_the_same_turn(self):
         self.beat()
         path = self.checkout / EVIDENCE / "coverage.json"
         coverage = json.loads(path.read_text())
         del coverage["hostAdapterRoute"]["mac-local"]["opencode"]["contextGenerations"]
         path.write_text(json.dumps(coverage))
-        answer = self.preparar()
+        answer = self.preparar("--perfil", "ingenieria")
         self.assertEqual((answer["causa"], answer["accion"]), ("generacion-no-certificada", "no-registrar"))
         self.assertIn("generación 1", answer["frase"])
 
-    def test_preparar_says_when_the_checkout_has_no_package_to_deliver(self):
+    def test_a_profiled_pedido_says_when_the_checkout_has_no_package_to_deliver(self):
         self.beat()
         shutil.rmtree(self.checkout / "scripts" / "agent-work" / "contexto")
-        answer = self.preparar()
+        answer = self.preparar("--perfil", "ingenieria")
         self.assertEqual((answer["causa"], answer["accion"]), ("contexto-incompleto", "no-registrar"))
         self.assertIn("no se pudo leer", answer["frase"])
 
@@ -367,9 +368,8 @@ class Preparar(Mac):
             "host": {"politica": self.policy().digest[:12], "cli": "1.18.35"}})
         self.beat(slot="running", taskId="t-1", model="zai-coding-plan/glm-5.3", since=time.time() - 30)
         token = self.preparar("--modelo", "deepseek v4 pro")
-        self.assertEqual((token["modelo"], token["cobro"], token["enFila"], token["briefArgs"][-2:]),
-                         ("deepseek/deepseek-v4-pro", "per-token", True, ["--perfil", "ingenieria"]))
-        self.assertEqual(token["briefArgs"][-3], "deepseek/deepseek-v4-pro")
+        self.assertEqual((token["modelo"], token["cobro"], token["enFila"], token["briefArgs"][-1]),
+                         ("deepseek/deepseek-v4-pro", "per-token", True, "deepseek/deepseek-v4-pro"))
         without_repo = self.preparar("--modelo", "glm 5.3 highspeed", repo=False)
         self.assertEqual((without_repo["modelo"], without_repo["inputRevision"]),
                          ("zai-coding-plan/glm-5.3-highspeed", None))
@@ -386,10 +386,8 @@ class Preparar(Mac):
         fragments = json.loads(done.stdout)
         self.assertEqual(fragments["target"], {"kind": "cli", "hostId": "mac-local", "adapterId": "opencode"})
         brief = (instructions / fragments["instructionRef"]["ref"].removeprefix("artifact:")).read_bytes()
-        self.assertEqual(brief, b"agent-work.launch.v1\nmodel: deepseek/deepseek-v4-pro\nprofile: ingenieria\n---\n"
-                                b"Agrega saludo.py\n")
+        self.assertEqual(brief, b"agent-work.launch.v1\nmodel: deepseek/deepseek-v4-pro\n---\nAgrega saludo.py\n")
         self.assertEqual(str(LaunchHeader.parse(brief).model), answer["modelo"])
-        self.assertEqual(LaunchHeader.parse(brief).profile, "ingenieria")
 
     def test_a_host_that_would_decide_with_something_else_is_out_of_step(self):
         for change, piece in (({"policyDigest": "f" * 64}, "otra política"), ({"policyDigest": None}, "otra política"),
