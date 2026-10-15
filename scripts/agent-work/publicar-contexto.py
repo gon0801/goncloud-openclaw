@@ -462,6 +462,11 @@ def aplicar_en_la_mini(publicacion: Path, home: Path, agentes_json: Path | None)
 
     for nombre in nombres:
         destino = skills_dir / nombre
+        if not destino.exists() and nombre in estado["skills"]:
+            # CAS de skills (4.3): borrarla también es una edición (C4); no se recrea.
+            salida_skills[nombre] = "conflicto: se borró después de publicar"
+            conflictos += 1
+            continue
         if destino.exists():
             actual = digest_de_carpeta(destino)
             if nombre not in estado["skills"]:
