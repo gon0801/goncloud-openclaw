@@ -15,16 +15,16 @@ No hay tabla de modelos en esta skill. Qué modelos existen, cuáles están perm
 
 ## Encargar
 
-1. Prepara el encargo con `exec` en la Mac (`host="node"`). `--modelo` lleva las palabras de David, por ejemplo `"glm 5.3 highspeed"`; omítelo si no nombró modelo. La ruta del repo es la de la Mac y va absoluta: allá `~` es `/Users/dn`, no el `/Users/gon` de la Mini. Un trabajo sin repo va sin `--repo`.
+1. Prepara el encargo con `exec` en la Mac (`host="node"`). `--modelo` lleva las palabras de David, por ejemplo `"glm 5.3 highspeed"`; omítelo si no nombró modelo. `--perfil` sale del tipo de pedido: implementar o arreglar, `ingenieria`; revisar, `revision`; "revisión adversaria" o "atácalo", `adversario`; verificar, `verificacion`; explorar o investigar sin cambiar nada, `exploracion`. La ruta del repo es la de la Mac y va absoluta: allá `~` es `/Users/dn`, no el `/Users/gon` de la Mini. Un trabajo sin repo va sin `--repo`.
    ```
-   python3 /Users/dn/dev/wt/agent-work-host/scripts/agent-work/encargo.py preparar --repo /Users/dn/dev/<repo> --modelo "<lo que dijo David>"
+   python3 /Users/dn/dev/wt/agent-work-host/scripts/agent-work/encargo.py preparar --repo /Users/dn/dev/<repo> --modelo "<lo que dijo David>" --perfil <id>
    ```
    Contesta una línea JSON. Un rechazo sale con código 3 y aun así trae su línea: léela.
    - Con `"ok": true`, guarda `modelo`, `cobro`, `inputRevision`, `briefArgs` y `enFila`:
      ```
      {"ok": true, "modelo": "zai-coding-plan/glm-5.3-highspeed", "cobro": "subscription", "inputRevision": {"kind": "code", "repository": "/Users/dn/dev/<repo>", "sha": "<HEAD>"}, "briefArgs": ["--host", "mac-local", "--adapter", "opencode", "--model", "zai-coding-plan/glm-5.3-highspeed"], "enFila": false, "host": {"politica": "…", "cli": "…"}}
      ```
-   - Con `"ok": false` llegan `causa`, `frase`, `accion` y `candidatos`. Dile a David la `frase` tal cual y haz la `accion`. `no-registrar` significa que aquí termina: no hay tarea. Pasa, por ejemplo, cuando el proveedor está cerrado, o cuando está permitido y David todavía no inició sesión en opencode: la `frase` le dice qué correr. `preguntar-a-david` trae `candidatos`: pregúntale cuál y repite este paso con el id exacto en `--modelo`.
+   - Con `"ok": false` llegan `causa`, `frase`, `accion` y `candidatos`. Dile a David la `frase` tal cual y haz la `accion`. Si la causa es de perfil (`perfil-ausente`, `perfil-desconocido`, `perfil-no-atiende-ruta`, `perfil-no-admite-contrato`, `perfil-sin-competencia`, `generacion-no-certificada`, `contexto-incompleto`, `herramienta-negada`), la frase es la respuesta: dila tal cual, como con cualquier otro rechazo. `no-registrar` significa que aquí termina: no hay tarea. Pasa, por ejemplo, cuando el proveedor está cerrado, o cuando está permitido y David todavía no inició sesión en opencode: la `frase` le dice qué correr. `preguntar-a-david` trae `candidatos`: pregúntale cuál y repite este paso con el id exacto en `--modelo`.
    - Sin línea JSON no hay tarea. Con código 1, opencode o git no contestaron a tiempo y el motivo está en stderr. Si el `exec` mismo falla, la Mac no responde. Díselo a David y termina.
 2. Escribe el brief con tu `exec` en la Mini. `<briefArgs>` son los elementos de `briefArgs` del paso 1, en ese orden, separados por espacios y sin cambiar ninguno:
    ```
@@ -33,11 +33,11 @@ No hay tabla de modelos en esta skill. Qué modelos existen, cuáles están perm
    Entrega el resultado ready.v1 con typedPayload {"evidenceRef": "<archivo>"} y el artefacto <archivo>, como lo explica el archivo de asignación (campo protocol).
    BRIEF
    ```
-   `<archivo>` es la ruta, relativa al repo, del archivo que prueba el trabajo (por ejemplo `saludo.py`). Escríbela, no dejes `<archivo>`. Para una revisión, el resultado es `review.v1` con typedPayload `{"verdict": "approved", "evidenceRef": "<archivo>"}` o `{"verdict": "changes", "findingsRef": "<archivo>"}`. `--model` hace que `brief.py` escriba el modelo al inicio del brief, que es de donde lo lee el host: no lo escribas tú en la prosa. `brief.py` imprime una línea JSON, `{"instructionRef": {"digest": "sha256:…", "ref": "artifact:…"}, "target": {"adapterId": "opencode", "hostId": "mac-local", "kind": "cli"}}`: copia esos dos objetos tal cual.
+   `<archivo>` es la ruta, relativa al repo, del archivo que prueba el trabajo (por ejemplo `saludo.py`). Escríbela, no dejes `<archivo>`. Para una revisión, el resultado es `review.v1` con typedPayload `{"verdict": "approved", "evidenceRef": "<hallazgos>"}` o `{"verdict": "changes", "findingsRef": "<hallazgos>"}`, y `<hallazgos>` ya no es una ruta del repo: va donde lo dice el campo `protocol` de la asignación, dentro de la carpeta de la corrida (la carpeta que contiene `resultRef`, nunca dentro de `workspaceRef`). En el brief se lo dices así al revisor: "el artefacto va donde lo dice el campo protocol de la asignación, dentro de la carpeta que contiene resultRef, y no tocas el repo". `--model` hace que `brief.py` escriba el modelo al inicio del brief, que es de donde lo lee el host: no lo escribas tú en la prosa. `brief.py` imprime una línea JSON, `{"instructionRef": {"digest": "sha256:…", "ref": "artifact:…"}, "target": {"adapterId": "opencode", "hostId": "mac-local", "kind": "cli"}}`: copia esos dos objetos tal cual.
 3. `managed_tasks_submit` con un `taskKey` nuevo (nunca `key`), por ejemplo `canario-saludo-202610121530` (repo, tema, fecha y hora), y este `assignment`:
    - `target` e `instructionRef`: los de `brief.py`.
    - `inputRevision`: el del paso 1. Si vino `null`, porque el trabajo no tiene repo, usa `{"kind": "artifact", "ref": <instructionRef.ref>, "digest": <instructionRef.digest>}`.
-   - `resultContract`: `ready.v1` para implementar o arreglar, `review.v1` para revisar.
+   - `resultContract`: `ready.v1` para implementar, arreglar o explorar, `review.v1` para revisar, atacar o verificar; es el contrato del perfil que pediste en el paso 1.
    - `continuation`: `{"kind": "requester"}`.
    - `progressBinding`, solo si el trabajo tiene corrida en el tablero (`seguimiento-tablero`): `{"publisherHostId": "mac-local", "corrida": "<c>", "carril": "<carril>", "intento": "<intento>", "ronda": 1}`.
 4. `managed_tasks_admit` con el `taskId` y `admissionKey` `<taskKey>-admit`. Contesta `host-pending`.

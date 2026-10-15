@@ -241,7 +241,17 @@ class AgentsRouting(unittest.TestCase):
             "python3 /Users/dn/dev/wt/agent-work-host/scripts/agent-work/encargo.py estado --tarea <taskId>",
             "`managed_tasks_submit` con un `taskKey` nuevo (nunca `key`)",
             '`{"kind": "artifact", "ref": <instructionRef.ref>, "digest": <instructionRef.digest>}`',
-            "`ready.v1` para implementar o arreglar, `review.v1` para revisar",
+            "`ready.v1` para implementar, arreglar o explorar, `review.v1` para revisar, atacar o verificar",
+            # G4: el perfil viaja en preparar y cada tipo de pedido lleva el suyo.
+            "python3 /Users/dn/dev/wt/agent-work-host/scripts/agent-work/encargo.py preparar "
+            '--repo /Users/dn/dev/<repo> --modelo "<lo que dijo David>" --perfil <id>',
+            "implementar o arreglar, `ingenieria`; revisar, `revision`; "
+            '"revisión adversaria" o "atácalo", `adversario`; verificar, `verificacion`; '
+            "explorar o investigar sin cambiar nada, `exploracion`",
+            "Si la causa es de perfil",
+            # G4: el artefacto de una revisión va a la carpeta de la corrida, no al repo (4.8).
+            'y `<hallazgos>` ya no es una ruta del repo: va donde lo dice el campo `protocol` de la asignación',
+            "la carpeta que contiene `resultRef`, nunca dentro de `workspaceRef`",
             '`continuation`: `{"kind": "requester"}`',
             "`managed_tasks_admit` con el `taskId` y `admissionKey` `<taskKey>-admit`",
             "Termina tu turno.",
