@@ -214,4 +214,23 @@ grep -q "no se pudo avisar" "$SB/verr" || fail "con Telegram caído no dijo la c
 cat "$SB/vout" "$SB/verr" | grep -qF "$TOKEN" && fail "el token apareció en la salida"
 rm -f "$SB/tg-falla"
 
+# 9
+X="$SB/roto"
+poner "$X" openclaw openclaw-backup-20261015.tar.gz 900 1
+ln -s "$SB/no-existe" "$X/openclaw/openclaw-backup-20261016.tar.gz"
+antes="$(envios)"
+vigilar "$X"; rc=$?
+[ "$rc" -eq 1 ] || fail "con un respaldo que no se puede leer no salió 1 (rc=$rc): $(cat "$SB/verr")"
+[ "$(envios)" -eq $((antes + 1)) ] || fail "un vigía que no pudo revisar no avisó"
+grep -q "no pude revisar los respaldos" "$SB/tg.log" || fail "el aviso no dice que no pudo revisar: $(tail -1 "$SB/tg.log")"
+
+# 10
+P="$SB/poda-propia"
+for d in 09 10 11 12 13 14 15; do
+  BASE_PRUEBA="$P" recibir openclaw "openclaw-backup-202610$d.tar.gz" "$SB/bueno.tar.gz" || fail "no recibió el día $d"
+done
+BASE_PRUEBA="$P" recibir openclaw openclaw-backup-20261001.tar.gz "$SB/bueno.tar.gz"; rc=$?
+[ "$rc" -eq 0 ] || fail "un día viejo que la poda quita salió $rc: $(cat "$SB/err")"
+[ "$(cat "$SB/out")" = "$(sha "$SB/bueno.tar.gz")" ] || fail "un día viejo que la poda quita no imprimió su sha: '$(cat "$SB/out")'"
+
 echo "ok: receptor por familia con validación, retención y sha; vigía callado al día y con un aviso sin token"

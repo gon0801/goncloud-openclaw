@@ -94,7 +94,10 @@ def main() -> int:
     base = Path(os.environ.get("VIGILA_BASE", "/mnt/data/backups"))
     env = Path(os.environ.get("VIGILA_ENV", "/mnt/data/appdata/orbit/secrets/accounting.env"))
     api = os.environ.get("VIGILA_API", "https://api.telegram.org")
-    hallados = problemas(base, time.time())
+    try:
+        hallados = problemas(base, time.time())
+    except Exception as e:  # noqa: BLE001 - a watcher that cannot look must say so
+        hallados = [f"no pude revisar los respaldos: {type(e).__name__}: {e}"]
     if not hallados:
         return 0
     print("\n".join(hallados))

@@ -64,9 +64,11 @@ if [ "$(wc -c < "$tmp" | tr -d ' ')" -gt "$MAX" ]; then
 fi
 gzip -t "$tmp" 2>/dev/null || { echo "ERROR: archivo corrupto o incompleto" >&2; exit 3; }
 mv -f "$tmp" "$dir/$nombre"
+# Antes de podar: un archivo viejo recién subido puede ser el que la poda quite.
+suma="$(sha256sum "$dir/$nombre" | cut -d" " -f1)"
 
 # El nombre lleva la fecha, así que el orden por nombre es el orden por día.
 ls -1 "$dir/$prefijo"-*.tar.gz | sort -r | tail -n +"$((guardar + 1))" | while IFS= read -r viejo; do
   rm -f "$viejo"
 done
-sha256sum "$dir/$nombre" | cut -d" " -f1
+echo "$suma"
