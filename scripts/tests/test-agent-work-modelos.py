@@ -646,10 +646,10 @@ class Routes(unittest.TestCase):
         self.assertEqual(coverage["hostAdapterRoute"]["mac-local"]["opencode"]["form"], "run-per-task")
         route = sesion.Route.load(coverage, "mac-local")
         self.assertEqual(route, sesion.Route("mac-local", "opencode", "run-per-task", "certified",
-                                             frozenset({"1.18.35"}), frozenset({"1"})))
+                                             frozenset({"1.18.35"}), frozenset()))
         self.assertIsNone(route.open_for("1.18.35", canary=False))
-        self.assertIsNone(route.open_for("1.18.35", 1, canary=False))
-        self.assertEqual(route.open_for("1.18.35", 2, canary=False), modelos.GenerationNotCertified(2, (1,)))
+        self.assertEqual(route.open_for("1.18.35", 1, canary=False), modelos.GenerationNotCertified(1, ()),
+                         "the package generation stays uncertified until M-16 (M-13 point b)")
         self.assertEqual(route.open_for("1.18.36", canary=False), modelos.RouteNotCertified("1.18.36", ("1.18.35",)))
         self.assertEqual(modelos.explicar(route.open_for("1.18.36", canary=False)).frase,
                          "Ruta certificada para 1.18.35, la Mac tiene opencode 1.18.36.")
@@ -716,8 +716,12 @@ class Routes(unittest.TestCase):
                           "a brief without a package only asks the version of the CLI")
 
     def test_the_repos_coverage_certifies_generation_1_of_the_package(self):
+        # M-13 punto b: las skills de la generación 1 pierden contra ~/.agents/skills, así que la
+        # generación 1 NO está certificada: solo un canario la corre, hasta la generación 2 de G4.
         route = sesion.Route.load(json.loads(COVERAGE.read_text(encoding="utf-8")), "mac-local")
-        self.assertIn("1", route.certified_context_generations)
+        self.assertEqual(route.certified_context_generations, frozenset())
+        self.assertEqual(route.open_for("1.18.35", 1, canary=False), modelos.GenerationNotCertified(1, ()))
+        self.assertIsNone(route.open_for("1.18.35", 1, canary=True))
 
 
 class Plans(Policies):
@@ -752,6 +756,7 @@ class Plans(Policies):
     def profiled(self, profile="ingenieria", contract="ready.v1", revision=None, **kwargs):
         brief = f"agent-work.launch.v1\nprofile: {profile}\n---\nprosa\n".encode()
         kwargs.setdefault("canary", True)
+        kwargs.setdefault("now", self.now())
         kwargs.setdefault("assignment", {"target": {"kind": "cli", "hostId": "mac-local", "adapterId": "opencode"},
                                          "inputRevision": revision or {"kind": "code", "repository": str(self.repo),
                                                                        "sha": "a" * 40},
@@ -922,6 +927,11 @@ class Plans(Policies):
             refusal = self.profiled("revision", "review.v1")
         self.assertEqual(refusal.causa, "herramienta-negada")
         self.assertIn("task", refusal.frase)
+
+    def test_a_plan_with_a_package_demands_the_hosts_clock(self):
+        with self.assertRaises(TypeError):
+            self.profiled(now=None)
+        self.assertIsNone(self.plan().perfil, "a packageless plan runs without a clock, as always")
 
     def now(self):
         return datetime(2026, 10, 15, tzinfo=timezone.utc)

@@ -809,6 +809,20 @@ class Decisions(Slot):
             shutil.copy(ROOT / "scripts/agent-work/contexto" / name, destino / name)
 
     @unittest.skipUnless(PSTACK.is_dir(), "pide pstack 0.9.84 instalado en esta Mac")
+    def test_a_profile_whose_source_expired_by_the_hosts_clock_is_refused_even_by_a_canary(self):
+        # context.admite does not skip an expired source for a canary, and the clock it judges with is
+        # the host's (SUA-03, 4.4): the sources of every profile expire on 2027-01-14.
+        self.checkout_contexto()
+        self.start(ScriptedBackend(), canary=True)
+        self.ahead = 100 * 24 * 3600.0
+        self.r.offer("task-1", b"agent-work.launch.v1\nprofile: ingenieria\n---\nhaz el saludo\n", self.revision)
+        self.assertEqual(self.one_pass()["claimed"], 1)
+        self.assertEqual(self.backend.launches, [], "a profile whose source expired never launched")
+        _, answer = self.estado()
+        self.assertEqual(answer["explicacion"]["causa"], "perfil-sin-competencia")
+        self.assertIn("venció", answer["explicacion"]["frase"])
+
+    @unittest.skipUnless(PSTACK.is_dir(), "pide pstack 0.9.84 instalado en esta Mac")
     def test_a_package_source_that_drifted_is_refused_and_launches_nothing(self):
         self.checkout_contexto()
         drifted = self.root / "pstack"
@@ -846,6 +860,8 @@ class Decisions(Slot):
         self.assertEqual(set(digests), {"poteto", "tools", "writesSource", "specialist", "generation", "profile"})
         self.assertEqual((digests["writesSource"], digests["specialist"], digests["generation"]),
                          (True, "ingenieria", 1))
+        # What the host annotated is the digest of the copy it read back, not a value it made up (4.5).
+        self.assertEqual(digests["poteto"], contexto.digest_del_paquete(run.context))
         self.cli_writes()
         self.left(0)
         self.backend.survivors = ("4321 Tue Oct 13 00:58:21 2026 /bin/sleep 300",)
@@ -867,6 +883,13 @@ class Decisions(Slot):
         self.assertEqual(self.git_out("-C", str(clone), "remote"), "", "the reviewer's clone has no origin")
         common = self.git_out("-C", str(clone), "rev-parse", "--git-common-dir")
         self.assertNotIn(str(self.repo), common, "the reviewer's clone shares nothing with the real .git")
+        # --no-hardlinks (4.8): no object file of the clone is the same inode as one of the real repo,
+        # or the session's shell would be writing the real repo's objects through the clone.
+        real_inodes = {path.stat().st_ino for path in (self.repo / ".git/objects").rglob("*") if path.is_file()}
+        cloned_objects = [path for path in (clone / ".git/objects").rglob("*") if path.is_file()]
+        self.assertTrue(cloned_objects, "the clone has no objects to compare")
+        self.assertFalse({path.stat().st_ino for path in cloned_objects} & real_inodes,
+                         "a clone object shares an inode with the real repo")
         launched2 = self.backend.launches[1]
         self.assertEqual((launched2["cwd"], launched2["env"]["PWD"]), (str(clone), str(clone)))
         digests2 = json.loads(self.record("task-2").context.read_text())
@@ -1287,6 +1310,11 @@ class Decisions(Slot):
         self.backend.foreign = tuple
         self.assertEqual(self.one_pass()["claimed"], 1)
         self.assertEqual((len(self.backend.launches), self.r.admits), (1, ["task-1"]))
+        # exploracion may not write source: the registered protocol says so, whatever its contract says.
+        protocol = json.loads(self.run_dir().assignment.read_text())["protocol"]
+        self.assertEqual(protocol["fill"]["artifactRef"],
+                         "the absolute path of the artifact file, inside the directory that holds resultRef, "
+                         "never inside workspaceRef")
 
     def refused(self, causa, piece):
         self.assertEqual(self.changes(), {"claimed": 1})

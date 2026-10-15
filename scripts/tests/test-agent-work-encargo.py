@@ -65,6 +65,12 @@ class Mac(unittest.TestCase):
         contexto_dir.mkdir(parents=True)
         for name in ("poteto.v1.json", "generaciones.json", "perfiles.v1.json"):
             shutil.copy(ROOT / "scripts/agent-work/contexto" / name, contexto_dir / name)
+        # The fixture certifies generation 1: the real coverage leaves it uncertified (M-13 point b),
+        # and a profiled pedido without a canary would stop at the generation gate, not at the profile.
+        coverage_path = self.checkout / EVIDENCE / "coverage.json"
+        coverage = json.loads(coverage_path.read_text())
+        coverage["hostAdapterRoute"]["mac-local"]["opencode"]["contextGenerations"] = {"1": "fixture"}
+        coverage_path.write_text(json.dumps(coverage))
         self.policy_path = self.checkout / EVIDENCE / "proveedores-permitidos.json"
         self.state = self.root / "state"
         self.state.mkdir()

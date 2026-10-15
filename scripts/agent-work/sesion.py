@@ -47,10 +47,6 @@ LOCAL_AGENTS = ("comment-sicko", "panel-glm47", "panel-glm52", "panel-glm53", "p
 pide el modelo fijado en el archivo del agente a un proveedor que la corrida no tiene
 (ProviderModelNotFoundError): el hijo entero fallaría en todo encargo que no sea GLM."""
 
-_EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
-"""Lo que `plan_launch` usa como `ahora` cuando nadie le pasó un reloj: pureza, no hora de pared. Un
-llamador con paquete pasa el suyo."""
-
 
 @dataclass(frozen=True)
 class LaunchHeader:
@@ -279,8 +275,12 @@ def plan_launch(assignment: object, brief: bytes, *, policy: ProviderPolicy, cat
 
     Con paquete (un brief que pide perfil), antes de tocar nada se admite al perfil (SUA-03, 4.5): la
     ruta abre para su generación, el id existe, atiende esta ruta, admite el contrato del encargo, tiene
-    competencia vigente, y la configuración de la corrida le da sus herramientas sin darle el teclado a
-    un revisor. Un encargo de hoy, sin paquete, corre como siempre."""
+    competencia vigente y fuentes sin vencer, y la configuración de la corrida le da sus herramientas
+    sin darle el teclado a un revisor. La admisión exige el reloj del llamador (`now`): sin él, una
+    fuente o una competencia vencida no vence nunca. Un encargo de hoy, sin paquete, corre como siempre
+    y no mira el reloj."""
+    if package is not None and now is None:
+        raise TypeError("un plan con paquete exige el reloj del host (now)")
     closed = route.open_for(cli_version, package.manifest["generation"] if package else None, canary=canary)
     if closed is not None:
         return closed
@@ -297,7 +297,7 @@ def plan_launch(assignment: object, brief: bytes, *, policy: ProviderPolicy, cat
             return PerfilRechazado("perfil-desconocido", f"ningún perfil se llama {header.profile}")
         admitted = contexto.admite(perfil, {"host": route.host_id, "executor": route.adapter_id, "agentId": None},
                                    assignment.get("resultContract") if isinstance(assignment, dict) else None,
-                                   ahora=now or _EPOCH, canario=canary)
+                                   ahora=now, canario=canary)
         if admitted.causa is not None:
             return PerfilRechazado(admitted.causa, admitted.frase)
     model = authorize(ExactModel(header.model) if header.model else DefaultModel(), policy, catalog)
