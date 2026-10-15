@@ -530,6 +530,36 @@ class Perfiles(Mac):
                 self.assertFalse(respuesta["ok"])
 
 
+    def test_a_profiles_file_with_broken_routes_competence_or_agents_is_an_error(self):
+        # B1 (Minor de CodeRabbit en #307): routes es una lista de objetos con via como
+        # lista, competence un objeto de objetos, y agents (si viene) una lista de objetos
+        # con agentId; cualquier otra forma contesta su línea JSON con salida 3.
+        ruta = self.checkout / "scripts" / "agent-work" / "contexto" / "perfiles.v1.json"
+        perfil = {
+            "id": "x", "purpose": "p", "resultContracts": ["ready.v1"],
+            "writesSource": False, "competence": {},
+        }
+        for ruta_o_via, competencia, agentes in (
+            ({"routes": [None]}, {}, None),
+            ({"routes": [{"ruta": "mac-local/opencode", "via": "task"}]}, {}, None),
+            ({}, [], None),
+            ({}, {}, [1]),
+        ):
+            with self.subTest(routes=ruta_o_via.get("routes"), competencia=competencia, agentes=agentes):
+                uno = dict(perfil)
+                uno.update(ruta_o_via)
+                uno["competence"] = competencia
+                if agentes is not None:
+                    uno["agents"] = agentes
+                ruta.write_text(json.dumps({"schema": "x", "profiles": [uno]}) + "\n", encoding="utf-8")
+                code, out, err = self.cli("perfiles")
+                self.assertEqual(code, 3)
+                self.assertEqual(out, "")
+                self.assertNotIn("Traceback", err)
+                respuesta = json.loads(err)
+                self.assertFalse(respuesta["ok"])
+
+
 class Permitir(Mac):
     def permitir(self, *args):
         before = self.policy_path.read_bytes()
