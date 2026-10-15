@@ -315,6 +315,13 @@ def main(argv: list[str] | None = None) -> int:
         "(repetible; la corrida pasa su carpeta y su artefacto)",
     )
     parser.add_argument(
+        "--directorio",
+        type=Path,
+        default=None,
+        help="carpeta de trabajo del trabajador: una ruta relativa de un evento se "
+        "resuelve contra ella antes de compararla con --excluir",
+    )
+    parser.add_argument(
         "--forma",
         choices=tuple(RAIZ_DE_FORMA),
         default="opencode",
@@ -343,7 +350,11 @@ def main(argv: list[str] | None = None) -> int:
             def excluido(paso: Paso) -> bool:
                 if paso.tool not in EDITS or paso.path is None:
                     return False
-                resuelta = Path(paso.path).resolve()
+                cruda = Path(paso.path)
+                if args.directorio is not None and not cruda.is_absolute():
+                    resuelta = (args.directorio / cruda).resolve()
+                else:
+                    resuelta = cruda.resolve()
                 return any(resuelta == raiz or raiz in resuelta.parents for raiz in raices)
 
             pasos = [paso for paso in pasos if not excluido(paso)]
