@@ -199,6 +199,8 @@ class HostReceipts(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, f"typedPayload no cumple {contrato}"):
                     maquina.collect("mac-test", clave)
                 self.assertEqual(list((maquina.state_dir / "results").glob("*.json")), [])
+                # F3: tampoco queda snapshot del artefacto.
+                self.assertEqual(list((maquina.state_dir / "artifacts").rglob("*.bin")), [])
 
     def test_a_cli_result_with_extra_fields_reaches_the_runtime_with_only_its_schema(self):
         # Live canary 2026-10-11: GLM copied claimId into result.v1, and R's strict schema refused the report.
