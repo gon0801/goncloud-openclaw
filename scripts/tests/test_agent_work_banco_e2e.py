@@ -19,6 +19,7 @@ import os
 from pathlib import Path
 import re
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -259,6 +260,32 @@ def sha256(data):
     return hashlib.sha256(data).hexdigest()
 
 
+def matar_procesos_del_slot(boundary, kill, *, espera_term=10.0, paso=0.05,
+                            reloj=time.monotonic, dormir=time.sleep):
+    """Lo que queda en el grupo del slot tras kill-server (R2 de G5c-r3): SIGTERM a
+    todo, y SIGKILL a lo que siga vivo a los `espera_term`. Devuelve los pids a los
+    que hubo que matar; sin restos, la tupla vacía y ninguna señal."""
+    restantes = boundary()
+    if not restantes:
+        return ()
+    matados = tuple(proceso.pid for proceso in restantes)
+    for proceso in restantes:
+        with contextlib.suppress(ProcessLookupError):
+            kill(proceso.pid, signal.SIGTERM)
+    limite = reloj() + espera_term
+    while boundary() and reloj() < limite:
+        dormir(paso)
+    restantes = boundary()
+    if restantes:
+        for proceso in restantes:
+            with contextlib.suppress(ProcessLookupError):
+                kill(proceso.pid, signal.SIGKILL)
+        limite = reloj() + espera_term
+        while boundary() and reloj() < limite:
+            dormir(paso)
+    return matados
+
+
 @unittest.skipUnless(REAL, "corre el banco real con AGENT_WORK_BANCO_REAL=1: gasta suscripción")
 class BancoE2E(unittest.TestCase):
     def setUp(self):
@@ -352,6 +379,12 @@ class BancoE2E(unittest.TestCase):
         if socket.endswith(f"/{self.socket}"):
             with contextlib.suppress(OSError):
                 os.unlink(socket)
+        # Un opencode reparentado sobrevive al kill-server en su propio grupo: si
+        # queda algo en el grupo del slot se mata aquí, para que el caso siguiente
+        # no se salte por procesos vivos ajenos (corrida 4).
+        matados = matar_procesos_del_slot(self.slot.boundary, os.kill)
+        if matados:
+            print(f"BANCO_E2E limpieza=matados:{','.join(str(pid) for pid in matados)}", flush=True)
         deadline = time.monotonic() + 5
         while self.slot.boundary() and time.monotonic() < deadline:
             time.sleep(0.05)
