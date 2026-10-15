@@ -619,7 +619,7 @@ class GitPhoto(unittest.TestCase):
             "a field absent from the previous photo was silently left uncompared",
         )
         exclude = self.repo / ".git" / "info" / "exclude"
-        exclude.parent.mkdir(parents=True)
+        exclude.parent.mkdir(parents=True, exist_ok=True)
         exclude.write_text("nueva.py\n")
         (self.repo / "nueva.py").write_text("planted\n")
         self.assertEqual(host.photo_changes(vieja, host.repo_photo(str(self.repo))), ["exclude"],
