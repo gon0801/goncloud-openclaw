@@ -60,10 +60,13 @@ def _json_recorded(path: Path) -> dict:
 
 def writes_source(assignment: dict, *, state_dir: Path | None = None,
                   operation: OperationKey | None = None) -> bool:
-    """Whether a run may write its task's repo. A run with a package follows what the HOST recorded of
-    its profile at launch, in sessions/<op>/contexto.json: a folder outside the run, which the session's
-    tools can neither read nor write (SUA-03, 4.8). What the session could edit decides nothing. A run
-    without a package keeps the G2 rule: a review never does and everything else may, as today."""
+    """Whether a run may write its task's repo. A run with a package follows what the HOST recorded
+    of its profile at launch, in sessions/<op>/contexto.json (SUA-03, 4.8). That file is not out of
+    the session's reach: the run's shell is unconfined (docs/evidence/agent-work/coverage.json,
+    directoryGuard.limitation), so the launcher contrasts the record with the profile it re-reads
+    from its own checkout on every pass, the checkout wins, and the recorded value stays noted
+    (writesSourceRecorded). What the session could edit decides nothing on its own. A run without a
+    package keeps the G2 rule: a review never does and everything else may, as today."""
     if state_dir is not None and operation is not None:
         launched = _json_recorded(SessionRecord.locate(state_dir, operation_id(operation)).context)
         if isinstance(launched.get("writesSource"), bool):

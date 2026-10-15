@@ -1026,6 +1026,36 @@ class Decisions(Slot):
         self.assertEqual(self.r.reports, [], "a flipped profile in the run copy changed nothing")
         self.assertEqual(self.r.incidents, [("task-1", "invalid-result", "reviewer-wrote-source")])
 
+    @unittest.skipUnless(PSTACK.is_dir(), "pide pstack 0.9.84 instalado en esta Mac")
+    def test_a_recorded_writes_source_that_drifted_from_the_checkout_loses(self):
+        # La sesión no queda confinada (coverage.json, directoryGuard.limitation): puede reescribir
+        # sessions/<op>/contexto.json. Lo anotado no decide solo: cada pasada lo contrasta con el
+        # perfil que el host vuelve a leer de su checkout, gana el del checkout y queda anotado.
+        self.checkout_contexto()
+        self.start(ScriptedBackend(), canary=True)
+        self.packaged("revision")
+        atacado = json.loads(self.record().context.read_text())
+        atacado["writesSource"] = True
+        self.record().context.write_text(json.dumps(atacado))
+        sha = self.git_out("-C", str(self.repo), "rev-parse", "HEAD")
+        self.r.offer("task-1", b"agent-work.launch.v1\nprofile: revision\n---\nrevisa\n",
+                     {"kind": "code", "repository": str(self.repo), "sha": sha}, contract="review.v1")
+        self.assertEqual(self.one_pass()["claimed"], 1)
+        contrastado = json.loads(self.record().context.read_text())
+        self.assertEqual((contrastado["writesSource"], contrastado["writesSourceRecorded"]), (False, True))
+        self.assertTrue(self.record().repo_before.exists(), "the run launched as a writer, without a photo")
+        (self.repo / "nuevo.py").write_text("escrito por el revisor\n")
+        assignment = json.loads(self.run_dir().assignment.read_text())
+        Path(assignment["acceptRef"]).write_text(json.dumps(assignment["protocol"]["accept"]))
+        artifact = self.run_dir().path / "hallazgos.md"
+        artifact.write_text("sin hallazgos\n")
+        Path(assignment["resultRef"]).write_text(json.dumps({
+            **assignment["protocol"]["result"], "typedPayload": {"verdict": "approved"},
+            "artifactRef": str(artifact), "digest": hashlib.sha256(b"sin hallazgos\n").hexdigest()}))
+        self.left(0)
+        self.one_pass()
+        self.assertEqual(self.r.incidents, [("task-1", "invalid-result", "reviewer-wrote-source")])
+
     def test_a_review_artifact_lives_in_the_run_folder(self):
         self.r.offer("task-1", b"revisa el saludo\n", self.revision, contract="review.v1")
         self.launched()

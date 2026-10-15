@@ -405,6 +405,24 @@ def build_clone(repository: str, sha: str, destino: Path) -> None:
         raise ValueError("git remote remove origin failed")
 
 
+def contrastar_writes_source(record: SessionRecord, perfil: dict) -> bool:
+    """Lo anotado de writesSource contrastado con el perfil que esta pasada volvió a leer del
+    checkout. La sesión no queda confinada (docs/evidence/agent-work/coverage.json,
+    directoryGuard.limitation), así que sessions/<op>/contexto.json está a su alcance y lo que ella
+    pudo editar no decide sola: si difieren, gana el checkout — el registro se reescribe con su
+    valor y el anotado queda guardado en writesSourceRecorded. True cuando reescribió."""
+    try:
+        grabado = json.loads(record.context.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    if not isinstance(grabado, dict) or not isinstance(grabado.get("writesSource"), bool) \
+            or grabado["writesSource"] == perfil["writesSource"]:
+        return False
+    atomic_json(record.context, {**grabado, "writesSource": perfil["writesSource"],
+                                 "writesSourceRecorded": grabado["writesSource"]})
+    return True
+
+
 def claim_run_once(client, *, host, manager, backend, instance_id, deps):
     """Claim one task and launch its own opencode process inside the slot's group, or refuse it with an
     incident. A slot whose group holds processes of no task has no room either: nothing is claimed that
@@ -445,11 +463,13 @@ def claim_run_once(client, *, host, manager, backend, instance_id, deps):
         if registered is not None:
             raise ValueError(f"the launch of a registered operation is now refused: {why.causa}")
         return host.refuse(key, authorized, client.admit_host, {"causa": why.causa, "frase": why.frase})
-    if plan.perfil is not None and plan.config is not None and not record.context.exists():
+    if plan.perfil is not None and plan.config is not None:
         # El paquete de la corrida, copiado ANTES de registrar la asignación: el protocolo que la
         # asignación le dice al CLI depende de si su perfil escribe fuente, y un protocolo que cambia
         # entre intentos no puede registrarse dos veces (SUA-03, 4.5). Un host que murió después de
-        # copiar encuentra la copia entera y solo re-lee su digest de la copia.
+        # copiar encuentra la copia entera y solo re-lee su digest de la copia. Y lo anotado de
+        # writesSource se contrasta aquí con el perfil de esta pasada, antes de que la asignación
+        # y el lanzamiento lean el registro: si difiere, el checkout gana y queda anotado.
         try:
             if not run.context.exists():
                 contexto.construir(plan.package.source, plan.package.manifest, plan.perfil, run.context,
@@ -459,12 +479,14 @@ def claim_run_once(client, *, host, manager, backend, instance_id, deps):
             if registered is not None:
                 raise ValueError(f"the launch of a registered operation is now refused: {why.causa}") from error
             return host.refuse(key, authorized, client.admit_host, {"causa": why.causa, "frase": why.frase})
-        atomic_json(record.context, {"poteto": contexto.digest_del_paquete(run.context),
-                                     "tools": "sha256:" + hashlib.sha256(canonical(plan.config).encode()).hexdigest(),
-                                     "writesSource": plan.perfil["writesSource"],
-                                     "specialist": plan.perfil["id"],
-                                     "generation": plan.package.manifest["generation"],
-                                     "profile": contexto.digest_de_perfil(plan.perfil)})
+        contrastar_writes_source(record, plan.perfil)
+        if not record.context.exists():
+            atomic_json(record.context, {"poteto": contexto.digest_del_paquete(run.context),
+                                         "tools": "sha256:" + hashlib.sha256(canonical(plan.config).encode()).hexdigest(),
+                                         "writesSource": plan.perfil["writesSource"],
+                                         "specialist": plan.perfil["id"],
+                                         "generation": plan.package.manifest["generation"],
+                                         "profile": contexto.digest_de_perfil(plan.perfil)})
 
     def launch(_assignment_ref, _session):
         deps.recheck(plan)
