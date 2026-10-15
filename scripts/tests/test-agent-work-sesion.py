@@ -48,6 +48,7 @@ from sistema_agentes import contrato  # noqa: E402
 
 EVIDENCE = Path("docs/evidence/agent-work")
 LISTING = (ROOT / "scripts/tests/fixtures/agent-work/opencode/models-1.18.35.txt").read_text()
+PSTACK = Path.home() / ".claude/plugins/cache/pstack-claude/pstack/0.9.84"
 TMUX = shutil.which("tmux") or "/opt/homebrew/bin/tmux"
 GATEWAY = ROOT / "scripts/agent-work/native_gateway.py"
 FAKE_R = ROOT / "scripts/tests/fixtures/agent-work/fake-r-host.py"
@@ -785,14 +786,132 @@ class Decisions(Slot):
                 f"modelID={name} session.id=ses_ecd56a597ffe6GHqp405Otldki small={small} agent={agent} mode=primary\n")
 
     def packaged(self, profile="ingenieria"):
-        """What G3's launcher leaves for a run with a package: the copy in the run, and the digests it took."""
+        """What G3's launcher leaves for a run with a package: the copy in the run, and what the host
+        recorded of it at launch."""
         run = self.run_dir()
-        run.context.mkdir()
+        run.context.mkdir(parents=True, exist_ok=True)
         (run.context / "poteto.v1.json").write_text(json.dumps({"generation": 1}))
         perfil = contexto.perfil(contexto.leer_json(contexto.PERFILES), profile)
         (run.context / "perfil.json").write_bytes(contexto.canonico(perfil))
-        self.record().context.write_text(json.dumps({"poteto": "sha256:" + "a" * 64, "tools": "sha256:" + "b" * 64}))
+        record = self.record()
+        record.context.parent.mkdir(parents=True, exist_ok=True)
+        record.context.write_text(json.dumps({
+            "poteto": "sha256:" + "a" * 64, "tools": "sha256:" + "b" * 64,
+            "writesSource": perfil["writesSource"], "specialist": perfil["id"], "generation": 1,
+            "profile": contexto.digest_de_perfil(perfil)}))
         return perfil
+
+    def checkout_contexto(self):
+        """The checkout a G3 host reads: the package files next to its policy and coverage."""
+        destino = self.checkout / "scripts" / "agent-work" / "contexto"
+        destino.mkdir(parents=True)
+        for name in ("poteto.v1.json", "generaciones.json", "perfiles.v1.json"):
+            shutil.copy(ROOT / "scripts/agent-work/contexto" / name, destino / name)
+
+    @unittest.skipUnless(PSTACK.is_dir(), "pide pstack 0.9.84 instalado en esta Mac")
+    def test_a_profile_whose_source_expired_by_the_hosts_clock_is_refused_even_by_a_canary(self):
+        # context.admite does not skip an expired source for a canary, and the clock it judges with is
+        # the host's (SUA-03, 4.4): the sources of every profile expire on 2027-01-14.
+        self.checkout_contexto()
+        self.start(ScriptedBackend(), canary=True)
+        self.ahead = 100 * 24 * 3600.0
+        self.r.offer("task-1", b"agent-work.launch.v1\nprofile: ingenieria\n---\nhaz el saludo\n", self.revision)
+        self.assertEqual(self.one_pass()["claimed"], 1)
+        self.assertEqual(self.backend.launches, [], "a profile whose source expired never launched")
+        _, answer = self.estado()
+        self.assertEqual(answer["explicacion"]["causa"], "perfil-sin-competencia")
+        self.assertIn("venció", answer["explicacion"]["frase"])
+
+    @unittest.skipUnless(PSTACK.is_dir(), "pide pstack 0.9.84 instalado en esta Mac")
+    def test_a_package_source_that_drifted_is_refused_and_launches_nothing(self):
+        self.checkout_contexto()
+        drifted = self.root / "pstack"
+        shutil.copytree(PSTACK, drifted)
+        (drifted / "skills/how/SKILL.md").write_text("otra cosa\n")
+        with mock.patch.object(contexto, "fuente_del_paquete", lambda manifest, plugins=None: drifted):
+            self.start(ScriptedBackend(), canary=True)
+            self.r.offer("task-1", b"agent-work.launch.v1\nprofile: ingenieria\n---\nhaz el saludo\n", self.revision)
+            self.assertEqual(self.one_pass()["claimed"], 1)
+            self.assertEqual(self.backend.launches, [], "a source that differs from the manifest never launched")
+            self.assertFalse(self.run_dir().context.exists(), "nothing was copied either")
+            _, answer = self.estado()
+            self.assertEqual(answer["explicacion"]["causa"], "contexto-incompleto")
+            self.assertIn("skills/how/SKILL.md", answer["explicacion"]["frase"])
+
+    def git_out(self, *args):
+        env = {key: value for key, value in os.environ.items() if not key.startswith("GIT_")}
+        done = subprocess.run(["git", *args], capture_output=True, text=True, env=env, check=True)
+        return done.stdout.strip()
+
+    @unittest.skipUnless(PSTACK.is_dir(), "pide pstack 0.9.84 instalado en esta Mac")
+    def test_a_profiled_task_launches_with_its_package_and_a_reviewer_in_a_clone(self):
+        self.checkout_contexto()
+        self.start(ScriptedBackend(), canary=True)
+        self.r.offer("task-1", b"agent-work.launch.v1\nprofile: ingenieria\n---\nhaz el saludo\n", self.revision)
+        self.launched()
+        run = self.run_dir()
+        config = json.loads(self.backend.launches[0]["env"]["OPENCODE_CONFIG_CONTENT"])
+        self.assertEqual(config["instructions"], [str(run.context / "AGENTS.md")])
+        self.assertEqual(config["skills"], {"paths": [str(run.context / "skills")]})
+        self.assertEqual(config["agent"], {name: {"model": DEFAULT} for name in sesion.LOCAL_AGENTS})
+        self.assertEqual(sorted(path.name for path in run.context.iterdir()),
+                         ["AGENTS.md", "perfil.json", "poteto.v1.json", "skills"])
+        digests = json.loads(self.record().context.read_text())
+        self.assertEqual(set(digests), {"poteto", "tools", "writesSource", "specialist", "generation", "profile"})
+        self.assertEqual((digests["writesSource"], digests["specialist"], digests["generation"]),
+                         (True, "ingenieria", 1))
+        # What the host annotated is the digest of the copy it read back, not a value it made up (4.5).
+        self.assertEqual(digests["poteto"], contexto.digest_del_paquete(run.context))
+        self.cli_writes()
+        self.left(0)
+        self.backend.survivors = ("4321 Tue Oct 13 00:58:21 2026 /bin/sleep 300",)
+        self.one_pass()
+        self.backend.survivors = ()
+        self.one_pass()
+        flota = json.loads(run.fleet.read_text())
+        self.assertEqual(flota["specialist"], "ingenieria")
+        self.assertEqual(flota["attestations"][0], {"what": "poteto", "digest": digests["poteto"]})
+        self.assertEqual(flota["attestations"][2]["digest"], digests["tools"])
+
+        revision = {"kind": "code", "repository": str(self.repo),
+                    "sha": self.git_out("-C", str(self.repo), "rev-parse", "HEAD")}
+        self.r.offer("task-2", b"agent-work.launch.v1\nprofile: revision\n---\nrevisa\n", revision,
+                     contract="review.v1")
+        self.assertEqual(self.one_pass()["claimed"], 1)
+        run2, clone = self.run_dir("task-2"), self.run_dir("task-2").repo
+        self.assertEqual(self.git_out("-C", str(clone), "rev-parse", "HEAD"), revision["sha"])
+        self.assertEqual(self.git_out("-C", str(clone), "remote"), "", "the reviewer's clone has no origin")
+        common = self.git_out("-C", str(clone), "rev-parse", "--git-common-dir")
+        self.assertNotIn(str(self.repo), common, "the reviewer's clone shares nothing with the real .git")
+        # --no-hardlinks (4.8): no object file of the clone is the same inode as one of the real repo,
+        # or the session's shell would be writing the real repo's objects through the clone.
+        real_inodes = {path.stat().st_ino for path in (self.repo / ".git/objects").rglob("*") if path.is_file()}
+        cloned_objects = [path for path in (clone / ".git/objects").rglob("*") if path.is_file()]
+        self.assertTrue(cloned_objects, "the clone has no objects to compare")
+        self.assertFalse({path.stat().st_ino for path in cloned_objects} & real_inodes,
+                         "a clone object shares an inode with the real repo")
+        launched2 = self.backend.launches[1]
+        self.assertEqual((launched2["cwd"], launched2["env"]["PWD"]), (str(clone), str(clone)))
+        digests2 = json.loads(self.record("task-2").context.read_text())
+        self.assertEqual(digests2["writesSource"], False, "the reviewer's run may not write source")
+        assignment2 = json.loads(run2.assignment.read_text())
+        self.assertEqual(assignment2["workspaceRef"], str(clone))
+        photo = json.loads(self.record("task-2").repo_before.read_text())
+        self.assertEqual(photo["repo"], str(self.repo), "the photo is of the real repo, not of the clone")
+        artifact = run2.path / "hallazgos.md"
+        artifact.write_text("sin hallazgos\n")
+        Path(assignment2["acceptRef"]).write_text(json.dumps(assignment2["protocol"]["accept"]))
+        Path(assignment2["resultRef"]).write_text(json.dumps({
+            **assignment2["protocol"]["result"], "typedPayload": {"verdict": "approved"},
+            "artifactRef": str(artifact), "digest": hashlib.sha256(b"sin hallazgos\n").hexdigest()}))
+        self.left(0, "task-2")
+        self.backend.survivors = ("4321 Tue Oct 13 00:58:21 2026 /bin/sleep 300",)
+        self.one_pass()
+        self.assertTrue(clone.exists(), "the clone died before its run was proven absent")
+        self.backend.survivors = ()
+        self.one_pass()
+        self.assertEqual((self.r.reports[-1][0], self.held("task-2")[1]), ("task-2", "AbsenceVerified"))
+        self.assertFalse(clone.exists(), "the clone survives its own closure")
 
     def test_a_run_with_a_package_leaves_its_flota_document_when_it_closes(self):
         self.launched()
@@ -835,7 +954,14 @@ class Decisions(Slot):
         record = self.record()
         record.events.write_text("")
         record.stderr.write_text(self.stream("zai-coding-plan/glm-5.3", "build"))
-        self.cli_writes()
+        # SUA-03: a revision profile does not write source, so its artifact lives in the run folder.
+        assignment = json.loads(self.run_dir().assignment.read_text())
+        artifact = self.run_dir().path / "hallazgos.txt"
+        artifact.write_text("hecho\n")
+        Path(assignment["acceptRef"]).write_text(json.dumps(assignment["protocol"]["accept"]))
+        Path(assignment["resultRef"]).write_text(json.dumps({
+            **assignment["protocol"]["result"], "typedPayload": {"evidenceRef": "hallazgos.txt"},
+            "artifactRef": str(artifact), "digest": hashlib.sha256(b"hecho\n").hexdigest()}))
         self.left(0)
         self.one_pass()
         self.one_pass()
@@ -882,6 +1008,23 @@ class Decisions(Slot):
             "artifactRef": str(artifact), "digest": hashlib.sha256(b"sin hallazgos\n").hexdigest()}))
         return assignment
 
+    def test_a_profile_the_session_edited_decides_nothing(self):
+        # runs/<op>/ is the one folder the session may write (B22-S7): whether its run may write the repo
+        # is what the host recorded in sessions/<op>, which the session cannot reach (SUA-03, 4.8).
+        self.r.offer("task-1", b"revisa el saludo\n", self.revision, contract="review.v1")
+        self.packaged("revision")
+        perfil_path = self.run_dir().context / "perfil.json"
+        perfil = json.loads(perfil_path.read_text())
+        perfil["writesSource"] = True
+        perfil_path.write_bytes(contexto.canonico(perfil))
+        self.launched()
+        (self.repo / "nuevo.py").write_text("escrito por el revisor\n")
+        self.review_writes(self.run_dir().path / "hallazgos.md")
+        self.left(0)
+        self.one_pass()
+        self.assertEqual(self.r.reports, [], "a flipped profile in the run copy changed nothing")
+        self.assertEqual(self.r.incidents, [("task-1", "invalid-result", "reviewer-wrote-source")])
+
     def test_a_review_artifact_lives_in_the_run_folder(self):
         self.r.offer("task-1", b"revisa el saludo\n", self.revision, contract="review.v1")
         self.launched()
@@ -895,12 +1038,27 @@ class Decisions(Slot):
         self.assertEqual(self.r.incidents, [])
 
     def test_a_review_artifact_in_the_repo_is_refused(self):
-        # Ignored, so the photo of the repo stays the same: what refuses it is where the artifact is.
+        # A review without a profile works in the real repo, so its photo is the G2 one, without ignored
+        # files: the ignored artifact does not move it, and what refuses it is where the artifact is.
+        # The location rule stays as the belt for a run whose photo never existed, too.
         (self.repo / ".gitignore").write_text("hallazgos.md\n")
         self.git("add", ".gitignore")
         self.git("commit", "-q", "-m", "ignora")
         self.r.offer("task-1", b"revisa el saludo\n", self.revision, contract="review.v1")
         self.launched()
+        self.review_writes(self.repo / "hallazgos.md")
+        self.left(0)
+        self.one_pass()
+        self.assertEqual(self.r.reports, [])
+        self.assertEqual(self.r.incidents, [("task-1", "invalid-result", "invalid-result")])
+        # A run whose host never photographed its repo is still refused for where the artifact is.
+        self.setUp()
+        (self.repo / ".gitignore").write_text("hallazgos.md\n")
+        self.git("add", ".gitignore")
+        self.git("commit", "-q", "-m", "ignora")
+        self.r.offer("task-1", b"revisa el saludo\n", self.revision, contract="review.v1")
+        self.launched()
+        self.record().repo_before.unlink()
         self.review_writes(self.repo / "hallazgos.md")
         self.left(0)
         self.one_pass()
@@ -927,11 +1085,16 @@ class Decisions(Slot):
         self.assertTrue((self.repo / "nuevo.py").exists(), "the host undid what the reviewer wrote")
 
     def test_a_reviewer_that_only_left_ignored_files_or_committed_is_told_apart(self):
+        # A review without a profile works in the real repo: its photo is the G2 one, without ignored
+        # files, so the __pycache__ its tests leave must not refuse a good result (SUA-03, 4.8). A
+        # commit leaves status and diff clean: HEAD and the refs still tell.
         (self.repo / ".gitignore").write_text("__pycache__/\n")
         self.git("add", ".gitignore")
         self.git("commit", "-q", "-m", "ignora")
         self.r.offer("task-1", b"revisa el saludo\n", self.revision, contract="review.v1")
         self.launched()
+        self.assertEqual(json.loads(self.record().repo_before.read_text())["ignored"], False,
+                         "a review without a clone keeps the G2 photo")
         (self.repo / "__pycache__").mkdir()
         (self.repo / "__pycache__" / "x.pyc").write_bytes(b"\0")
         self.review_writes(self.run_dir().path / "hallazgos.md")
@@ -1128,6 +1291,30 @@ class Decisions(Slot):
         self.one_pass()
         self.assertEqual(self.held(), ("cancelled", "AbsenceVerified", ""))
 
+    @unittest.skipUnless(PSTACK.is_dir(), "pide pstack 0.9.84 instalado en esta Mac")
+    def test_a_profiled_launch_deferred_by_a_busy_boundary_retries_with_the_same_assignment(self):
+        # exploracion is the one CLI profile whose writesSource disagrees with its contract: the protocol
+        # the assignment spells out must not change between the attempt and its retry (SU A-03, 4.5).
+        self.checkout_contexto()
+        self.start(ScriptedBackend(), canary=True)
+        revision = {"kind": "code", "repository": str(self.repo),
+                    "sha": self.git_out("-C", str(self.repo), "rev-parse", "HEAD")}
+        self.r.offer("task-1", b"agent-work.launch.v1\nprofile: exploracion\n---\nexplora\n", revision)
+        self.backend.foreign = lambda: ("9001 Tue Oct 13 00:58:21 2026 /bin/sleep 600",) if self.r.claims else ()
+        outcome = self.one_pass()
+        self.assertEqual(self.held(), ("deferred", "Reserved", ""))
+        self.assertTrue((self.run_dir().context / "perfil.json").is_file(), "the copy precedes the assignment")
+        self.assertEqual(self.one_pass()["claimed"], 1)
+        self.assertEqual(self.r.admits, ["task-1"], "the retry registered the same assignment")
+        self.backend.foreign = tuple
+        self.assertEqual(self.one_pass()["claimed"], 1)
+        self.assertEqual((len(self.backend.launches), self.r.admits), (1, ["task-1"]))
+        # exploracion may not write source: the registered protocol says so, whatever its contract says.
+        protocol = json.loads(self.run_dir().assignment.read_text())["protocol"]
+        self.assertEqual(protocol["fill"]["artifactRef"],
+                         "the absolute path of the artifact file, inside the directory that holds resultRef, "
+                         "never inside workspaceRef")
+
     def refused(self, causa, piece):
         self.assertEqual(self.changes(), {"claimed": 1})
         self.assertEqual((self.backend.launches, self.r.admits, self.incidents()),
@@ -1214,6 +1401,59 @@ class Decisions(Slot):
                       progress_client="unused", cli_claim=self.run.claim)
         self.backend.dies = None
         self.start(self.backend)
+
+    def test_a_clone_left_with_a_remote_is_built_again(self):
+        from native_gateway import build_clone
+
+        sha = self.git_out("-C", str(self.repo), "rev-parse", "HEAD")
+        destino = self.root / "clon"
+        build_clone(str(self.repo), sha, destino)
+        self.assertEqual(self.git_out("-C", str(destino), "remote"), "")
+        subprocess.run(["git", "-C", str(destino), "remote", "add", "origin", str(self.repo)], check=True,
+                       capture_output=True)
+        build_clone(str(self.repo), sha, destino)
+        self.assertEqual(self.git_out("-C", str(destino), "remote"), "",
+                         "a clone whose origin came back is rebuilt, not reused")
+        self.assertEqual(self.git_out("-C", str(destino), "rev-parse", "HEAD"), sha)
+
+    def test_a_clone_with_leftovers_is_built_again(self):
+        from native_gateway import build_clone
+
+        sha = self.git_out("-C", str(self.repo), "rev-parse", "HEAD")
+        destino = self.root / "clon-sucio"
+        build_clone(str(self.repo), sha, destino)
+        (destino / "dejado.txt").write_text("de un intento anterior\n")
+        build_clone(str(self.repo), sha, destino)
+        self.assertFalse((destino / "dejado.txt").exists(), "a dirty clone was reused")
+        self.assertEqual(self.git_out("-C", str(destino), "rev-parse", "HEAD"), sha)
+
+    @unittest.skipUnless(PSTACK.is_dir(), "pide pstack 0.9.84 instalado en esta Mac")
+    def test_a_new_file_in_an_ignored_dir_that_already_existed_is_caught(self):
+        # A review WITH its package works in a clone, so the real repo must stay as its photo took it,
+        # ignored files included (SUA-03, 4.8): --ignored=traditional lists the files inside an ignored
+        # directory, which --ignored=matching would collapse into one entry.
+        self.checkout_contexto()
+        self.start(ScriptedBackend(), canary=True)
+        (self.repo / ".gitignore").write_text("__pycache__/\n")
+        self.git("add", ".gitignore")
+        self.git("commit", "-q", "-m", "ignora")
+        (self.repo / "__pycache__").mkdir()
+        (self.repo / "__pycache__" / "viejo.pyc").write_bytes(b"\0")
+        revision = {"kind": "code", "repository": str(self.repo),
+                    "sha": self.git_out("-C", str(self.repo), "rev-parse", "HEAD")}
+        self.r.offer("task-1", b"agent-work.launch.v1\nprofile: revision\n---\nrevisa\n", revision,
+                     contract="review.v1")
+        self.launched()
+        self.assertEqual(json.loads(self.record().repo_before.read_text())["ignored"], True,
+                         "a reviewer in a clone sums ignored files")
+        self.assertTrue(self.run_dir().repo.is_dir(), "the reviewer works in a clone")
+        (self.repo / "__pycache__" / "nuevo.pyc").write_bytes(b"\0")
+        self.review_writes(self.run_dir().path / "hallazgos.md")
+        self.left(0)
+        self.one_pass()
+        self.assertEqual(self.r.reports, [], "a new file inside an old ignored dir went unseen")
+        self.assertEqual(self.r.incidents, [("task-1", "invalid-result", "reviewer-wrote-source")])
+        self.assertEqual(json.loads(self.record().repo_after.read_text())["changed"], ["status"])
 
     def test_a_host_that_died_before_launching_launches_once_it_is_back(self):
         self.died("before-launching")

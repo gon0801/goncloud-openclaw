@@ -13,13 +13,16 @@ import signal
 import time
 from collections import deque
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Literal
 
+import contexto
 from contracts import RunDir, SessionRecord
 from host import delivery_line
-from modelos import (Catalog, DefaultModel, ExactModel, MalformedHeader, ModelId, PermittedModel, ProviderPolicy,
-                     Refusal, RouteNotCertified, WorkspaceRefused, authorize)
+from modelos import (Catalog, DefaultModel, ExactModel, GenerationNotCertified, MalformedHeader, ModelId,
+                     PerfilRechazado, PermittedModel, ProviderPolicy, Refusal, RouteNotCertified, WorkspaceRefused,
+                     authorize)
 from resources import BoundaryBusy, TmuxBackend, _ps
 from spool import atomic_json
 
@@ -32,6 +35,17 @@ COVERAGE_FILE = Path("docs/evidence/agent-work/coverage.json")
 
 ALLOWED_ROOT = Path("/Users/dn/dev")
 """David, P10866: "2. cualquiera". Cualquier repo bajo `~/dev`."""
+
+PROFILE_ID = re.compile(r"[a-z][a-z0-9-]{0,31}")
+"""El id de un perfil de trabajador. Copia la forma de `brief.py --perfil`, que no puede importar esto;
+test-agent-work-routing.py compara las dos."""
+
+LOCAL_AGENTS = ("comment-sicko", "panel-glm47", "panel-glm52", "panel-glm53", "panel-glm5turbo",
+                "poteto-agent", "poteto-agent-rapido")
+"""Los siete agentes locales de opencode (diseño de SUA-03, 4.6). M-13 midió que
+`agent.<nombre>.model` aplica desde OPENCODE_CONFIG_CONTENT, y que sin él un `task` a poteto-agent
+pide el modelo fijado en el archivo del agente a un proveedor que la corrida no tiene
+(ProviderModelNotFoundError): el hijo entero fallaría en todo encargo que no sea GLM."""
 
 
 @dataclass(frozen=True)
@@ -46,6 +60,8 @@ class LaunchHeader:
     Un brief sin esa primera línea no tiene cabecera y corre el modelo por omisión. Con cabecera, una
     llave desconocida es MalformedHeader: un host viejo no ignora un parámetro que no entiende."""
     model: ModelId | None
+    profile: str | None = None
+    """El perfil de trabajador que el brief pide (SUA-03, 4.5). `brief.py --perfil` lo escribe."""
 
     @staticmethod
     def parse(brief: bytes) -> "LaunchHeader | MalformedHeader":
@@ -56,6 +72,7 @@ class LaunchHeader:
                 return MalformedHeader(f"la primera línea no es exactamente {LAUNCH_SCHEMA}")
             return LaunchHeader(None)
         model: ModelId | None = None
+        profile: str | None = None
         lines = rest.split(b"\n", MAX_HEADER_LINES)
         for index, raw in enumerate(lines[:MAX_HEADER_LINES]):
             try:
@@ -63,18 +80,25 @@ class LaunchHeader:
             except UnicodeDecodeError:
                 return MalformedHeader("la cabecera no es UTF-8")
             if line == HEADER_END:
-                return LaunchHeader(model)
+                return LaunchHeader(model, profile)
             if index == len(lines) - 1:
                 break
             key, colon, value = line.partition(": ")
-            if key != "model" or not colon:
+            if not colon or key not in ("model", "profile"):
                 return MalformedHeader(f"línea que este host no entiende: {line!r}")
-            if model is not None:
-                return MalformedHeader("model aparece dos veces")
-            parsed = ModelId.parse(value)
-            if not isinstance(parsed, ModelId):
-                return MalformedHeader(f"model no es <proveedor>/<modelo>: {value!r}")
-            model = parsed
+            if key == "model":
+                if model is not None:
+                    return MalformedHeader("model aparece dos veces")
+                parsed = ModelId.parse(value)
+                if not isinstance(parsed, ModelId):
+                    return MalformedHeader(f"model no es <proveedor>/<modelo>: {value!r}")
+                model = parsed
+            else:
+                if profile is not None:
+                    return MalformedHeader("profile aparece dos veces")
+                if not PROFILE_ID.fullmatch(value):
+                    return MalformedHeader(f"profile no es un id de perfil: {value!r}")
+                profile = value
         return MalformedHeader(f"la cabecera no cierra con {HEADER_END}")
 
 
@@ -108,7 +132,8 @@ class Workspace:
 
     @staticmethod
     def for_revision(input_revision: object, *, allowed_root: Path, run: RunDir) -> "Workspace | WorkspaceRefused":
-        """`input_revision` llega de R sin validar: lo que no es una revisión `code` o `artifact` se rechaza."""
+        """`input_revision` llega de R sin validar: lo que no es una revisión `code` con su sha, o
+        `artifact`, se rechaza. Sin sha usable, el paso de lanzamiento no tiene a qué hacer detach."""
         kind = input_revision.get("kind") if isinstance(input_revision, dict) else None
         if kind == "artifact":
             work = run.path / "work"
@@ -116,17 +141,22 @@ class Workspace:
             return Workspace(work)
         if kind != "code":
             return WorkspaceRefused(str(input_revision)[:MAX_SHOWN], "invalid")
+        sha = input_revision.get("sha")
+        if not isinstance(sha, str) or not re.fullmatch(r"[0-9a-f]{40,64}", sha):
+            return WorkspaceRefused(str(input_revision)[:MAX_SHOWN], "invalid")
         return Workspace.for_repository(input_revision.get("repository"), allowed_root=allowed_root)
 
 
 @dataclass(frozen=True)
 class Route:
-    """Lo que se certifica una vez: host, CLI, forma de lanzamiento y versiones medidas del CLI."""
+    """Lo que se certifica una vez: host, CLI, forma de lanzamiento y versiones medidas del CLI, y las
+    generaciones del paquete de poteto certificadas para encargos (SUA-03, 4.5)."""
     host_id: str
     adapter_id: Literal["opencode"]
     form: Literal["run-per-task"]
     status: str
     certified_cli_versions: frozenset[str]
+    certified_context_generations: frozenset[str] = frozenset()
 
     @staticmethod
     def load(coverage: object, host_id: str) -> "Route":
@@ -144,19 +174,37 @@ class Route:
             return Route(host_id, "opencode", ROUTE_FORM, "absent", frozenset())
         measured = entry.get("certifiedCliVersions")
         versions = (key for key in measured if isinstance(key, str)) if isinstance(measured, dict) else ()
-        return Route(host_id, "opencode", ROUTE_FORM, status, frozenset(versions))
+        contexts = entry.get("contextGenerations")
+        generations = (key for key in contexts if isinstance(key, str)) if isinstance(contexts, dict) else ()
+        return Route(host_id, "opencode", ROUTE_FORM, status, frozenset(versions), frozenset(generations))
 
-    def open_for(self, cli_version: str, *, canary: bool) -> "None | RouteNotCertified":
-        """Abierta si el estado es `certified` y la versión está medida. Con canary también abre para una
-        versión nueva o un estado `sandbox-tested-uncertified`: así se recertifica la ruta."""
+    def open_for(self, cli_version: str, generation: int | None = None, *, canary: bool
+                 ) -> "None | RouteNotCertified | GenerationNotCertified":
+        """Abierta si el estado es `certified`, la versión está medida y, cuando la corrida lleva paquete,
+        su generación está certificada. Con canary también abre para una versión nueva, un estado
+        `sandbox-tested-uncertified` o una generación sin certificar: así se recertifica la ruta."""
         if canary and self.status in ("certified", "sandbox-tested-uncertified"):
             return None
         if self.status != "certified":
             # Las versiones medidas de una ruta sin certificar todavía no certifican nada.
             return RouteNotCertified(cli_version, ())
-        if cli_version in self.certified_cli_versions:
-            return None
-        return RouteNotCertified(cli_version, tuple(sorted(self.certified_cli_versions)))
+        if cli_version not in self.certified_cli_versions:
+            return RouteNotCertified(cli_version, tuple(sorted(self.certified_cli_versions)))
+        if generation is not None and str(generation) not in self.certified_context_generations:
+            certified = tuple(sorted(int(key) for key in self.certified_context_generations if key.isdigit()))
+            return GenerationNotCertified(generation, certified)
+        return None
+
+
+@dataclass(frozen=True)
+class Package:
+    """El paquete de poteto del checkout, ya leído y con su manifiesto íntegro (SUA-03, 4.5). Lo lee
+    quien planea y lo que recibe `plan_launch`: la admisión del perfil decide con estos datos, sin
+    tocar el disco. Un brief sin `profile` no lleva paquete y corre como hoy."""
+    manifest: dict
+    profiles: dict
+    source: Path
+    """La carpeta de la fuente fijada, de donde el paso de lanzamiento copia los archivos."""
 
 
 @dataclass(frozen=True)
@@ -167,6 +215,12 @@ class LaunchSpec:
     run: RunDir
     record: Path
     session: str
+    perfil: dict | None = None
+    """El perfil admitido de esta corrida. None: un encargo de hoy, sin paquete."""
+    config: dict | None = None
+    """El OPENCODE_CONFIG_CONTENT que el lanzador va a pasar. None: el de toda la vida."""
+    package: Package | None = None
+    """El paquete que este plan leyó: el paso de lanzamiento copia de su fuente y relee su digest."""
 
 
 def session_name(operation: str) -> str:
@@ -174,25 +228,105 @@ def session_name(operation: str) -> str:
     return f"enc-{operation[:12]}"
 
 
+def run_config(run: RunDir, model: ModelId, *, writes: bool) -> dict:
+    """El OPENCODE_CONFIG_CONTENT de una corrida con paquete (diseño de SUA-03, 4.3 y 4.6), medido en
+    M-13 (docs/evidence/sistema-agentes-unificado/SUA-03-mediciones.md): `instructions` y `skills.paths`
+    apuntan dentro de la corrida, y `agent.<nombre>.model` fija el modelo del encargo para los siete
+    agentes locales, porque sin él un hijo de `task` pide el modelo de su archivo a un proveedor que la
+    corrida no tiene. Un perfil que no escribe fuente no recibe la herramienta de editar: M-13 midió que
+    con `permission.edit: "deny"` opencode 1.18.35 se la quita al modelo.
+    Limitación medida (M-13, punto b): una skill del paquete con el mismo nombre que una de
+    `~/.agents/skills` o `~/.claude/skills` pierde contra la global. Lo declara coverage.json."""
+    permission: dict = {"external_directory": {"*": "deny", f"{run.path}/**": "allow"}}
+    if not writes:
+        permission["edit"] = "deny"
+    return {
+        "permission": permission,
+        "enabled_providers": [model.provider],
+        "small_model": str(model),
+        "instructions": [str(run.context / "AGENTS.md")],
+        "skills": {"paths": [str(run.context / "skills")]},
+        "agent": {name: {"model": str(model)} for name in LOCAL_AGENTS},
+    }
+
+
+def _admits_tools(perfil: dict, config: dict) -> PerfilRechazado | None:
+    """La configuración que el host va a pasar no niega ninguna herramienta del procedimiento (4.5)."""
+    negadas = [tool for tool in perfil["requiredTools"].get("opencode", ())
+               if config["permission"].get(tool) == "deny"]
+    if negadas:
+        return PerfilRechazado(
+            "herramienta-negada",
+            f"la configuración de la corrida niega {', '.join(negadas)} y el perfil {perfil['id']} la exige")
+    return None
+
+
+def _may_not_write(perfil: dict, config: dict) -> PerfilRechazado | None:
+    """Un perfil que no escribe fuente llega solo si la configuración se la quita de verdad (4.5)."""
+    if not perfil["writesSource"] and config["permission"].get("edit") != "deny":
+        return PerfilRechazado(
+            "revisor-con-escritura",
+            f"el perfil {perfil['id']} no escribe fuente y la configuración de la corrida no niega edit")
+    return None
+
+
 def plan_launch(assignment: object, brief: bytes, *, policy: ProviderPolicy, catalog: Catalog, route: Route,
                 cli_version: str, allowed_root: Path, run: RunDir, record: Path, operation: str,
-                canary: bool = False) -> "LaunchSpec | Refusal":
+                canary: bool = False, package: Package | None = None,
+                now: "datetime | None" = None) -> "LaunchSpec | Refusal":
     """La frontera donde lo que llegó de R (JSON y bytes) se vuelve tipos del dominio. El primer rechazo
-    corta. Un brief sin cabecera pide el modelo por omisión, que también pasa por authorize."""
-    closed = route.open_for(cli_version, canary=canary)
+    corta. Un brief sin cabecera pide el modelo por omisión, que también pasa por authorize.
+
+    Con paquete (un brief que pide perfil), antes de tocar nada se admite al perfil (SUA-03, 4.5): la
+    ruta abre para su generación, el id existe, atiende esta ruta, admite el contrato del encargo, tiene
+    competencia vigente y fuentes sin vencer, y la configuración de la corrida le da sus herramientas
+    sin darle el teclado a un revisor. La admisión exige el reloj del llamador (`now`): sin él, una
+    fuente o una competencia vencida no vence nunca. Un encargo de hoy, sin paquete, corre como siempre
+    y no mira el reloj."""
+    if package is not None and now is None:
+        raise TypeError("un plan con paquete exige el reloj del host (now)")
+    closed = route.open_for(cli_version, package.manifest["generation"] if package else None, canary=canary)
     if closed is not None:
         return closed
     header = LaunchHeader.parse(brief)
     if isinstance(header, MalformedHeader):
         return header
+    perfil: dict | None = None
+    if package is not None:
+        if header.profile is None:
+            return PerfilRechazado("perfil-ausente", "el brief no trae perfil y la corrida lleva paquete")
+        try:
+            perfil = contexto.perfil(package.profiles, header.profile)
+        except KeyError:
+            return PerfilRechazado("perfil-desconocido", f"ningún perfil se llama {header.profile}")
+        admitted = contexto.admite(perfil, {"host": route.host_id, "executor": route.adapter_id, "agentId": None},
+                                   assignment.get("resultContract") if isinstance(assignment, dict) else None,
+                                   ahora=now, canario=canary)
+        if admitted.causa is not None:
+            return PerfilRechazado(admitted.causa, admitted.frase)
     model = authorize(ExactModel(header.model) if header.model else DefaultModel(), policy, catalog)
     if not isinstance(model, PermittedModel):
         return model
+    config: dict | None = None
+    if perfil is not None:
+        # Las dos comprobaciones miran la configuración que este plan va a pasar, con el modelo ya admitido.
+        config = run_config(run, model.model, writes=perfil["writesSource"])
+        negada = _admits_tools(perfil, config)
+        if negada is not None:
+            return negada
+        escritor = _may_not_write(perfil, config)
+        if escritor is not None:
+            return escritor
     revision = assignment.get("inputRevision") if isinstance(assignment, dict) else None
     workspace = Workspace.for_revision(revision, allowed_root=allowed_root, run=run)
     if not isinstance(workspace, Workspace):
         return workspace
-    return LaunchSpec(model, workspace, run, record, session_name(operation))
+    if perfil is not None and not perfil["writesSource"] and isinstance(revision, dict) \
+            and revision.get("kind") == "code":
+        # El revisor trabaja en un clon desechable dentro de la corrida (4.8), que arma el paso de
+        # lanzamiento: plan_launch se queda puro y solo señala la carpeta.
+        workspace = Workspace(run.repo)
+    return LaunchSpec(model, workspace, run, record, session_name(operation), perfil, config, package)
 
 
 SCRATCH_RULE = (" Keep every helper script and scratch file inside the directory that holds acceptRef, and touch "
@@ -228,16 +362,17 @@ def opencode_env(spec: LaunchSpec) -> dict[str, str]:
     archivo que nombra el AGENTS.md global de opencode (tarea 730557f4). TMPDIR apunta dentro de la corrida
     para que el modelo tenga dónde dejar sus archivos temporales."""
     model = spec.model.model
+    config = spec.config if spec.config is not None else {
+        "permission": {"external_directory": {"*": "deny", f"{spec.run.path}/**": "allow"}},
+        "enabled_providers": [model.provider],
+        "small_model": str(model),
+    }
     return {
         "PWD": str(spec.workspace.root),
         "TMPDIR": str(spec.run.scratch),
         "OPENCODE_DISABLE_AUTOUPDATE": "1",
         "AGENT_WORK_MANAGED": "1",
-        "OPENCODE_CONFIG_CONTENT": json.dumps({
-            "permission": {"external_directory": {"*": "deny", f"{spec.run.path}/**": "allow"}},
-            "enabled_providers": [model.provider],
-            "small_model": str(model),
-        }, separators=(",", ":")),
+        "OPENCODE_CONFIG_CONTENT": json.dumps(config, separators=(",", ":")),
     }
 
 

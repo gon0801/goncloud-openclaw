@@ -9,6 +9,7 @@ below in the same change.
 import collections
 import copy
 import dataclasses
+from datetime import datetime, timezone
 import hashlib
 import json
 from pathlib import Path
@@ -17,10 +18,12 @@ import tempfile
 import types
 import typing
 import unittest
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts" / "agent-work"))
 import contracts  # noqa: E402
+import contexto  # noqa: E402
 import modelos  # noqa: E402
 import sesion  # noqa: E402
 from modelos import (ByName, Catalog, DefaultModel, ExactModel, ModelId, ModelOutsideGrant, NameIsAmbiguous,  # noqa: E402
@@ -502,6 +505,9 @@ class Explicar(Policies):
             modelos.MalformedHeader("llave desconocida: effort"): "cabecera-mal-formada",
             modelos.WorkspaceRefused("/tmp/x", "outside-root"): "carpeta-no-permitida",
             modelos.RouteNotCertified("1.18.36", ("1.18.35",)): "ruta-no-certificada",
+            modelos.GenerationNotCertified(2, (1,)): "generacion-no-certificada",
+            modelos.ContextoIncompleto("skills/how/SKILL.md no coincide con el manifiesto"): "contexto-incompleto",
+            modelos.PerfilRechazado("perfil-ausente", "el brief no trae perfil"): "perfil-ausente",
             modelos.HostDown(None): "sin-host",
             modelos.HostMismatch("policy", "aaaa", "bbbb"): "host-desfasado",
             modelos.SlotBlocked(("123 Mon Oct 12 sleep 300",)): "slot-bloqueado",
@@ -513,6 +519,13 @@ class Explicar(Policies):
                          {type(case).__name__: causa for case, causa in cases.items()})
         with self.assertRaises(TypeError):
             explicar(DefaultModel())
+
+    def test_a_profile_refusal_keeps_the_cause_the_admission_answered(self):
+        caso = modelos.PerfilRechazado("perfil-sin-competencia",
+                                       "el perfil meli no tiene competencia vigente en la ruta mac-local/opencode")
+        self.assertEqual(explicar(caso), modelos.Explicacion(caso.causa, caso.frase, "no-registrar"))
+        self.assertEqual(explicar(caso, registrado=True),
+                         modelos.Explicacion(caso.causa, caso.frase, "cancelar"))
 
     def test_words_that_match_nothing_name_the_providers_david_can_ask_for_not_every_model(self):
         answer = explicar(authorize(ByName("no existe tal"), self.policy, catalog()))
@@ -527,6 +540,16 @@ class Explicar(Policies):
                          "Ruta certificada para 1.18.35, la Mac tiene opencode 1.18.36.")
         self.assertEqual(explicar(modelos.RouteNotCertified("1.18.35", ())).frase,
                          "La ruta de encargos por opencode todavía no está certificada. La Mac tiene opencode 1.18.35.")
+        self.assertEqual(explicar(modelos.GenerationNotCertified(2, (1,))).frase,
+                         "El paquete de poteto de la generación 2 no está certificado para encargos; "
+                         "certificadas: 1.")
+        self.assertEqual(explicar(modelos.GenerationNotCertified(2, ())).frase,
+                         "El paquete de poteto de la generación 2 no está certificado para encargos; "
+                         "certificadas: ninguna.")
+        self.assertEqual(explicar(modelos.ContextoIncompleto("skills/how/SKILL.md no coincide con el "
+                                                             "manifiesto")).frase,
+                         "El paquete de poteto no coincide con su manifiesto: skills/how/SKILL.md no coincide con "
+                         "el manifiesto. No se lanza nada.")
         self.assertEqual(explicar(modelos.HostDown(600.0)).frase, "El host de encargos no corre desde hace 10 min.")
         self.assertEqual(explicar(modelos.HostDown(None)).frase, "El host de encargos nunca corrió en esta Mac.")
         self.assertEqual(explicar(modelos.HostMismatch("policy", "aaaa", "bbbb")).frase,
@@ -573,6 +596,13 @@ class Headers(unittest.TestCase):
         self.assertEqual(sesion.LaunchHeader.parse(brief), sesion.LaunchHeader(ModelId("zai-coding-plan", "glm-5.3")))
         self.assertEqual(sesion.LaunchHeader.parse(b"agent-work.launch.v1\n---\nprosa\n"), sesion.LaunchHeader(None))
 
+    def test_the_header_names_the_profile(self):
+        brief = b"agent-work.launch.v1\nprofile: ingenieria\n---\nprosa\n"
+        self.assertEqual(sesion.LaunchHeader.parse(brief), sesion.LaunchHeader(None, "ingenieria"))
+        both = b"agent-work.launch.v1\nmodel: zai/glm-5.3\nprofile: revision\n---\nprosa\n"
+        self.assertEqual(sesion.LaunchHeader.parse(both),
+                         sesion.LaunchHeader(ModelId("zai", "glm-5.3"), "revision"))
+
     def test_a_header_the_host_does_not_understand_is_refused_not_ignored(self):
         for brief, why in (
             (b"agent-work.launch.v1\nmodel: zai-coding-plan/glm-5.3\neffort: high\n---\n", "effort"),
@@ -580,6 +610,8 @@ class Headers(unittest.TestCase):
             (b"agent-work.launch.v1\nmodel: zai-coding-plan/glm-5.3\n", "---"),
             (b"agent-work.launch.v1\nmodel: Zai/glm\n---\n", "Zai/glm"),
             (b"agent-work.launch.v1\nmodel: zai/glm-5.3\nmodel: opencode-go/kimi-k3\n---\n", "model"),
+            (b"agent-work.launch.v1\nmodel: zai/glm-5.3\nprofile: ingenieria\nprofile: meli\n---\n", "profile"),
+            (b"agent-work.launch.v1\nprofile: Ingenieria\n---\n", "Ingenieria"),
             (b"agent-work.launch.v1\nmodel: \xff\xfe\n---\n", "UTF-8"),
             (b"agent-work.launch.v1\r\nmodel: zai/glm-5.3\r\n---\r\n", "primera línea"),
             (b" agent-work.launch.v1\nmodel: zai/glm-5.3\n---\n", "primera línea"),
@@ -614,8 +646,10 @@ class Routes(unittest.TestCase):
         self.assertEqual(coverage["hostAdapterRoute"]["mac-local"]["opencode"]["form"], "run-per-task")
         route = sesion.Route.load(coverage, "mac-local")
         self.assertEqual(route, sesion.Route("mac-local", "opencode", "run-per-task", "certified",
-                                             frozenset({"1.18.35"})))
+                                             frozenset({"1.18.35"}), frozenset()))
         self.assertIsNone(route.open_for("1.18.35", canary=False))
+        self.assertEqual(route.open_for("1.18.35", 1, canary=False), modelos.GenerationNotCertified(1, ()),
+                         "the package generation stays uncertified until M-16 (M-13 point b)")
         self.assertEqual(route.open_for("1.18.36", canary=False), modelos.RouteNotCertified("1.18.36", ("1.18.35",)))
         self.assertEqual(modelos.explicar(route.open_for("1.18.36", canary=False)).frase,
                          "Ruta certificada para 1.18.35, la Mac tiene opencode 1.18.36.")
@@ -666,6 +700,29 @@ class Routes(unittest.TestCase):
                 self.assertIsInstance(route.open_for("1.18.35", canary=False), modelos.RouteNotCertified)
         self.assertEqual(sesion.Route.load(coverage, "windows-remote").status, "absent")
 
+    def test_the_route_opens_by_package_generation_and_the_canary_skips_the_gate(self):
+        def route(generations):
+            return sesion.Route("mac-local", "opencode", "run-per-task", "certified", frozenset({"1.18.35"}),
+                                frozenset(generations))
+        self.assertIsNone(route({"1": "M-13"}).open_for("1.18.35", 1, canary=False))
+        self.assertEqual(route({"1": "M-13"}).open_for("1.18.35", 2, canary=False),
+                         modelos.GenerationNotCertified(2, (1,)))
+        self.assertEqual(route({}).open_for("1.18.35", 1, canary=False), modelos.GenerationNotCertified(1, ()))
+        self.assertIsNone(route({"1": "M-13"}).open_for("1.18.35", 2, canary=True),
+                          "the canary recertifies a generation")
+        self.assertEqual(route({"2": "x", "10": "y"}).open_for("1.18.35", 1, canary=False),
+                         modelos.GenerationNotCertified(1, (2, 10)))
+        self.assertIsNone(route({"1": "M-13"}).open_for("1.18.35", canary=False),
+                          "a brief without a package only asks the version of the CLI")
+
+    def test_the_repos_coverage_certifies_generation_1_of_the_package(self):
+        # M-13 punto b: las skills de la generación 1 pierden contra ~/.agents/skills, así que la
+        # generación 1 NO está certificada: solo un canario la corre, hasta la generación 2 de G4.
+        route = sesion.Route.load(json.loads(COVERAGE.read_text(encoding="utf-8")), "mac-local")
+        self.assertEqual(route.certified_context_generations, frozenset())
+        self.assertEqual(route.open_for("1.18.35", 1, canary=False), modelos.GenerationNotCertified(1, ()))
+        self.assertIsNone(route.open_for("1.18.35", 1, canary=True))
+
 
 class Plans(Policies):
     OPERATION = "ab" * 32
@@ -677,17 +734,34 @@ class Plans(Policies):
         self.repo = self.allowed / "demo"
         (self.repo / ".git").mkdir(parents=True)
         self.run = contracts.RunDir.for_operation(self.root / "spool", self.OPERATION)
-        self.route = sesion.Route("mac-local", "opencode", "run-per-task", "certified", frozenset({"1.18.35"}))
+        self.route = sesion.Route("mac-local", "opencode", "run-per-task", "certified", frozenset({"1.18.35"}),
+                                  frozenset({"1"}))
+
+    def package(self, generation=1):
+        """What the host reads from its checkout for a brief that asks for a profile."""
+        manifest = contexto.leer_json(contexto.MANIFIESTO)
+        manifest["generation"] = generation
+        return sesion.Package(manifest, contexto.leer_json(contexto.PERFILES), self.root / "pstack")
 
     def plan(self, brief=b"Revisa el commit aaaa\n", *, policy=None, revision=None, route=None, cli="1.18.35",
-             canary=False, assignment=...):
+             canary=False, assignment=..., package=None, now=None):
         if assignment is ...:
             assignment = {"target": {"kind": "cli", "hostId": "mac-local", "adapterId": "opencode"},
                           "inputRevision": revision or {"kind": "code", "repository": str(self.repo), "sha": "a" * 40}}
         return sesion.plan_launch(assignment, brief, policy=policy or ProviderPolicy.load(POLICY), catalog=catalog(),
                                   route=route or self.route, cli_version=cli, allowed_root=self.allowed, run=self.run,
                                   record=self.root / "spool/sessions" / self.OPERATION, operation=self.OPERATION,
-                                  canary=canary)
+                                  canary=canary, package=package, now=now)
+
+    def profiled(self, profile="ingenieria", contract="ready.v1", revision=None, **kwargs):
+        brief = f"agent-work.launch.v1\nprofile: {profile}\n---\nprosa\n".encode()
+        kwargs.setdefault("canary", True)
+        kwargs.setdefault("now", self.now())
+        kwargs.setdefault("assignment", {"target": {"kind": "cli", "hostId": "mac-local", "adapterId": "opencode"},
+                                         "inputRevision": revision or {"kind": "code", "repository": str(self.repo),
+                                                                       "sha": "a" * 40},
+                                         "resultContract": contract})
+        return self.plan(brief, package=self.package(), **kwargs)
 
     def test_the_run_folder_is_private_and_holds_the_four_protocol_files(self):
         self.assertEqual(self.run.path, self.root / "spool/runs" / self.OPERATION)
@@ -773,10 +847,103 @@ class Plans(Policies):
         self.assertIsInstance(answer, modelos.WorkspaceRefused)
         self.assertIn(answer.why, ("invalid", "missing"))
 
+    def test_a_code_revision_without_a_usable_sha_is_refused_before_launch(self):
+        for sha in (None, 123, "zzz", "a" * 39, "a" * 65, True):
+            with self.subTest(sha=sha):
+                revision = {"kind": "code", "repository": str(self.repo), "sha": sha}
+                self.assertEqual(self.plan(revision=revision),
+                                 modelos.WorkspaceRefused(str(revision), "invalid"))
+        self.assertIsInstance(self.plan(revision={"kind": "code", "repository": str(self.repo), "sha": "b" * 40}),
+                              sesion.LaunchSpec)
+
     def test_a_task_without_repo_works_in_a_new_folder_inside_its_run(self):
         spec = self.plan(revision={"kind": "artifact", "ref": "artifact:aa", "digest": "sha256:aa"})
         self.assertEqual(spec.workspace.root, self.run.path / "work")
         self.assertTrue(spec.workspace.root.is_dir())
+
+    def test_a_brief_without_a_profile_is_refused_before_launch(self):
+        answer = self.plan(package=self.package(), now=self.now())
+        self.assertEqual(answer, modelos.PerfilRechazado("perfil-ausente",
+                                                         "el brief no trae perfil y la corrida lleva paquete"))
+        self.assertFalse((self.run.path / "contexto").exists(), "a refused brief copied nothing")
+        self.assertIsInstance(self.plan(canary=True, package=self.package(), now=self.now()),
+                              modelos.PerfilRechazado, "the canary does not invent a default profile either")
+
+    def test_a_brief_without_a_package_runs_as_it_always_did(self):
+        spec = self.plan(b"agent-work.launch.v1\n---\nprosa\n")
+        self.assertIsNone(spec.perfil)
+        self.assertIsNone(spec.config)
+        self.assertEqual(spec.workspace.root, self.repo)
+
+    def test_an_unknown_profile_is_refused_by_its_name(self):
+        brief = b"agent-work.launch.v1\nprofile: no-existe\n---\nprosa\n"
+        self.assertEqual(self.plan(brief, canary=True, package=self.package(), now=self.now()),
+                         modelos.PerfilRechazado("perfil-desconocido", "ningún perfil se llama no-existe"))
+
+    def test_a_profile_runs_only_when_it_admits_the_route_the_contract_and_its_competence(self):
+        spec = self.profiled()
+        self.assertEqual((spec.perfil["id"], spec.workspace.root), ("ingenieria", self.repo))
+        brief = b"agent-work.launch.v1\nprofile: meli\n---\nprosa\n"
+        fuera = self.plan(brief, canary=True, package=self.package(), now=self.now(),
+                          assignment={"target": {"kind": "cli", "hostId": "mac-local", "adapterId": "opencode"},
+                                      "inputRevision": {"kind": "code", "repository": str(self.repo), "sha": "a" * 40},
+                                      "resultContract": "ready.v1"})
+        self.assertEqual(fuera.causa, "perfil-no-atiende-ruta")
+        revision = self.profiled(contract="review.v1")
+        self.assertEqual(revision.causa, "perfil-no-admite-contrato")
+        sin = self.profiled(canary=False)
+        self.assertEqual(sin.causa, "perfil-sin-competencia")
+
+    def test_the_planned_config_delivers_the_package_and_the_model_of_the_encargo(self):
+        spec = self.profiled()
+        env = sesion.opencode_env(spec)
+        config = json.loads(env["OPENCODE_CONFIG_CONTENT"])
+        self.assertEqual(config["instructions"], [str(self.run.context / "AGENTS.md")])
+        self.assertEqual(config["skills"], {"paths": [str(self.run.context / "skills")]})
+        self.assertEqual(config["agent"], {name: {"model": str(spec.model.model)} for name in sesion.LOCAL_AGENTS})
+        self.assertNotIn("edit", config["permission"], "ingenieria writes source and keeps the edit tool")
+
+    def test_a_reviewer_runs_in_a_clone_that_cannot_edit(self):
+        spec = self.profiled("revision", "review.v1")
+        self.assertEqual(spec.workspace.root, self.run.path / "repo")
+        config = json.loads(sesion.opencode_env(spec)["OPENCODE_CONFIG_CONTENT"])
+        self.assertEqual(config["permission"]["edit"], "deny")
+        artifact = self.profiled("revision", "review.v1",
+                                 revision={"kind": "artifact", "ref": "artifact:aa", "digest": "sha256:aa"})
+        self.assertEqual(artifact.workspace.root, self.run.path / "work", "an artifact run has no repo to clone")
+
+    def test_a_reviewer_that_could_edit_is_refused(self):
+        original = sesion.run_config
+
+        def sin_deny(run, model, writes):
+            config = original(run, model, writes=writes)
+            config["permission"].pop("edit", None)
+            return config
+
+        with mock.patch.object(sesion, "run_config", sin_deny):
+            refusal = self.profiled("revision", "review.v1")
+        self.assertEqual(refusal.causa, "revisor-con-escritura")
+
+    def test_a_run_that_denies_a_required_tool_is_refused(self):
+        original = sesion.run_config
+
+        def sin_task(run, model, writes):
+            config = original(run, model, writes=writes)
+            config["permission"]["task"] = "deny"
+            return config
+
+        with mock.patch.object(sesion, "run_config", sin_task):
+            refusal = self.profiled("revision", "review.v1")
+        self.assertEqual(refusal.causa, "herramienta-negada")
+        self.assertIn("task", refusal.frase)
+
+    def test_a_plan_with_a_package_demands_the_hosts_clock(self):
+        with self.assertRaises(TypeError):
+            self.profiled(now=None)
+        self.assertIsNone(self.plan().perfil, "a packageless plan runs without a clock, as always")
+
+    def now(self):
+        return datetime(2026, 10, 15, tzinfo=timezone.utc)
 
 
 if __name__ == "__main__":

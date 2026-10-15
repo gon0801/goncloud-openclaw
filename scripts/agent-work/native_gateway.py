@@ -7,6 +7,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import signal
 import sqlite3
 import subprocess
@@ -16,22 +17,25 @@ import threading
 import time
 from collections import namedtuple
 from dataclasses import replace
+from datetime import datetime, timezone
 from pathlib import Path
 
 from contracts import (HOST_BEAT_FILE, AuthorizedOperation, HostBeat, HostObservation, IncidentRejected, OperationKey,
                        RunDir, SessionRecord, operation_id)
+import contexto
 import flota
 from host import (ACCEPT_DEADLINE_SECONDS, RESULT_DEADLINE_SECONDS, DeliveryDeferred, Host, repo_photo,
                   writes_source)
-from modelos import (POLICY_FILE, CatalogStore, CatalogUnavailable, ExactModel, ModelNotListed,
-                     ProviderNotConfigured, ProviderPolicy, authorize, explicar)
+from modelos import (POLICY_FILE, CatalogStore, CatalogUnavailable, ContextoIncompleto, ExactModel, ModelNotListed,
+                     PerfilRechazado, ProviderNotConfigured, ProviderPolicy, authorize, explicar)
 from progress_bridge import transfer_host_projection, transfer_projection
 from resources import BoundaryBusy
-from sesion import (COVERAGE_FILE, GroupBoundaryBackend, LaunchSpec, Route, opencode_argv, opencode_env, plan_launch,
-                    session_directory, session_name)
+from sesion import (COVERAGE_FILE, GroupBoundaryBackend, LaunchHeader, LaunchSpec, MalformedHeader, Package, Route,
+                    opencode_argv, opencode_env, plan_launch, session_directory, session_name)
 from spool import atomic_json, canonical, incident_identity
 
 CHECKOUT = Path(__file__).resolve().parents[2]
+CONTEXT_DIR = Path("scripts/agent-work/contexto")
 
 DEFINITIVE_INCIDENT_REJECTIONS = (
     "Managed task incident conflict",
@@ -372,6 +376,35 @@ SLOT_GROUP = "agent-work-enc1"
 CATALOG_RECHECK_SECONDS = 60.0
 
 
+def build_clone(repository: str, sha: str, destino: Path) -> None:
+    """The reviewer's disposable clone (SUA-03, 4.8). No hardlinks: no object of the clone is a file of the
+    real repo. No origin: a push has nowhere to go. Idempotent: a host that died after cloning finds the
+    clone detached at the very revision it asked for and with no remote, and anything else is rebuilt."""
+    if destino.exists():
+        head = subprocess.run(["git", "-C", str(destino), "rev-parse", "HEAD"], capture_output=True, text=True,
+                              timeout=30)
+        remotes = subprocess.run(["git", "-C", str(destino), "remote"], capture_output=True, text=True, timeout=30)
+        clean = subprocess.run(["git", "-C", str(destino), "status", "--porcelain=v1", "--untracked-files=all",
+                                "--ignored=traditional"], capture_output=True, text=True, timeout=60)
+        if (head.returncode == 0 and head.stdout.strip() == sha and not remotes.stdout.strip()
+                and clean.returncode == 0 and not clean.stdout.strip()):
+            return
+        shutil.rmtree(destino, ignore_errors=True)
+    clone = subprocess.run(["git", "clone", "--no-hardlinks", "--no-checkout", repository, str(destino)],
+                           capture_output=True, text=True, timeout=300)
+    if clone.returncode != 0:
+        raise ValueError(f"git clone failed: {clone.stderr.strip()[:300]}")
+    detach = subprocess.run(["git", "-C", str(destino), "checkout", "--detach", sha], capture_output=True,
+                            text=True, timeout=120)
+    if detach.returncode != 0:
+        shutil.rmtree(destino, ignore_errors=True)
+        raise ValueError(f"git checkout --detach {sha[:12]} failed: {detach.stderr.strip()[:300]}")
+    remote = subprocess.run(["git", "-C", str(destino), "remote", "remove", "origin"], capture_output=True,
+                            text=True, timeout=30)
+    if remote.returncode != 0:
+        raise ValueError("git remote remove origin failed")
+
+
 def claim_run_once(client, *, host, manager, backend, instance_id, deps):
     """Claim one task and launch its own opencode process inside the slot's group, or refuse it with an
     incident. A slot whose group holds processes of no task has no room either: nothing is claimed that
@@ -412,18 +445,49 @@ def claim_run_once(client, *, host, manager, backend, instance_id, deps):
         if registered is not None:
             raise ValueError(f"the launch of a registered operation is now refused: {why.causa}")
         return host.refuse(key, authorized, client.admit_host, {"causa": why.causa, "frase": why.frase})
+    if plan.perfil is not None and plan.config is not None and not record.context.exists():
+        # El paquete de la corrida, copiado ANTES de registrar la asignación: el protocolo que la
+        # asignación le dice al CLI depende de si su perfil escribe fuente, y un protocolo que cambia
+        # entre intentos no puede registrarse dos veces (SUA-03, 4.5). Un host que murió después de
+        # copiar encuentra la copia entera y solo re-lee su digest de la copia.
+        try:
+            if not run.context.exists():
+                contexto.construir(plan.package.source, plan.package.manifest, plan.perfil, run.context,
+                                   adaptaciones=contexto.leer_adaptaciones())
+        except contexto.ContextoIncompleto as error:
+            why = explicar(ContextoIncompleto(str(error)), registrado=registered is not None)
+            if registered is not None:
+                raise ValueError(f"the launch of a registered operation is now refused: {why.causa}") from error
+            return host.refuse(key, authorized, client.admit_host, {"causa": why.causa, "frase": why.frase})
+        atomic_json(record.context, {"poteto": contexto.digest_del_paquete(run.context),
+                                     "tools": "sha256:" + hashlib.sha256(canonical(plan.config).encode()).hexdigest(),
+                                     "writesSource": plan.perfil["writesSource"],
+                                     "specialist": plan.perfil["id"],
+                                     "generation": plan.package.manifest["generation"],
+                                     "profile": contexto.digest_de_perfil(plan.perfil)})
 
     def launch(_assignment_ref, _session):
         deps.recheck(plan)
-        if not writes_source(assignment) and not record.repo_before.exists():
-            # The photo of the real repo, before the run can touch it (SUA-03, 4.8). A folder that is not a
-            # git repo has no photo, and its result is not compared.
-            try:
-                photo = repo_photo(str(plan.workspace.root))
-            except OSError:
-                photo = None
+        if not writes_source(assignment, state_dir=host.state_dir, operation=key) \
+                and not record.repo_before.exists():
+            # The photo of the real repo, before the run can touch it (SUA-03, 4.8). Ignored files only
+            # count when the run works in a clone: a reviewer without one leaves __pycache__ and must
+            # not see its good result refused. The mode travels in the photo for the after-read.
+            revision = assignment["inputRevision"]
+            en_clon = plan.perfil is not None and not plan.perfil["writesSource"] \
+                and revision.get("kind") == "code"
+            protected = revision.get("repository") if revision.get("kind") == "code" else None
+            photo = None
+            if protected is not None:
+                try:
+                    photo = repo_photo(str(protected), ignored=en_clon)
+                except OSError:
+                    photo = None
             if photo is not None:
-                atomic_json(record.repo_before, {"repo": str(plan.workspace.root), "photo": photo})
+                atomic_json(record.repo_before, {"repo": str(protected), "photo": photo, "ignored": en_clon})
+        if plan.perfil is not None and not plan.perfil["writesSource"] \
+                and assignment["inputRevision"].get("kind") == "code":
+            build_clone(assignment["inputRevision"]["repository"], assignment["inputRevision"]["sha"], run.repo)
         argv = opencode_argv(plan, deps.opencode_bin, task_id=claim["taskId"])
         try:
             launched = manager.ensure_launched(key, lambda nonce: backend.launch(plan, nonce, argv, opencode_env(plan)))
@@ -516,6 +580,35 @@ class RunHost:
         atomic_json(self.state_root / HOST_BEAT_FILE, beat.document())
         return beat
 
+    def package(self, brief: bytes) -> "Package | ContextoIncompleto | PerfilRechazado | None":
+        """What this checkout holds for a brief that asks for a profile (SUA-03, 4.5): the manifest whole
+        and the profiles, with the source the launcher copies from. A brief without a profile carries no
+        package and runs as always; one with a profile and a checkout without a package, or with a fixed
+        generation that does not match, stays on the ground."""
+        header = LaunchHeader.parse(brief)
+        if isinstance(header, MalformedHeader) or header.profile is None:
+            return None
+        base = self.checkout / CONTEXT_DIR
+        try:
+            manifest = json.loads((base / "poteto.v1.json").read_text(encoding="utf-8"))
+            contexto.comprobar_generacion(manifest, json.loads((base / "generaciones.json").read_text(encoding="utf-8")))
+            profiles = json.loads((base / "perfiles.v1.json").read_text(encoding="utf-8"))
+        except (OSError, ValueError) as error:
+            return ContextoIncompleto(f"el paquete del checkout no se pudo leer: {error}")
+        try:
+            perfil = contexto.perfil(profiles, header.profile)
+        except KeyError:
+            return PerfilRechazado("perfil-desconocido", f"ningún perfil se llama {header.profile}")
+        fuente = None
+        try:
+            fuente = contexto.fuente_del_paquete(manifest)
+            # La primera frontera con disco (4.5): cada archivo de la fuente coincide con el manifiesto
+            # antes de planear. La segunda es la copia, que construye y relee el paso de lanzamiento.
+            contexto.comprobar_fuente(manifest, perfil, fuente)
+        except contexto.ContextoIncompleto as error:
+            return ContextoIncompleto(str(error))
+        return Package(manifest, profiles, fuente)
+
     def plan(self, assignment, brief, *, run, record, operation):
         """The launch of one claim, or why not. An opencode that does not answer its version has no
         certified route. A provider or a model the catalog lacks is looked up once more: the operator may
@@ -525,6 +618,9 @@ class RunHost:
         except (OSError, ValueError):
             coverage = {}
         route = Route.load(coverage, self.client.host_id)
+        package = self.package(brief)
+        if not isinstance(package, (Package, type(None))):
+            return package
         try:
             catalog = self.catalog(fresh=True)
         except CatalogUnavailable:
@@ -533,7 +629,8 @@ class RunHost:
         def planned(listed):
             return plan_launch(assignment, brief, policy=self.policy, catalog=listed, route=route,
                                cli_version=listed.cli_version, allowed_root=self.allowed_root, run=run,
-                               record=record, operation=operation, canary=self.canary)
+                               record=record, operation=operation, canary=self.canary, package=package,
+                               now=datetime.fromtimestamp(self.clock(), tz=timezone.utc))
 
         plan = planned(catalog)
         if (isinstance(plan, (ProviderNotConfigured, ModelNotListed))
@@ -575,10 +672,18 @@ class RunHost:
 
     def write_fleets(self):
         """The flota.v1 of each launched run whose session is proven gone: its logs are final. A run
-        without a package has no document; one that cannot be read now is tried on the next pass."""
+        without a package has no document; one that cannot be read now is tried on the next pass. The
+        reviewer's clone dies with its run (SUA-03, 4.8): what it left there is lost on purpose. A fleet
+        that was written never changes, so the pass skips it with one stat instead of the whole spool
+        row."""
         written = []
         for row in self.host.spool.closure_rows():
             if row["state"] != "AbsenceVerified":
+                continue
+            run = RunDir(self.host.state_dir / "runs" / row["operation_id"])
+            if run.repo.exists():
+                shutil.rmtree(run.repo, ignore_errors=True)
+            if run.fleet.exists():
                 continue
             current = self.host.spool.get(row["operation_id"])
             if current is None:

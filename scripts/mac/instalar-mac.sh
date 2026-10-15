@@ -30,7 +30,7 @@ LINEA_SOURCE="source ~/bin/agent-tmux-shell.zsh"
 # Manifiesto binario: fuentes relativas a scripts/mac, destino ~/bin (cp -p
 # conserva el +x).
 BINS="progress-events.py agent-tmux.sh agent-tmux-shell.zsh tmux-activity-watch.sh claude-stop-openclaw-event.sh shot.sh tablero-trabajo.sh"
-AGENT_WORK_FILES="brief.py contracts.py host.py modelos.py native_gateway.py progress_bridge.py resources.py routing.py sesion.py spool.py cutover.py"
+AGENT_WORK_FILES="brief.py contexto.py contracts.py flota.py host.py modelos.py native_gateway.py progress_bridge.py resources.py routing.py sesion.py spool.py cutover.py"
 
 di() { printf '%s\n' "$1"; }
 falla() { printf 'instalar-mac: error: %s\n' "$1" >&2; exit 1; }
@@ -89,6 +89,7 @@ modo_dry() {
   di "instalaria desde $AQUI (ref $REF@$(ref_sha)) a HOME=$HOME uid=$QUIEN_UID:"
   for f in $BINS; do sha="$(blob_de "$AQUI/$f")"; di "  bin/$f  (blob ${sha})"; done
   for f in $AGENT_WORK_FILES; do sha="$(blob_de "$RAIZ/agent-work/$f")"; di "  bin/agent-work/$f  (blob ${sha})"; done
+  di "  bin/agent-work/contexto/  (carpeta entera: manifiesto, perfiles y competencia)"
   di "  Library/LaunchAgents/$PL_NOMBRE  (generada con HOME=$HOME)"
   di "  .tmux.conf  (blob $(blob_de "$AQUI/tmux.conf"))"
   di "  .zshrc: agregaria \`$LINEA_SOURCE\` si falta"
@@ -106,6 +107,16 @@ modo_verificar() {
     [ -f "$BIN_DIR/agent-work/$f" ] && cmp -s "$RAIZ/agent-work/$f" "$BIN_DIR/agent-work/$f" || { di "DIFIERE: bin/agent-work/$f"; mal=$((mal+1)); continue; }
   done
   [ -x "$BIN_DIR/agent-work/cutover.py" ] || { di "SIN +x: bin/agent-work/cutover.py"; mal=$((mal+1)); }
+  if [ ! -d "$BIN_DIR/agent-work/contexto" ]; then di "FALTA: bin/agent-work/contexto"; mal=$((mal+1)); else
+    while IFS= read -r f; do
+      rel="${f#"$RAIZ"/agent-work/contexto/}"
+      cmp -s "$f" "$BIN_DIR/agent-work/contexto/$rel" || { di "DIFIERE: bin/agent-work/contexto/$rel"; mal=$((mal+1)); }
+    done < <(find "$RAIZ/agent-work/contexto" -type f | sort)
+    while IFS= read -r f; do
+      rel="${f#"$BIN_DIR"/agent-work/contexto/}"
+      [ -f "$RAIZ/agent-work/contexto/$rel" ] || { di "SOBRA: bin/agent-work/contexto/$rel"; mal=$((mal+1)); }
+    done < <(find "$BIN_DIR/agent-work/contexto" -type f | sort)
+  fi
   tmp="$(mktemp)" || falla "sin tmp para comparar el plist"
   generar_plist "$tmp" || { rm -f "$tmp"; falla "no se pudo generar el plist esperado"; }
   if [ ! -f "$LA_DIR/$PL_NOMBRE" ]; then di "FALTA: LaunchAgents/$PL_NOMBRE"; mal=$((mal+1));
@@ -129,6 +140,17 @@ modo_instalar() {
   for f in $AGENT_WORK_FILES; do
     copiar_si_difiere "$RAIZ/agent-work/$f" "$BIN_DIR/agent-work/$f" || falla "no se pudo instalar agent-work/$f"
   done
+  # La carpeta de datos del paquete de SUA-03 (manifiesto, perfiles y competencia): archivo por
+  # archivo, sin tocar lo que ya esta igual, y sin dejar dato viejo que el repo ya no trae.
+  local fdatos
+  while IFS= read -r fdatos; do
+    mkdir -p "$BIN_DIR/agent-work/$(dirname "$fdatos")"
+    copiar_si_difiere "$RAIZ/agent-work/$fdatos" "$BIN_DIR/agent-work/$fdatos" \
+      || falla "no se pudo instalar agent-work/$fdatos"
+  done < <(cd "$RAIZ/agent-work" && find contexto -type f | sort)
+  while IFS= read -r fdatos; do
+    [ -f "$RAIZ/agent-work/$fdatos" ] || rm -f "$BIN_DIR/agent-work/$fdatos"
+  done < <(cd "$BIN_DIR/agent-work" && find contexto -type f 2>/dev/null | sort)
   chmod 755 "$BIN_DIR/agent-work/cutover.py"
   chmod 755 "$BIN_DIR/progress-events.py"
   local pl_tmp; pl_tmp="$(mktemp)" || falla "sin tmp para el plist"

@@ -714,13 +714,14 @@ class BriefHelper(unittest.TestCase):
         self.assertIn(b"brief: cannot read", missing.stderr)
         self.assertEqual(list(self.root.iterdir()), [])
 
-    def test_todays_host_refuses_a_profile_line(self):
-        # G1 does not move the host: until G3 a brief with a profile is cabecera-mal-formada, which is
-        # why main does not pass --perfil before the window of G5.
+    def test_the_host_reads_the_profile_line_that_brief_writes(self):
+        # G1 did not move the host: until G3 a brief with a profile was cabecera-mal-formada, which is
+        # why main did not pass --perfil before the window of G5. G3 is the slice that teaches the host
+        # to read it, and the header it writes parses from then on.
         done = self.run_helper("--host", "mac-local", "--adapter", "opencode", "--perfil", "ingenieria")
         digest = json.loads(done.stdout)["instructionRef"]["ref"].removeprefix("artifact:")
-        self.assertEqual(sesion.LaunchHeader.parse((self.root / digest).read_bytes()),
-                         modelos.MalformedHeader("línea que este host no entiende: 'profile: ingenieria'"))
+        header = sesion.LaunchHeader.parse((self.root / digest).read_bytes())
+        self.assertEqual((header.model, header.profile), (None, "ingenieria"))
 
     def test_brief_and_contexto_share_the_canonical_form(self):
         sample = {"z": [1, {"ñ": "sí"}], "a": None}

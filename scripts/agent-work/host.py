@@ -49,9 +49,25 @@ class ReviewerWroteSource(ValueError):
         self.changed = changed
 
 
-def writes_source(assignment: dict) -> bool:
-    """Whether a run may write its task's repo. Until a run carries its profile (SUA-03, G3), a review
-    never does and everything else may, as today."""
+def _json_recorded(path: Path) -> dict:
+    """What the host recorded there, or an empty dict when it wrote nothing."""
+    try:
+        recorded = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return recorded if isinstance(recorded, dict) else {}
+
+
+def writes_source(assignment: dict, *, state_dir: Path | None = None,
+                  operation: OperationKey | None = None) -> bool:
+    """Whether a run may write its task's repo. A run with a package follows what the HOST recorded of
+    its profile at launch, in sessions/<op>/contexto.json: a folder outside the run, which the session's
+    tools can neither read nor write (SUA-03, 4.8). What the session could edit decides nothing. A run
+    without a package keeps the G2 rule: a review never does and everything else may, as today."""
+    if state_dir is not None and operation is not None:
+        launched = _json_recorded(SessionRecord.locate(state_dir, operation_id(operation)).context)
+        if isinstance(launched.get("writesSource"), bool):
+            return launched["writesSource"]
     return assignment["resultContract"] != REVIEW_CONTRACT
 
 
@@ -72,17 +88,26 @@ def _git_files(folder: Path) -> str:
                                       .hexdigest()] for path in files]).encode()).hexdigest()
 
 
-def repo_photo(repo: str) -> dict:
-    """What a reviewer's run must leave as it was: HEAD, the refs, the status with untracked files, the diff
-    against HEAD, and inside .git its config and its hooks, which run code at the next git command. Ignored
-    files are not in it: a test run leaves __pycache__ behind (until G3 runs the reviewer in a clone).
-    OSError when the folder is not a git repo."""
+def repo_photo(repo: str, *, ignored: bool = False) -> dict:
+    """What a reviewer's run must leave as it was: HEAD, the refs, the status with untracked files, the
+    diff against HEAD, and inside .git its config and its hooks, which run code at the next git command.
+    Ignored files only join the status when the run works in a disposable clone (SUA-03, 4.8): a
+    reviewer without one runs its tests where it works, and a __pycache__ in the repo must not refuse a
+    good result, so its photo is the G2 one, byte for byte. Which mode applies is the launcher's call,
+    and it writes it in the before-photo so the after-photo reads the same one. OSError when the folder
+    is not a git repo."""
     git_dir = Path(_git(repo, "rev-parse", "--absolute-git-dir").decode().strip())
     config = git_dir / "config"
+    status = ["status", "--porcelain=v1", "-z", "--untracked-files=all"]
+    if ignored:
+        # --ignored=traditional lists the files inside an ignored directory; --ignored=matching would
+        # collapse the directory into one entry, and a new file inside one that already existed would
+        # never change the photo.
+        status.append("--ignored=traditional")
     return {
         "head": _git(repo, "rev-parse", "HEAD").decode().strip(),
         "refs": hashlib.sha256(_git(repo, "for-each-ref")).hexdigest(),
-        "status": hashlib.sha256(_git(repo, "status", "--porcelain=v1", "-z", "--untracked-files=all")).hexdigest(),
+        "status": hashlib.sha256(_git(repo, *status)).hexdigest(),
         "diff": hashlib.sha256(_git(repo, "diff", "--binary", "HEAD")).hexdigest(),
         "config": hashlib.sha256(config.read_bytes() if config.is_file() else b"").hexdigest(),
         "hooks": _git_files(git_dir / "hooks"),
@@ -134,11 +159,13 @@ def delivery_line(assignment_ref: str) -> str:
             "from the assignment. Then follow briefRef and write agent-work.result.v1 atomically to resultRef.")
 
 
-def cli_protocol(assignment: dict, *, run: bool = False) -> dict:
+def cli_protocol(assignment: dict, *, run: bool = False, state_dir: Path | None = None,
+                 operation: OperationKey | None = None) -> dict:
     """The assignment spells out what a CLI writes, because the CLI has nothing else to go on. A review
     with a run folder leaves its artifact there, never in the repo it reviews (SUA-03, 4.8)."""
     artifact_home = ("inside the directory that holds resultRef, never inside workspaceRef"
-                     if run and not writes_source(assignment) else "inside workspaceRef")
+                     if run and not writes_source(assignment, state_dir=state_dir, operation=operation)
+                     else "inside workspaceRef")
     return {
         "steps": [
             "Before any other work, write the accept object as JSON to acceptRef, atomically: create the "
@@ -326,7 +353,8 @@ class Host:
         assignment = self._assignment(key, replace(operation, workspace_ref=str(Path(operation.workspace_ref).resolve())),
                                       str(brief))
         if operation.adapter_id:
-            assignment["protocol"] = cli_protocol(assignment, run=run is not None)
+            assignment["protocol"] = cli_protocol(assignment, run=run is not None, state_dir=self.state_dir,
+                                                  operation=key)
         self._register(key, assignment, assignment_ref)
         if not run:
             (self.state_dir / "inbox").mkdir(parents=True, exist_ok=True)
@@ -401,7 +429,8 @@ class Host:
                 raise ValueError("recorded artifact snapshot missing")
             # A run-per-task operation keeps its result in its own run folder (RunDir).
             run_folder = Path(assignment["resultRef"]).parent
-            reviewed = run_folder == self.state_dir / "runs" / op_id and not writes_source(assignment)
+            reviewed = run_folder == self.state_dir / "runs" / op_id and not writes_source(
+                assignment, state_dir=self.state_dir, operation=key)
             if reviewed:
                 self._check_repo(op_id)
             home = str(run_folder) if reviewed else assignment["workspaceRef"]
@@ -426,7 +455,7 @@ class Host:
             before = json.loads(record.repo_before.read_text(encoding="utf-8"))
         except FileNotFoundError:
             return
-        after = repo_photo(before["repo"])
+        after = repo_photo(before["repo"], ignored=bool(before.get("ignored")))
         changed = photo_changes(before["photo"], after)
         if changed:
             atomic_json(record.repo_after, {"repo": before["repo"], "photo": after, "changed": changed})

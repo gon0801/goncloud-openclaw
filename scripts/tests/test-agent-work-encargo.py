@@ -61,6 +61,16 @@ class Mac(unittest.TestCase):
         (self.checkout / EVIDENCE).mkdir(parents=True)
         for name in ("proveedores-permitidos.json", "coverage.json"):
             shutil.copy(ROOT / EVIDENCE / name, self.checkout / EVIDENCE / name)
+        contexto_dir = self.checkout / "scripts" / "agent-work" / "contexto"
+        contexto_dir.mkdir(parents=True)
+        for name in ("poteto.v1.json", "generaciones.json", "perfiles.v1.json"):
+            shutil.copy(ROOT / "scripts/agent-work/contexto" / name, contexto_dir / name)
+        # The fixture certifies generation 1: the real coverage leaves it uncertified (M-13 point b),
+        # and a profiled pedido without a canary would stop at the generation gate, not at the profile.
+        coverage_path = self.checkout / EVIDENCE / "coverage.json"
+        coverage = json.loads(coverage_path.read_text())
+        coverage["hostAdapterRoute"]["mac-local"]["opencode"]["contextGenerations"] = {"1": "fixture"}
+        coverage_path.write_text(json.dumps(coverage))
         self.policy_path = self.checkout / EVIDENCE / "proveedores-permitidos.json"
         self.state = self.root / "state"
         self.state.mkdir()
@@ -192,6 +202,34 @@ class Proveedores(Mac):
 
 
 class Preparar(Mac):
+    def test_the_profile_travels_in_the_brief_args_only_when_it_is_asked_for(self):
+        self.beat()
+        self.assertNotIn("--perfil", self.preparar()["briefArgs"], "a task of today carries no profile")
+        with_profile = self.preparar("--perfil", "revision")
+        self.assertEqual(with_profile["briefArgs"][-2:], ["--perfil", "revision"])
+        unknown = self.preparar("--perfil", "no-existe")
+        self.assertEqual((unknown["causa"], unknown["accion"]), ("perfil-desconocido", "no-registrar"))
+        self.assertEqual(unknown["frase"], "ningún perfil se llama no-existe")
+        malformed = self.preparar("--perfil", "Ingenieria")
+        self.assertEqual(malformed["causa"], "perfil-desconocido")
+
+    def test_a_profiled_pedido_names_an_uncertified_package_generation_in_the_same_turn(self):
+        self.beat()
+        path = self.checkout / EVIDENCE / "coverage.json"
+        coverage = json.loads(path.read_text())
+        del coverage["hostAdapterRoute"]["mac-local"]["opencode"]["contextGenerations"]
+        path.write_text(json.dumps(coverage))
+        answer = self.preparar("--perfil", "ingenieria")
+        self.assertEqual((answer["causa"], answer["accion"]), ("generacion-no-certificada", "no-registrar"))
+        self.assertIn("generación 1", answer["frase"])
+
+    def test_a_profiled_pedido_says_when_the_checkout_has_no_package_to_deliver(self):
+        self.beat()
+        shutil.rmtree(self.checkout / "scripts" / "agent-work" / "contexto")
+        answer = self.preparar("--perfil", "ingenieria")
+        self.assertEqual((answer["causa"], answer["accion"]), ("contexto-incompleto", "no-registrar"))
+        self.assertIn("no se pudo leer", answer["frase"])
+
     def test_a_bare_provider_word_asks_david_which_model(self):
         answer = self.preparar("--modelo", "glm")
         self.assertEqual((answer["causa"], answer["accion"]), ("nombre-ambiguo", "preguntar-a-david"))
