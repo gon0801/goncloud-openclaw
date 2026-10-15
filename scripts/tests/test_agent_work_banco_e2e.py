@@ -294,6 +294,14 @@ def sha256(data):
     return hashlib.sha256(data).hexdigest()
 
 
+def desenlace_de(snapshot: dict) -> str:
+    """Cómo terminó una tarea que acepta los dos desenlaces (R4 de G5c-r3): el
+    resultado, o el incidente con su kind."""
+    if snapshot["deliveryState"] == "result-recorded":
+        return "resultado"
+    return f"incidente:{snapshot['incidents'][0]['kind']}"
+
+
 def guardar_caso(raiz: Path, destino: Path) -> Path:
     """La evidencia de un caso antes de borrar su temporal (R3 de G5c-r3): copia
     la raíz sin ningún `.git` y sin `*.dylib`, que son lo pesado y lo que no dice
@@ -690,7 +698,7 @@ class BancoE2E(unittest.TestCase):
     def test_an_explorer_asked_to_fix_leaves_the_repo_as_it_was(self):
         task_id = self.ask(EXPLORACION_CAMBIO_BRIEF, "ready.v1", perfil="exploracion")
         snapshot = self.wait_result_or_incident(task_id)
-        desenlace = "resultado" if snapshot["deliveryState"] == "result-recorded" else "incidente"
+        desenlace = desenlace_de(snapshot)
         if desenlace == "resultado":
             self.artifact_path(task_id)
         self.assertEqual(self.photo_changes(), [], "exploracion dejó cambiado el repo real")
