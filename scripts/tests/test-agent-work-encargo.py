@@ -539,13 +539,23 @@ class Perfiles(Mac):
             "id": "x", "purpose": "p", "resultContracts": ["ready.v1"],
             "writesSource": False, "competence": {},
         }
-        for ruta_o_via, competencia, agentes in (
-            ({"routes": [None]}, {}, None),
-            ({"routes": [{"ruta": "mac-local/opencode", "via": "task"}]}, {}, None),
-            ({}, [], None),
-            ({}, {}, [1]),
+        for ruta_o_via, competencia, agentes, campo in (
+            ({"routes": [None]}, {}, None, "routes"),
+            ({"routes": [{"ruta": "mac-local/opencode", "via": "task"}]}, {}, None, "via"),
+            (
+                {"routes": [{"ruta": "mac-local/opencode", "via": ["task"]}]},
+                [],
+                None,
+                "competence",
+            ),
+            (
+                {"routes": [{"ruta": "mac-local/opencode", "via": ["task"]}]},
+                {},
+                [1],
+                "agents",
+            ),
         ):
-            with self.subTest(routes=ruta_o_via.get("routes"), competencia=competencia, agentes=agentes):
+            with self.subTest(campo=campo):
                 uno = dict(perfil)
                 uno.update(ruta_o_via)
                 uno["competence"] = competencia
@@ -558,6 +568,7 @@ class Perfiles(Mac):
                 self.assertNotIn("Traceback", err)
                 respuesta = json.loads(err)
                 self.assertFalse(respuesta["ok"])
+                self.assertIn(campo, respuesta["error"], f"el mensaje no nombra {campo}")
 
 
 class Permitir(Mac):
