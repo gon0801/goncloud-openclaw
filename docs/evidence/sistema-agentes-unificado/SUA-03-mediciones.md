@@ -64,4 +64,4 @@ BANCO_E2E case=ingenieria task=4d2e7e8d-7b11-4388-9263-01dc08497830 conducta=ok 
 BANCO_E2E case=control task=ec302951-c64c-4518-8cb2-bab88a7d36fb conducta=roja razones=['falta la lectura de contexto/skills/poteto-mode/SKILL.md antes del primer cambio', 'falta la lectura de contexto/skills/poteto-mode/playbooks/feature.md antes del primer cambio', "la primera lista no empieza con el primer paso del playbook: '`how` over the affected subsystem.'"]
 ```
 
-**Veredicto M-16: VERDE, diez corridas (corrida 5 + corrida 8)**
+**Veredicto M-16: VERDE, diez casos en dos corridas (corrida 5 + corrida 8)**

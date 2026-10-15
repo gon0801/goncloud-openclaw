@@ -44,7 +44,7 @@
       "opencode": {
         "form": "run-per-task",
         "certifiedCliVersions": {"1.18.35": "B22-fase0.md y B22-canarios.md"},
-        "contextGenerations": {"1": "SUA-03-mediciones.md (M-16, banco)"},
+        "contextGenerations": {"1": "docs/evidence/sistema-agentes-unificado/SUA-03-mediciones.md (M-16, banco)"},
         "closureProof": {
           "boundary": "procesos del uid del operador con rgid del grupo agent-work-enc1",
           "evidence": "docs/evidence/agent-work/B22-fase0.md (M4) y scripts/tests/test-agent-work-sesion.py",
