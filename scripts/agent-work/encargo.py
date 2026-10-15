@@ -35,17 +35,22 @@ from pathlib import Path
 from typing import Callable, Iterator, Literal
 
 from contracts import HostBeat, RunDir, SessionRecord
+import contexto
 from modelos import (MODEL_PATTERN, POLICY_FILE, PROVIDER, Billing, Catalog, CatalogStore, CatalogUnavailable,
-                     Explicacion, HostDown, HostMismatch, ModelFilter, ModelId, ModelNotListed, OperatorCitation,
-                     PermittedModel, PolicyUnreadable, ProviderClosure, ProviderGrant, ProviderId,
-                     ProviderNotConfigured, ProviderPolicy, SlotBlocked, UNVERIFIED_REF, WorkspaceRefused, authorize,
-                     explicar, pedido, policy_document)
-from sesion import (ALLOWED_ROOT, COVERAGE_FILE, EXIT_NO_SCRATCH, EXIT_NO_WORKSPACE, EXIT_OUTSIDE_GROUP, Route, Workspace,
-                    model_in_use, read_events)
+                     ContextoIncompleto, Explicacion, HostDown, HostMismatch, ModelFilter, ModelId, ModelNotListed,
+                     OperatorCitation, PerfilRechazado, PermittedModel, PolicyUnreadable, ProviderClosure,
+                     ProviderGrant, ProviderId, ProviderNotConfigured, ProviderPolicy, SlotBlocked, UNVERIFIED_REF,
+                     WorkspaceRefused, authorize, explicar, pedido, policy_document)
+from sesion import (ALLOWED_ROOT, COVERAGE_FILE, EXIT_NO_SCRATCH, EXIT_NO_WORKSPACE, EXIT_OUTSIDE_GROUP, PROFILE_ID,
+                    Route, Workspace, model_in_use, read_events)
 
 HOST_ID = "mac-local"
 ADAPTER_ID = "opencode"
 OPERATOR = "David"
+CONTEXTO_DIR = Path("scripts/agent-work/contexto")
+DEFAULT_PROFILE = "ingenieria"
+"""El perfil que `preparar` pone en `briefArgs` cuando nadie eligió uno (diseño de SUA-03, 4.5): `main`
+lo copia sin conocer los perfiles."""
 BEAT_ALIVE_SECONDS = 120.0
 """Una pasada del host con RPC colgados tarda hasta 105 s."""
 CATALOG_RECHECK_SECONDS = 60.0
@@ -160,20 +165,47 @@ def _head(repo: Path) -> str | None:
     return sha if done.returncode == 0 and re.fullmatch(r"[0-9a-f]{40,64}", sha) else None
 
 
-def preparar(repo: Path | None, modelo: str | None, *, state_root: Path, checkout: Path, now: float,
-             opencode_bin: Path = OPENCODE_BIN, allowed_root: Path = ALLOWED_ROOT,
+def _paquete_del_checkout(checkout: Path) -> "dict | Explicacion":
+    """El manifiesto del paquete que este checkout llevaría a la corrida, o por qué no se lo puede dar
+    a nadie (SUA-03, 4.5): preparar avisa en el mismo turno con la misma compuerta que el host."""
+    base = Path(checkout) / CONTEXTO_DIR
+    try:
+        manifiesto = contexto.leer_json(base / "poteto.v1.json")
+        contexto.comprobar_generacion(manifiesto, contexto.leer_json(base / "generaciones.json"))
+    except (OSError, ValueError) as error:
+        return explicar(ContextoIncompleto(f"el paquete del checkout no se pudo leer: {error}"))
+    return manifiesto
+
+
+def preparar(repo: Path | None, modelo: str | None, *, perfil: str = DEFAULT_PROFILE, state_root: Path, checkout: Path,
+             now: float, opencode_bin: Path = OPENCODE_BIN, allowed_root: Path = ALLOWED_ROOT,
              deadline_seconds: float = PREPARAR_DEADLINE_SECONDS) -> "Preparado | Explicacion":
-    """`encargo.py preparar [--repo <ruta>] [--modelo "<palabras>"]`.
+    """`encargo.py preparar [--repo <ruta>] [--modelo "<palabras>"] [--perfil <id>]`.
 
     El pedido se juzga antes que el host, así "ese proveedor no está permitido" no queda tapado por "el
     host no corre". Es un aviso y no la compuerta: usa la misma authorize, la misma política y el mismo
-    catálogo que el host, y si alguien se la salta el host rechaza igual.
+    catálogo que el host, y si alguien se la salta el host rechaza igual. El perfil viaja en la cabecera
+    del brief; con `ingenieria` por omisión, así `main` lo copia sin conocer los perfiles.
 
     Termina dentro de `deadline_seconds`: opencode tiene ese tope menos lo que se le reserva a git."""
     policy = ProviderPolicy.load(Path(checkout) / POLICY_FILE)
     if policy.unreadable is not None:
         # Antes de llamar a opencode: una política rota se dice aunque opencode no conteste.
         return explicar(PolicyUnreadable(policy.unreadable))
+    if not PROFILE_ID.fullmatch(perfil):
+        return explicar(PerfilRechazado("perfil-desconocido", f"{perfil!r} no es un id de perfil"))
+    base = Path(checkout) / CONTEXTO_DIR
+    try:
+        perfiles = contexto.leer_json(base / "perfiles.v1.json")
+    except (OSError, ValueError) as error:
+        return explicar(ContextoIncompleto(f"el paquete del checkout no se pudo leer: {error}"))
+    try:
+        contexto.perfil(perfiles, perfil)
+    except KeyError:
+        return explicar(PerfilRechazado("perfil-desconocido", f"ningún perfil se llama {perfil}"))
+    manifiesto = _paquete_del_checkout(checkout)
+    if isinstance(manifiesto, Explicacion):
+        return manifiesto
     store = CatalogStore(opencode_bin, state_root, budget_seconds=deadline_seconds - GIT_TIMEOUT_SECONDS)
     catalog = store.current()
     request = pedido(modelo)
@@ -196,7 +228,7 @@ def preparar(repo: Path | None, modelo: str | None, *, state_root: Path, checkou
     beat = latido(state_root, now)
     # Un host canario vivo corre también una ruta todavía sin certificar: su canario es un pedido real.
     canary = isinstance(beat, HostBeat) and beat.canary
-    closed = Route.load(coverage, HOST_ID).open_for(catalog.cli_version, canary=canary)
+    closed = Route.load(coverage, HOST_ID).open_for(catalog.cli_version, manifiesto["generation"], canary=canary)
     if closed is not None:
         return explicar(closed)
     if isinstance(beat, HostDown):
@@ -215,7 +247,7 @@ def preparar(repo: Path | None, modelo: str | None, *, state_root: Path, checkou
             return explicar(WorkspaceRefused(str(repo), "no-commit"))
         revision = {"kind": "code", "repository": str(workspace.root), "sha": sha}
     return Preparado(str(model.model), model.billing, revision,
-                     ("--host", HOST_ID, "--adapter", ADAPTER_ID, "--model", str(model.model)),
+                     ("--host", HOST_ID, "--adapter", ADAPTER_ID, "--model", str(model.model), "--perfil", perfil),
                      beat.slot == "running", model.policy_digest[:12], beat.cli_version)
 
 
@@ -686,6 +718,7 @@ def _parser() -> argparse.ArgumentParser:
     prepare = commands.add_parser("preparar", help="dice si un pedido puede correr y con qué argumentos de brief.py")
     prepare.add_argument("--repo", type=Path)
     prepare.add_argument("--modelo")
+    prepare.add_argument("--perfil", default=DEFAULT_PROFILE, help="perfil de trabajador para la cabecera del brief")
     state = commands.add_parser("estado", help="el latido del host de encargos, o lo que corrió una tarea")
     state.add_argument("--tarea", metavar="TASKID")
     listing = commands.add_parser("proveedores", help="qué proveedores pueden correr, cómo cobran y qué falta")
@@ -724,7 +757,8 @@ def _show(command: str, outcome: "tuple[ProviderRow, ...] | ProviderRow | str") 
 
 
 def _run_preparar(args: argparse.Namespace, where: dict, now: float) -> int:
-    return _say(preparar(args.repo, args.modelo, now=now, allowed_root=args.workspace_root, **where), now)
+    return _say(preparar(args.repo, args.modelo, perfil=args.perfil, now=now, allowed_root=args.workspace_root,
+                         **where), now)
 
 
 def _run_estado(args: argparse.Namespace, where: dict, now: float) -> int:
