@@ -74,7 +74,7 @@ mv -f "$tmp" "$dir/$nombre"
 suma="$(sha256sum "$dir/$nombre" | cut -d" " -f1)"
 
 # El nombre lleva la fecha, así que el orden por nombre es el orden por día.
-ls -1 "$dir/$prefijo"-*.tar.gz | sort -r | tail -n +"$((guardar + 1))" | while IFS= read -r viejo; do
-  rm -f "$viejo"
+ls -1 "$dir" | grep -E "^$prefijo-[0-9]{8}\.tar\.gz\$" | sort -r | tail -n +"$((guardar + 1))" | while IFS= read -r viejo; do
+  rm -f "$dir/$viejo"
 done
 echo "$suma"

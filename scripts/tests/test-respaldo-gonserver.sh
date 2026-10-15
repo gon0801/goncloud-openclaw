@@ -14,6 +14,8 @@
 #   6. Vigía: todo al día no avisa ni imprime nada.
 #   7. Vigía: falta, viejo y encogido van en un solo aviso HTML escapado al chat del env.
 #   8. Vigía: si Telegram falla sale 2 y el token no aparece en ninguna salida.
+#   9. Vigía: si no puede revisar (un respaldo ilegible) lo avisa por Telegram y sale 1.
+#  10. Un día más viejo que los siete guardados sale 5 y lo guardado no cambia.
 #
 # Uso: bash scripts/tests/test-respaldo-gonserver.sh
 set -u

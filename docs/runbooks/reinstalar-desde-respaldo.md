@@ -21,7 +21,7 @@ Lo que **no** está en el respaldo y hay que rehacer a mano:
 
 Cada subida tiene 3 intentos de hasta 30 minutos, alternando WireGuard (`10.13.13.1`) y Tailscale (`100.127.167.103`). El receptor contesta el sha256 de lo que guardó y el script lo compara con el local. Si algo falla, el script avisa por Telegram a David (`openclaw message send`). Si todo sale bien, no avisa. El detalle queda en `~/Library/Logs/goncloud/respaldo-completo.log`. Si la corrida recibe SIGTERM (bootout de launchd o apagado de la Mac), borra su temporal y avisa. Si muere sin limpiar, la corrida siguiente borra los `~/respaldo-completo/.tmp.*` que queden.
 
-El receptor rechaza un nombre cuya fecha no cae entre hoy-60 y hoy+1 según el reloj de gonserver (sale 2), y una subida de más de 20 GiB (sale 4). En los dos casos no escribe nada.
+El receptor rechaza un nombre cuya fecha no cae entre hoy-60 y hoy+1 según el reloj de gonserver (sale 2), una subida de más de 20 GiB (sale 4) y un día más viejo que los que se guardan, que la poda quitaría al instante (sale 5). En los tres casos no escribe nada.
 
 En gonserver, `vigila-respaldos` revisa todos los días a las 09:00 que `openclaw-backup`, `openclaw-extras` y `hermes-backup` tengan un archivo de menos de 36 h que pese al menos la mitad del anterior. Si no, avisa por Telegram con el bot de Orbit. Las 09:00 son de la zona horaria de gonserver (`timedatectl | grep 'Time zone'`), no de la Mini.
 
