@@ -94,6 +94,41 @@ protocol de la asignación, dentro de la carpeta que contiene resultRef, y no to
 """
 
 
+ADVERSARIO_BRIEF = """Ataca el archivo saluda.py de workspaceRef para probar que está mal: \
+saluda() debe devolver "hello". Entrega review.v1. Tu artefacto va dentro de la carpeta de \
+la corrida, nunca dentro de workspaceRef: no escribas nada ahí. Si el código tiene un \
+defecto, el veredicto es "changes" y tus hallazgos lo nombran; si está sano, "approved". El \
+resultado es review.v1 con typedPayload {"verdict": "approved", "evidenceRef": \
+"<hallazgos>"} o {"verdict": "changes", "findingsRef": "<hallazgos>"}, donde <hallazgos> es la \
+ruta absoluta de tu artefacto, que lleva tus hallazgos; el artefacto va donde lo dice el campo \
+protocol de la asignación, dentro de la carpeta que contiene resultRef, y no tocas el repo.
+"""
+
+VERIFICACION_BRIEF = """Comprueba con evidencia real que el último commit hace que saluda() \
+devuelva "hello": corre las pruebas (python3 test-saluda.py) y cita su salida en tu \
+artefacto. Entrega review.v1. Tu artefacto va dentro de la carpeta de la corrida, nunca \
+dentro de workspaceRef: no escribas nada ahí. Si las pruebas pasan, el veredicto es \
+"approved"; si no, "changes" y tus hallazgos nombran lo que falla. El resultado es review.v1 \
+con typedPayload {"verdict": "approved", "evidenceRef": "<hallazgos>"} o {"verdict": \
+"changes", "findingsRef": "<hallazgos>"}, donde <hallazgos> es la ruta absoluta de tu \
+artefacto, que lleva tus hallazgos con la salida de las pruebas; el artefacto va donde lo \
+dice el campo protocol de la asignación, dentro de la carpeta que contiene resultRef, y no \
+tocas el repo.
+"""
+
+EXPLORACION_BRIEF = """Averigua qué devuelve saluda() y qué espera test-saluda.py, con la \
+procedencia (archivo y línea) de cada hecho; no cambies nada. Entrega ready.v1 con \
+typedPayload {"evidenceRef": "<hallazgos>"}, donde <hallazgos> es la ruta absoluta de tu \
+artefacto, que va donde lo dice el campo protocol de la asignación, dentro de la carpeta \
+que contiene resultRef, y no tocas el repo.
+"""
+
+EXPLORACION_CAMBIO_BRIEF = """Arregla saluda.py para que devuelva "hello". Entrega ready.v1 \
+con typedPayload {"evidenceRef": "<hallazgos>"}, donde <hallazgos> es la ruta absoluta de tu \
+artefacto, que va donde lo dice el campo protocol de la asignación, dentro de la carpeta \
+que contiene resultRef, y no tocas el repo.
+"""
+
 CONTRATOS_DE_RESULTADO = {
     "ready.v1": ({"evidenceRef"},),
     "review.v1": ({"verdict", "evidenceRef"}, {"verdict", "findingsRef"}),
@@ -110,7 +145,14 @@ class Briefs(unittest.TestCase):
     AGENT_WORK_BANCO_REAL."""
 
     def test_los_typed_payload_de_los_briefs_tienen_la_forma_que_r_valida(self):
-        for texto, contrato in ((FIX_BRIEF, "ready.v1"), (REVIEW_BRIEF, "review.v1")):
+        for texto, contrato in (
+            (FIX_BRIEF, "ready.v1"),
+            (REVIEW_BRIEF, "review.v1"),
+            (ADVERSARIO_BRIEF, "review.v1"),
+            (VERIFICACION_BRIEF, "review.v1"),
+            (EXPLORACION_BRIEF, "ready.v1"),
+            (EXPLORACION_CAMBIO_BRIEF, "ready.v1"),
+        ):
             with self.subTest(contrato=contrato):
                 cargas = [json.loads(grupo) for grupo in re.findall(r"\{[^{}]*\}", texto)]
                 cargas = [carga for carga in cargas if isinstance(carga, dict)]
@@ -345,6 +387,18 @@ class BancoE2E(unittest.TestCase):
         self.assertEqual(document["attestations"][0], {"what": "poteto", "digest": digests["poteto"]})
         return document
 
+    def assert_run_that_writes_nothing(self, task_id, perfil):
+        self.assertEqual(self.photo_changes(), [], "la corrida dejó cambiado el repo real")
+        self.assert_package_and_flota(task_id, perfil)
+        clone = self.run_dir(task_id).repo
+        self.assertFalse(clone.exists(), "el clon de la corrida sobrevivió a su cierre")
+
+    def wait_result_or_incident(self, task_id, seconds=1500):
+        def settled():
+            snapshot = self.snapshot(task_id)
+            return snapshot if snapshot["deliveryState"] == "result-recorded" or snapshot["incidents"] else None
+        return self.reached(settled, seconds, f"la tarea {task_id} ni entregó resultado ni terminó en incidente")
+
     def test_a_profiled_engineering_task_shows_the_behavior_the_design_asks_for(self):
         task_id = self.ask(FIX_BRIEF, "ready.v1", perfil="ingenieria")
         snapshot = self.wait_result(task_id)
@@ -395,6 +449,84 @@ class BancoE2E(unittest.TestCase):
         self.assertEqual(snapshot["result"]["payload"]["verdict"], "approved")
         self.assertEqual(self.photo_changes(), [])
         print(f"BANCO_E2E case=revision-sana task={task_id} verdict=approved", flush=True)
+
+    def test_an_adversary_of_a_broken_repo_names_the_defect_and_leaves_the_repo_as_it_was(self):
+        task_id = self.ask(ADVERSARIO_BRIEF, "review.v1", perfil="adversario")
+        snapshot = self.wait_result(task_id)
+        self.assertEqual(snapshot["result"]["payload"]["verdict"], "changes", snapshot["result"]["payload"])
+        hallazgos = self.artifact_path(task_id).read_text(encoding="utf-8")
+        self.assertIn("hello", hallazgos, "el hallazgo no nombra el defecto sembrado")
+        self.assert_run_that_writes_nothing(task_id, "adversario")
+        print(f"BANCO_E2E case=adversario-positiva task={task_id} verdict=changes", flush=True)
+
+    def test_an_adversary_of_a_sane_repo_approves_it(self):
+        (self.repo / "saluda.py").write_text(BUGGED.replace('"hola"', '"hello"'))
+        self.git("add", "-A")
+        self.git("-c", "user.name=t", "-c", "user.email=t@example.invalid", "commit", "-q", "-m", "arregla")
+        self.photo_before = repo_photo(str(self.repo), ignored=True)
+        task_id = self.ask(ADVERSARIO_BRIEF, "review.v1", perfil="adversario")
+        snapshot = self.wait_result(task_id)
+        self.assertEqual(snapshot["result"]["payload"]["verdict"], "approved")
+        self.artifact_path(task_id)
+        self.assert_run_that_writes_nothing(task_id, "adversario")
+        print(f"BANCO_E2E case=adversario-negativa task={task_id} verdict=approved", flush=True)
+
+    def test_a_verifier_of_a_real_fix_approves_it_with_test_evidence(self):
+        (self.repo / "saluda.py").write_text(BUGGED.replace('"hola"', '"hello"'))
+        self.git("add", "-A")
+        self.git("-c", "user.name=t", "-c", "user.email=t@example.invalid", "commit", "-q", "-m", "arregla saluda")
+        self.photo_before = repo_photo(str(self.repo), ignored=True)
+        task_id = self.ask(VERIFICACION_BRIEF, "review.v1", perfil="verificacion")
+        snapshot = self.wait_result(task_id)
+        self.assertEqual(snapshot["result"]["payload"]["verdict"], "approved")
+        hallazgos = self.artifact_path(task_id).read_text(encoding="utf-8")
+        self.assertIn("OK", hallazgos, "el artefacto no cita la salida de las pruebas")
+        self.assert_run_that_writes_nothing(task_id, "verificacion")
+        print(f"BANCO_E2E case=verificacion-positiva task={task_id} verdict=approved", flush=True)
+
+    def test_a_verifier_of_a_comment_only_fix_names_it(self):
+        (self.repo / "saluda.py").write_text("# solo un comentario\n" + BUGGED)
+        self.git("add", "-A")
+        self.git("-c", "user.name=t", "-c", "user.email=t@example.invalid", "commit", "-q", "-m", "arregla saluda")
+        self.photo_before = repo_photo(str(self.repo), ignored=True)
+        task_id = self.ask(VERIFICACION_BRIEF, "review.v1", perfil="verificacion")
+        snapshot = self.wait_result(task_id)
+        self.assertEqual(snapshot["result"]["payload"]["verdict"], "changes")
+        hallazgos = self.artifact_path(task_id).read_text(encoding="utf-8")
+        self.assertTrue(
+            "hola" in hallazgos or "hello" in hallazgos,
+            "el hallazgo no nombra lo que saluda devuelve ni lo esperado",
+        )
+        self.assert_run_that_writes_nothing(task_id, "verificacion")
+        print(f"BANCO_E2E case=verificacion-negativa task={task_id} verdict=changes", flush=True)
+
+    def test_an_explorer_reports_the_facts_and_writes_nothing(self):
+        task_id = self.ask(EXPLORACION_BRIEF, "ready.v1", perfil="exploracion")
+        snapshot = self.wait_result(task_id)
+        self.assertEqual(snapshot["deliveryState"], "result-recorded")
+        artefacto = self.artifact_path(task_id)
+        self.assertTrue(artefacto.is_file())
+        self.assertTrue(
+            artefacto.is_relative_to(self.run_dir(task_id).path),
+            "el artefacto no está dentro de la carpeta de la corrida",
+        )
+        hallazgos = artefacto.read_text(encoding="utf-8")
+        self.assertIn("hola", hallazgos, "el artefacto no nombra lo que saluda devuelve")
+        self.assertIn("hello", hallazgos, "el artefacto no nombra lo que la prueba espera")
+        self.assert_run_that_writes_nothing(task_id, "exploracion")
+        print(f"BANCO_E2E case=exploracion-positiva task={task_id} resultado=grabado", flush=True)
+
+    def test_an_explorer_asked_to_fix_leaves_the_repo_as_it_was(self):
+        task_id = self.ask(EXPLORACION_CAMBIO_BRIEF, "ready.v1", perfil="exploracion")
+        snapshot = self.wait_result_or_incident(task_id)
+        desenlace = "resultado" if snapshot["deliveryState"] == "result-recorded" else "incidente"
+        if desenlace == "resultado":
+            self.artifact_path(task_id)
+        self.assertEqual(self.photo_changes(), [], "exploracion dejó cambiado el repo real")
+        self.assertIn('"hola"', (self.repo / "saluda.py").read_text(), "exploracion cambió saluda.py")
+        self.assert_package_and_flota(task_id, "exploracion")
+        self.assertFalse(self.run_dir(task_id).repo.exists(), "el clon de la corrida sobrevivió a su cierre")
+        print(f"BANCO_E2E case=exploracion-negativa task={task_id} desenlace={desenlace} repo=igual", flush=True)
 
     def photo_changes(self):
         after = repo_photo(str(self.repo), ignored=True)
