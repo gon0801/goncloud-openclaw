@@ -1056,6 +1056,27 @@ class Decisions(Slot):
         self.one_pass()
         self.assertEqual(self.r.incidents, [("task-1", "invalid-result", "reviewer-wrote-source")])
 
+    def test_a_writes_source_flipped_mid_run_does_not_unreview_the_result(self):
+        # El volteo de sessions/<op>/contexto.json no solo cabe antes del lanzamiento: la sesión
+        # sigue viva y puede reescribirlo durante su corrida, cuando contrastar_writes_source ya
+        # pasó. La decisión de lanzar al revisor con foto es la foto misma: si repo_before existe,
+        # el resultado se compara con ella, y lo que la sesión dejó escrito en el registro no
+        # des-revisa nada.
+        self.r.offer("task-1", b"revisa el saludo\n", self.revision, contract="review.v1")
+        self.packaged("revision")
+        self.launched()
+        self.assertTrue(self.record().repo_before.exists(), "the run launched as a reviewer, without a photo")
+        atacado = json.loads(self.record().context.read_text())
+        atacado["writesSource"] = True
+        self.record().context.write_text(json.dumps(atacado))
+        (self.repo / "nuevo.py").write_text("escrito por el revisor\n")
+        assignment = json.loads(self.run_dir().assignment.read_text())
+        self.review_writes(Path(assignment["workspaceRef"]) / "hallazgos.md")
+        self.left(0)
+        self.one_pass()
+        self.assertEqual(self.r.reports, [], "the flipped record delivered the reviewer's result")
+        self.assertEqual(self.r.incidents, [("task-1", "invalid-result", "reviewer-wrote-source")])
+
     def test_a_review_artifact_lives_in_the_run_folder(self):
         self.r.offer("task-1", b"revisa el saludo\n", self.revision, contract="review.v1")
         self.launched()
