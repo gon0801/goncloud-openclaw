@@ -10,8 +10,8 @@
       "text": "Seguir con el plan."
     },
     {
-      "optionId": "detener",
-      "text": "Detener la raíz."
+      "optionId": "cancelar",
+      "text": "Cancelar."
     }
   ],
   "evidenceRef": {

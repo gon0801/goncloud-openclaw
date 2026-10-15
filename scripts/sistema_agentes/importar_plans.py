@@ -8,7 +8,10 @@ entrada estándar. Las reglas:
   segunda columna) hasta el primer punto, sin las marcas `[...]` del inicio ni los `**`.
 - `dependsOn` son las filas de su columna Depends que también se eligieron. Una dependencia que
   no se eligió y está cerrada (`cc:完了`) es un supuesto. Abierta, el importador falla: la raíz
-  no puede esperar una fila que nadie va a hacer.
+  no puede esperar una fila que nadie va a hacer. Depends lleva ids, rangos (`6.0–6.8`, las filas
+  del ledger entre los dos extremos), separadores (`,`, `;`, `y`), `-` y notas entre paréntesis.
+  Cualquier otra cosa es una condición que el importador no sabe leer, y falla con ella.
+- Elegir cero filas falla: un plan sin unidades es `plan-invalid` en R.
 - Cada cláusula de la compuerta verificable (la tercera columna), separada por `;`, es un
   criterio literal con rol `verifier`, con id `<fila>-<n>`. Una celda puede llevar `\\|`: es un
   `|` del contenido, no un borde de columna.
@@ -33,6 +36,10 @@ FILA = re.compile(r"^\|\s*(\d+\.\d+[a-z]?)\s*\|(.*)\|\s*$")
 # Un `|` sin `\` antes es un borde de columna; `\|` es contenido.
 BORDE = re.compile(r"(?<!\\)\|")
 ID = re.compile(r"\d+\.\d+[a-z]?")
+# Un rango `6.0–6.8` (raya o guion) o un id suelto, en el orden de la celda.
+PIEZA = re.compile(r"(\d+\.\d+[a-z]?)\s*[–-]\s*(\d+\.\d+[a-z]?)|\d+\.\d+[a-z]?")
+NOTA = re.compile(r"\([^)]*\)")
+SIN_DEPENDENCIA = {"", "-", "—", "y"}
 MARCAS = re.compile(r"^(?:\s*`[^`]*`)+\s*")
 CERRADA = "cc:完了"
 # La regla de R para partir el pedido en frases: un salto de línea, o un punto seguido de espacio.
@@ -49,6 +56,14 @@ class FilaMalFormada(ValueError):
 
 class PedidoVacio(ValueError):
     """El pedido de David no trae ninguna frase."""
+
+
+class SinFilas(ValueError):
+    """La selección no trae ninguna fila."""
+
+
+class DependenciaIlegible(ValueError):
+    """La columna Depends de una fila elegida trae algo que no es una fila."""
 
 
 def frases(texto: str) -> list[str]:
@@ -85,9 +100,27 @@ def titulo(entrega: str) -> str:
     return sin_marcas.split(".", 1)[0].strip()
 
 
-def dependencias(columna: str) -> list[str]:
-    partes = re.split(r"[,\s]+", columna)
-    return [parte for parte in partes if ID.fullmatch(parte)]
+def dependencias(id_fila: str, columna: str, orden: list[str]) -> list[str]:
+    """Las filas de la columna Depends, en su orden y sin repetir. Un rango son las filas del
+    ledger entre sus dos extremos, en el orden del ledger."""
+    texto = NOTA.sub(" ", columna)
+    ids: list[str] = []
+    for pieza in PIEZA.finditer(texto):
+        desde, hasta = pieza.group(1), pieza.group(2)
+        if desde is None:
+            ids.append(pieza.group(0))
+        elif desde in orden and hasta in orden and orden.index(desde) <= orden.index(hasta):
+            ids += orden[orden.index(desde) : orden.index(hasta) + 1]
+        else:
+            raise DependenciaIlegible(
+                f"la fila {id_fila} depende del rango {pieza.group(0)}, que no está en Plans.md"
+            )
+    resto = [p for p in re.split(r"[,;\s]+", PIEZA.sub(" ", texto)) if p not in SIN_DEPENDENCIA]
+    if resto:
+        raise DependenciaIlegible(
+            f"la fila {id_fila} depende de algo que no es una fila: {columna.strip()}"
+        )
+    return list(dict.fromkeys(ids))
 
 
 def clausulas(compuerta: str) -> list[str]:
@@ -97,6 +130,8 @@ def clausulas(compuerta: str) -> list[str]:
 def importar(texto: str, elegidas: list[str], repo_de_alcance: str, pedido: str) -> dict:
     """La entrada de `managed_roots_open` para esas filas y el pedido de David: pedido, cobertura
     y plan."""
+    if not elegidas:
+        raise SinFilas("no se eligió ninguna fila")
     filas = filas_de(texto)
     faltan = [id_fila for id_fila in elegidas if id_fila not in filas]
     if faltan:
@@ -110,7 +145,7 @@ def importar(texto: str, elegidas: list[str], repo_de_alcance: str, pedido: str)
     for id_fila in elegidas:
         entrega, compuerta, depende, _estado = fila(filas, id_fila)
         de_la_seleccion = []
-        for anterior in dependencias(depende):
+        for anterior in dependencias(id_fila, depende, list(filas)):
             if anterior in elegidas:
                 de_la_seleccion.append(anterior)
             elif anterior in filas and CERRADA in fila(filas, anterior)[3]:

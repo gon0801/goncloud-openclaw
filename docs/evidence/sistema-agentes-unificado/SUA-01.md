@@ -49,9 +49,11 @@ eligió a Kimi como revisor de relevo para lo que siguió. Los veredictos están
 `~/.local/state/encargos-loop/VEREDICTO-SUA01-R{123,45,67,810,1113}-r1`, y las
 compuertas en `~/.local/state/sua-loop/compuertas/`.
 
-Decisiones del operador que el bloque dejó con un valor: el cupo del gateway es
-de 4 plazas cuando falta `managedTasks.capacity`, y solo el dueño de una raíz
-(mismo `principal`, `agentId` y `sessionKey`) la sigue.
+Supuestos del coordinador que el bloque dejó con un valor mientras David no
+conteste (diseño de SUA-01, "Decisiones pendientes de David"): el cupo del
+gateway es de 4 plazas cuando falta `managedTasks.capacity`, y solo el dueño de
+una raíz (mismo `principal`, `agentId` y `sessionKey`) la sigue. Ninguno es una
+decisión de David. <!-- corr: DeepSeek #297 F4 -->
 
 ## Ensayo de reversa
 
