@@ -1038,8 +1038,9 @@ class Decisions(Slot):
         self.assertEqual(self.r.incidents, [])
 
     def test_a_review_artifact_in_the_repo_is_refused(self):
-        # Ignored, but the photo sums ignored files since G3 (F10): what refuses it is the photo, and the
-        # location rule stays as the belt for a run whose photo never existed.
+        # A review without a profile works in the real repo, so its photo is the G2 one, without ignored
+        # files: the ignored artifact does not move it, and what refuses it is where the artifact is.
+        # The location rule stays as the belt for a run whose photo never existed, too.
         (self.repo / ".gitignore").write_text("hallazgos.md\n")
         self.git("add", ".gitignore")
         self.git("commit", "-q", "-m", "ignora")
@@ -1049,7 +1050,7 @@ class Decisions(Slot):
         self.left(0)
         self.one_pass()
         self.assertEqual(self.r.reports, [])
-        self.assertEqual(self.r.incidents, [("task-1", "invalid-result", "reviewer-wrote-source")])
+        self.assertEqual(self.r.incidents, [("task-1", "invalid-result", "invalid-result")])
         # A run whose host never photographed its repo is still refused for where the artifact is.
         self.setUp()
         (self.repo / ".gitignore").write_text("hallazgos.md\n")
@@ -1084,23 +1085,22 @@ class Decisions(Slot):
         self.assertTrue((self.repo / "nuevo.py").exists(), "the host undid what the reviewer wrote")
 
     def test_a_reviewer_that_only_left_ignored_files_or_committed_is_told_apart(self):
-        # Since G3 (F10) the photo sums ignored files: a __pycache__ in the real repo is the reviewer's
-        # doing, because its run works in a clone. A commit still leaves status and diff clean: HEAD and
-        # the refs tell.
+        # A review without a profile works in the real repo: its photo is the G2 one, without ignored
+        # files, so the __pycache__ its tests leave must not refuse a good result (SUA-03, 4.8). A
+        # commit leaves status and diff clean: HEAD and the refs still tell.
         (self.repo / ".gitignore").write_text("__pycache__/\n")
         self.git("add", ".gitignore")
         self.git("commit", "-q", "-m", "ignora")
         self.r.offer("task-1", b"revisa el saludo\n", self.revision, contract="review.v1")
         self.launched()
+        self.assertEqual(json.loads(self.record().repo_before.read_text())["ignored"], False,
+                         "a review without a clone keeps the G2 photo")
         (self.repo / "__pycache__").mkdir()
         (self.repo / "__pycache__" / "x.pyc").write_bytes(b"\0")
         self.review_writes(self.run_dir().path / "hallazgos.md")
         self.left(0)
         self.one_pass()
-        self.assertEqual(self.r.reports, [])
-        self.assertEqual(json.loads(self.record().repo_after.read_text())["changed"], ["status"])
-        self.r.cancel("task-1")
-        self.one_pass()
+        self.assertEqual((len(self.r.reports), self.r.incidents), (1, []))
         # A commit leaves status and diff clean: HEAD and the refs still tell.
         self.r.offer("task-2", b"revisa otra vez\n", self.revision, contract="review.v1")
         self.assertEqual(self.one_pass()["claimed"], 1)
@@ -1114,8 +1114,7 @@ class Decisions(Slot):
             "artifactRef": str(artifact), "digest": hashlib.sha256(b"ok\n").hexdigest()}))
         self.left(0, "task-2")
         self.one_pass()
-        self.assertEqual(self.r.incidents, [("task-1", "invalid-result", "reviewer-wrote-source"),
-                                            ("task-2", "invalid-result", "reviewer-wrote-source")])
+        self.assertEqual(self.r.incidents, [("task-2", "invalid-result", "reviewer-wrote-source")])
         self.assertEqual(json.loads(self.record("task-2").repo_after.read_text())["changed"], ["head", "refs"])
 
     def test_a_reviewer_that_planted_a_hook_or_changed_the_git_config_is_refused(self):
@@ -1428,19 +1427,26 @@ class Decisions(Slot):
         self.assertFalse((destino / "dejado.txt").exists(), "a dirty clone was reused")
         self.assertEqual(self.git_out("-C", str(destino), "rev-parse", "HEAD"), sha)
 
+    @unittest.skipUnless(PSTACK.is_dir(), "pide pstack 0.9.84 instalado en esta Mac")
     def test_a_new_file_in_an_ignored_dir_that_already_existed_is_caught(self):
-        # --ignored=traditional lists the files inside an ignored directory; --ignored=matching would
-        # collapse it into one entry, and a file added inside one that the photo already held would
-        # never change it (SUA-03, 4.8).
+        # A review WITH its package works in a clone, so the real repo must stay as its photo took it,
+        # ignored files included (SUA-03, 4.8): --ignored=traditional lists the files inside an ignored
+        # directory, which --ignored=matching would collapse into one entry.
+        self.checkout_contexto()
+        self.start(ScriptedBackend(), canary=True)
         (self.repo / ".gitignore").write_text("__pycache__/\n")
         self.git("add", ".gitignore")
         self.git("commit", "-q", "-m", "ignora")
         (self.repo / "__pycache__").mkdir()
         (self.repo / "__pycache__" / "viejo.pyc").write_bytes(b"\0")
-        self.r.offer("task-1", b"revisa el saludo\n", self.revision, contract="review.v1")
-        self.packaged("revision")
+        revision = {"kind": "code", "repository": str(self.repo),
+                    "sha": self.git_out("-C", str(self.repo), "rev-parse", "HEAD")}
+        self.r.offer("task-1", b"agent-work.launch.v1\nprofile: revision\n---\nrevisa\n", revision,
+                     contract="review.v1")
         self.launched()
-        self.assertEqual(json.loads(self.record().repo_before.read_text())["repo"], str(self.repo))
+        self.assertEqual(json.loads(self.record().repo_before.read_text())["ignored"], True,
+                         "a reviewer in a clone sums ignored files")
+        self.assertTrue(self.run_dir().repo.is_dir(), "the reviewer works in a clone")
         (self.repo / "__pycache__" / "nuevo.pyc").write_bytes(b"\0")
         self.review_writes(self.run_dir().path / "hallazgos.md")
         self.left(0)

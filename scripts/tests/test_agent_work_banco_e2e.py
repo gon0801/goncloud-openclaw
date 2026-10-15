@@ -121,7 +121,7 @@ class BancoE2E(unittest.TestCase):
         self.git("init", "-q")
         self.git("add", "-A")
         self.git("-c", "user.name=t", "-c", "user.email=t@example.invalid", "commit", "-q", "-m", "base")
-        self.photo_before = repo_photo(str(self.repo))
+        self.photo_before = repo_photo(str(self.repo), ignored=True)
         self.addCleanup(self.clean_slot)
         subprocess.run([TMUX, "-L", self.socket, "-f", "/dev/null", "new-session", "-d", "-s", "keeper", "sleep 600"],
                        check=True, cwd=self.root)
@@ -302,7 +302,7 @@ class BancoE2E(unittest.TestCase):
         (self.repo / "saluda.py").write_text(BUGGED.replace('"hola"', '"hello"'))
         self.git("add", "-A")
         self.git("-c", "user.name=t", "-c", "user.email=t@example.invalid", "commit", "-q", "-m", "arregla")
-        self.photo_before = repo_photo(str(self.repo))
+        self.photo_before = repo_photo(str(self.repo), ignored=True)
         task_id = self.ask(REVIEW_BRIEF, "review.v1", perfil="revision")
         snapshot = self.wait_result(task_id)
         self.assertEqual(snapshot["result"]["payload"]["verdict"], "approved")
@@ -310,7 +310,7 @@ class BancoE2E(unittest.TestCase):
         print(f"BANCO_E2E case=revision-sana task={task_id} verdict=approved", flush=True)
 
     def photo_changes(self):
-        after = repo_photo(str(self.repo))
+        after = repo_photo(str(self.repo), ignored=True)
         return [field for field in self.photo_before if self.photo_before[field] != after[field]]
 
 

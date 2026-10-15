@@ -470,18 +470,21 @@ def claim_run_once(client, *, host, manager, backend, instance_id, deps):
         deps.recheck(plan)
         if not writes_source(assignment, state_dir=host.state_dir, operation=key) \
                 and not record.repo_before.exists():
-            # The photo of the real repo, before the run can touch it (SUA-03, 4.8). A folder that is not a
-            # git repo has no photo, and its result is not compared.
+            # The photo of the real repo, before the run can touch it (SUA-03, 4.8). Ignored files only
+            # count when the run works in a clone: a reviewer without one leaves __pycache__ and must
+            # not see its good result refused. The mode travels in the photo for the after-read.
             revision = assignment["inputRevision"]
+            en_clon = plan.perfil is not None and not plan.perfil["writesSource"] \
+                and revision.get("kind") == "code"
             protected = revision.get("repository") if revision.get("kind") == "code" else None
             photo = None
             if protected is not None:
                 try:
-                    photo = repo_photo(str(protected))
+                    photo = repo_photo(str(protected), ignored=en_clon)
                 except OSError:
                     photo = None
             if photo is not None:
-                atomic_json(record.repo_before, {"repo": str(protected), "photo": photo})
+                atomic_json(record.repo_before, {"repo": str(protected), "photo": photo, "ignored": en_clon})
         if plan.perfil is not None and not plan.perfil["writesSource"] \
                 and assignment["inputRevision"].get("kind") == "code":
             build_clone(assignment["inputRevision"]["repository"], assignment["inputRevision"]["sha"], run.repo)

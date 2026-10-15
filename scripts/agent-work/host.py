@@ -88,20 +88,26 @@ def _git_files(folder: Path) -> str:
                                       .hexdigest()] for path in files]).encode()).hexdigest()
 
 
-def repo_photo(repo: str) -> dict:
-    """What a reviewer's run must leave as it was: HEAD, the refs, the status with untracked and ignored
-    files, the diff against HEAD, and inside .git its config and its hooks, which run code at the next
-    git command. Ignored files go with --ignored=traditional, which lists the files inside an ignored
-    directory: --ignored=matching would collapse the whole directory into one entry, and a new file
-    inside one that already existed would never change the photo. OSError when the folder is not a git
-    repo."""
+def repo_photo(repo: str, *, ignored: bool = False) -> dict:
+    """What a reviewer's run must leave as it was: HEAD, the refs, the status with untracked files, the
+    diff against HEAD, and inside .git its config and its hooks, which run code at the next git command.
+    Ignored files only join the status when the run works in a disposable clone (SUA-03, 4.8): a
+    reviewer without one runs its tests where it works, and a __pycache__ in the repo must not refuse a
+    good result, so its photo is the G2 one, byte for byte. Which mode applies is the launcher's call,
+    and it writes it in the before-photo so the after-photo reads the same one. OSError when the folder
+    is not a git repo."""
     git_dir = Path(_git(repo, "rev-parse", "--absolute-git-dir").decode().strip())
     config = git_dir / "config"
+    status = ["status", "--porcelain=v1", "-z", "--untracked-files=all"]
+    if ignored:
+        # --ignored=traditional lists the files inside an ignored directory; --ignored=matching would
+        # collapse the directory into one entry, and a new file inside one that already existed would
+        # never change the photo.
+        status.append("--ignored=traditional")
     return {
         "head": _git(repo, "rev-parse", "HEAD").decode().strip(),
         "refs": hashlib.sha256(_git(repo, "for-each-ref")).hexdigest(),
-        "status": hashlib.sha256(_git(repo, "status", "--porcelain=v1", "-z", "--untracked-files=all",
-                                      "--ignored=traditional")).hexdigest(),
+        "status": hashlib.sha256(_git(repo, *status)).hexdigest(),
         "diff": hashlib.sha256(_git(repo, "diff", "--binary", "HEAD")).hexdigest(),
         "config": hashlib.sha256(config.read_bytes() if config.is_file() else b"").hexdigest(),
         "hooks": _git_files(git_dir / "hooks"),
@@ -449,7 +455,7 @@ class Host:
             before = json.loads(record.repo_before.read_text(encoding="utf-8"))
         except FileNotFoundError:
             return
-        after = repo_photo(before["repo"])
+        after = repo_photo(before["repo"], ignored=bool(before.get("ignored")))
         changed = photo_changes(before["photo"], after)
         if changed:
             atomic_json(record.repo_after, {"repo": before["repo"], "photo": after, "changed": changed})
