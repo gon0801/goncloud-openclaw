@@ -267,7 +267,7 @@ En las rutas nativas no hay rechazo por encargo en SUA-03 (4.11, conflicto 4).
 
 ### 4.7 `flota.v1` por intento
 
-**Ruta por CLI.** El host escribe `runs/<op>/flota.json` al cerrar la operación, cuando ya leyó los logs. `encargo.py estado --tarea` lo devuelve en `flota`. El documento pasa `contrato.py` sin hallazgos.
+**Ruta por CLI.** El host escribe `runs/<op>/flota.json` al cerrar la operación, cuando ya leyó los logs: en la pasada en que el recurso de la corrida llega a `AbsenceVerified`, una sola vez. Una corrida sin paquete (todas hasta G3) no tiene perfil ni generación y no tiene documento: `estado` devuelve `flota: null`. Los digests de `poteto` y `tools` los toma el lanzador antes de lanzar y los deja en `sessions/<op>/contexto.json` (G3). `encargo.py estado --tarea` lo devuelve en `flota`. El documento pasa `contrato.py` sin hallazgos.
 
 | Campo | De dónde sale | Si no se puede leer |
 |---|---|---|
@@ -285,7 +285,7 @@ En las rutas nativas no hay rechazo por encargo en SUA-03 (4.11, conflicto 4).
 
 `children` es un campo opcional nuevo. El contrato lo permite sin subir versión ("Un bloque que necesite más los agrega como opcionales"). Va al fixture `flota/modelo-exacto-con-hijos.json`.
 
-`estado --tarea` gana `modeloUsado`, el `model.id` de arriba, y deja `modelo` como el pedido, con su docstring corregido.
+`estado --tarea` gana `modeloUsado`, el `model.id` de arriba, `modeloUsadoRazon` cuando es `null`, y `permisos`, lo medido en 4.6; deja `modelo` como el pedido, con su docstring corregido.
 
 **Encargo nativo a un agente.** Lo arma `flota.py nativo` sobre un extracto de solo lectura de la Mini, como la sombra de SUA-02. Solo para evidencia en SUA-03. `host` es `mini-native`, `executor` es `native`. `model` sale de `json_extract(payload_json, '$.model')` de `subagent_runs`, comparado con `modelId` del evento `session.started` del hijo en `trajectory_runtime_events` de la base del agente. P5 confirmó que `payload_json` trae `$.model` (por ejemplo `opencode-go/deepseek-v4.1-flash` en los hijos de `mail`). `~/.local/state/sua-loop/mediciones/turnos.sh:20` solo lee `modelId` de `session.started`; la consulta a `subagent_runs` es nueva y la escribe `flota.py`. Los campos existen en R (`subagent-spawn.ts:572`, `openclaw-state-schema.sql:2042-2051`). Si no coinciden o falta uno, `null` con la razón (`unknown` 5). `permissions` es lo de `tools.effective`. `accountRef` es `null`.
 
@@ -298,9 +298,10 @@ Turno nativo e hijo nativo no tienen intento de una unidad. No llevan `flota.v1`
 Una foto del repo antes y después no basta: el revisor puede escribir con `bash`, mirar el resultado y dejarlo como estaba antes de terminar, y `permission.edit: "deny"` no cubre el shell. Por eso el revisor no trabaja en el repo real.
 
 - **Un clon desechable.** Para un perfil con `writesSource: false`, el host clona el repo antes de lanzar: `git clone --no-hardlinks --no-checkout <repo> <corrida>/repo`, `git -C <corrida>/repo checkout --detach <inputRevision.sha>` y `git -C <corrida>/repo remote remove origin`. Sin enlaces duros, ningún objeto del clon es un archivo del repo real. Sin `origin`, un `git push` del revisor no tiene a dónde ir. `workspaceRef` y `PWD` apuntan al clon, que está dentro de la carpeta de la corrida y por eso ya es lo único que `external_directory` deja (`opencode_env`). No es `git worktree`: un worktree escribe en el `.git` del repo real y comparte sus refs.
+- **Hasta G3, sin perfil.** Mientras la corrida no trae su perfil, el host trata `review.v1` como `writesSource: false` y todo lo demás como hoy. G3 lo cambia por el campo del perfil.
 - **El artefacto de revisión va a la corrida.** Para `review.v1`, `cli_protocol` pide `artifactRef` dentro de la carpeta de la corrida, y `report` lo comprueba con `under(…, run.path)` en vez de `workspaceRef` (`host.py:106` y `:343`). Para `ready.v1` no cambia. La skill `encargo-cli` deja de pedir un archivo del repo para `findingsRef` de una revisión.
 - **Al cerrar, el clon se borra.** Después de la prueba de cierre del grupo, el host borra `<corrida>/repo`. Lo que el revisor escribió ahí se pierde, y no importa.
-- **La foto del repo real se queda como comprobación.** El host guarda antes de lanzar y relee al cerrar: `git rev-parse HEAD`, el sha256 de `git for-each-ref`, el de `git status --porcelain=v1 -z --untracked-files=all` y el de `git diff --binary HEAD`. Si algo cambió, el resultado se rechaza con `invalid-result` y episodio `reviewer-wrote-source`, y `estado` dice qué cambió. El host no deshace nada.
+- **La foto del repo real se queda como comprobación.** El host guarda antes de lanzar y relee al cerrar: `git rev-parse HEAD`, el sha256 de `git for-each-ref`, el de `git status --porcelain=v1 -z --untracked-files=all` y el de `git diff --binary HEAD`. Desde G2 guarda también el sha256 de `.git/config` y el de los archivos de `.git/hooks`, que corren código en el siguiente comando de git (nota de DeepSeek a 4.8). Los archivos ignorados entran a la foto con el clon, en G3: antes del clon, una corrida de pruebas del revisor en el repo real deja `__pycache__` y eso no es fuente. La foto no sabe quién cambió el repo: un cambio de otro proceso durante la corrida (David, otro encargo) también rechaza la revisión, y el recibo lo dice como límite (F12). Si algo cambió, el resultado se rechaza con `invalid-result` y episodio `reviewer-wrote-source`, y `estado` dice qué cambió. El host no deshace nada.
 - **Lo que deja de importar.** Las escrituras temporales, los `__pycache__` de una corrida de pruebas, un `stash`, un commit o una rama: todo pasa en el clon.
 - **Lo que sigue sin cubrir.** El shell no está confinado (B22-S7). El revisor puede escribir el repo real o cualquier otro repo de `~/dev` por su ruta absoluta. Si deja el repo real cambiado, la foto lo atrapa. Si lo escribe y lo restaura antes de cerrar, o si escribe otro repo, no se ve. La certificación dice lo que mide: el revisor trabajó en un clon y el repo real quedó igual. Se escribe así en el recibo.
 
@@ -381,7 +382,7 @@ Las pruebas de G son `unittest` y el arnés de `test-agent-work-e2e.sh`. Cada fi
 
 ### La sonda de control
 
-Una prueba de conducta solo vale si distingue. `conducta.py` corre también sobre eventos que no tienen poteto y debe dar rojo con la razón esperada (que falta la lectura de `poteto-mode/SKILL.md`), no por un error de lectura:
+La lista de pasos se compara con la primera frase del primer paso del playbook: varios pasos de los playbooks de 0.9.84 son párrafos, y un elemento de lista no. Una prueba de conducta solo vale si distingue. `conducta.py` corre también sobre eventos que no tienen poteto y debe dar rojo con la razón esperada (que falta la lectura de `poteto-mode/SKILL.md`), no por un error de lectura:
 - Ruta por CLI: los eventos de la operación de la tarea del canario D de B22 (tarea `595755ae…`), si siguen en el spool, y la misma tarea del banco corrida con `--sin-contexto`, una bandera que solo existe en el caso de banco.
 - Rutas nativas: la sonda nativa corrida antes de publicar (M-15).
 

@@ -20,7 +20,9 @@ from pathlib import Path
 
 from contracts import (HOST_BEAT_FILE, AuthorizedOperation, HostBeat, HostObservation, IncidentRejected, OperationKey,
                        RunDir, SessionRecord, operation_id)
-from host import ACCEPT_DEADLINE_SECONDS, RESULT_DEADLINE_SECONDS, DeliveryDeferred, Host
+import flota
+from host import (ACCEPT_DEADLINE_SECONDS, RESULT_DEADLINE_SECONDS, DeliveryDeferred, Host, repo_photo,
+                  writes_source)
 from modelos import (POLICY_FILE, CatalogStore, CatalogUnavailable, ExactModel, ModelNotListed,
                      ProviderNotConfigured, ProviderPolicy, authorize, explicar)
 from progress_bridge import transfer_host_projection, transfer_projection
@@ -413,6 +415,15 @@ def claim_run_once(client, *, host, manager, backend, instance_id, deps):
 
     def launch(_assignment_ref, _session):
         deps.recheck(plan)
+        if not writes_source(assignment) and not record.repo_before.exists():
+            # The photo of the real repo, before the run can touch it (SUA-03, 4.8). A folder that is not a
+            # git repo has no photo, and its result is not compared.
+            try:
+                photo = repo_photo(str(plan.workspace.root))
+            except OSError:
+                photo = None
+            if photo is not None:
+                atomic_json(record.repo_before, {"repo": str(plan.workspace.root), "photo": photo})
         argv = opencode_argv(plan, deps.opencode_bin, task_id=claim["taskId"])
         try:
             launched = manager.ensure_launched(key, lambda nonce: backend.launch(plan, nonce, argv, opencode_env(plan)))
@@ -554,11 +565,34 @@ class RunHost:
         return self._opened[operation]
 
     def watch(self):
-        return self.host.detect_run_failures(
+        detected = self.host.detect_run_failures(
             self.client.host_id, self.manager.session_exit, now=self.clock(),
             accept_deadline_seconds=self.accept_deadline_seconds,
             result_deadline_seconds=self.result_deadline_seconds,
             session_directory=self._session_directory, stop_session=self.manager.stop_session)
+        self.write_fleets()
+        return detected
+
+    def write_fleets(self):
+        """The flota.v1 of each launched run whose session is proven gone: its logs are final. A run
+        without a package has no document; one that cannot be read now is tried on the next pass."""
+        written = []
+        for row in self.host.spool.closure_rows():
+            if row["state"] != "AbsenceVerified":
+                continue
+            current = self.host.spool.get(row["operation_id"])
+            if current is None:
+                continue
+            assignment = json.loads(current["operation_json"])
+            if assignment.get("adapterId") != RUN_ADAPTER or "refused" in assignment:
+                continue
+            try:
+                path = flota.escribir(assignment, state_dir=self.host.state_dir, policy=self.policy)
+            except (OSError, ValueError, KeyError, TypeError):
+                continue
+            if path is not None:
+                written.append(path)
+        return written
 
 
 def hold_spool(state_dir):

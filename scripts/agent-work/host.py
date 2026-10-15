@@ -6,6 +6,7 @@ import hmac
 import json
 import os
 import stat
+import subprocess
 import sys
 import tempfile
 import time
@@ -35,6 +36,61 @@ ACCEPT_BOUND = ("hostId", "taskId", "generation", "instanceId", "claimId")
 RESULT_BOUND = ("hostId", "taskId", "generation", "instanceId", "producerId", "capability")
 MAX_ACCEPT_BYTES = 4096
 VERDICTS = ("delivered", "abandoned")
+REVIEW_CONTRACT = "review.v1"
+REVIEWER_EPISODE = "reviewer-wrote-source"
+"""The invalid-result episode of a reviewer whose run changed the task's real repo (SUA-03, 4.8)."""
+
+
+class ReviewerWroteSource(ValueError):
+    """The real repo of a run that may not write it changed between its launch and its result."""
+
+    def __init__(self, changed: list[str]):
+        super().__init__(f"{REVIEWER_EPISODE}: {', '.join(changed)}")
+        self.changed = changed
+
+
+def writes_source(assignment: dict) -> bool:
+    """Whether a run may write its task's repo. Until a run carries its profile (SUA-03, G3), a review
+    never does and everything else may, as today."""
+    return assignment["resultContract"] != REVIEW_CONTRACT
+
+
+def _git(repo: str, *args: str) -> bytes:
+    done = subprocess.run(["git", "-C", repo, *args], capture_output=True, timeout=60)
+    if done.returncode != 0:
+        raise OSError(f"git {args[0]} failed in {repo}")
+    return done.stdout
+
+
+PHOTO_FIELDS = ("head", "refs", "status", "diff", "config", "hooks")
+
+
+def _git_files(folder: Path) -> str:
+    """The sha256 of each file under folder, by its relative path: what changed inside .git/hooks."""
+    files = sorted(path for path in folder.rglob("*") if path.is_file()) if folder.is_dir() else []
+    return hashlib.sha256(canonical([[path.relative_to(folder).as_posix(), hashlib.sha256(path.read_bytes())
+                                      .hexdigest()] for path in files]).encode()).hexdigest()
+
+
+def repo_photo(repo: str) -> dict:
+    """What a reviewer's run must leave as it was: HEAD, the refs, the status with untracked files, the diff
+    against HEAD, and inside .git its config and its hooks, which run code at the next git command. Ignored
+    files are not in it: a test run leaves __pycache__ behind (until G3 runs the reviewer in a clone).
+    OSError when the folder is not a git repo."""
+    git_dir = Path(_git(repo, "rev-parse", "--absolute-git-dir").decode().strip())
+    config = git_dir / "config"
+    return {
+        "head": _git(repo, "rev-parse", "HEAD").decode().strip(),
+        "refs": hashlib.sha256(_git(repo, "for-each-ref")).hexdigest(),
+        "status": hashlib.sha256(_git(repo, "status", "--porcelain=v1", "-z", "--untracked-files=all")).hexdigest(),
+        "diff": hashlib.sha256(_git(repo, "diff", "--binary", "HEAD")).hexdigest(),
+        "config": hashlib.sha256(config.read_bytes() if config.is_file() else b"").hexdigest(),
+        "hooks": _git_files(git_dir / "hooks"),
+    }
+
+
+def photo_changes(before: dict, after: dict) -> list[str]:
+    return [field for field in PHOTO_FIELDS if before.get(field) != after.get(field)]
 
 
 class DeliveryDeferred(Exception):
@@ -78,8 +134,11 @@ def delivery_line(assignment_ref: str) -> str:
             "from the assignment. Then follow briefRef and write agent-work.result.v1 atomically to resultRef.")
 
 
-def cli_protocol(assignment: dict) -> dict:
-    """The assignment spells out what a CLI writes, because the CLI has nothing else to go on."""
+def cli_protocol(assignment: dict, *, run: bool = False) -> dict:
+    """The assignment spells out what a CLI writes, because the CLI has nothing else to go on. A review
+    with a run folder leaves its artifact there, never in the repo it reviews (SUA-03, 4.8)."""
+    artifact_home = ("inside the directory that holds resultRef, never inside workspaceRef"
+                     if run and not writes_source(assignment) else "inside workspaceRef")
     return {
         "steps": [
             "Before any other work, write the accept object as JSON to acceptRef, atomically: create the "
@@ -103,7 +162,7 @@ def cli_protocol(assignment: dict) -> dict:
         "fill": {
             "typedPayload": f"the JSON object that the {assignment['resultContract']} contract and the "
                             "brief ask for",
-            "artifactRef": "the absolute path of the artifact file, inside workspaceRef",
+            "artifactRef": f"the absolute path of the artifact file, {artifact_home}",
             "digest": "the lowercase hex SHA-256 of the artifact file's bytes",
         },
     }
@@ -267,7 +326,7 @@ class Host:
         assignment = self._assignment(key, replace(operation, workspace_ref=str(Path(operation.workspace_ref).resolve())),
                                       str(brief))
         if operation.adapter_id:
-            assignment["protocol"] = cli_protocol(assignment)
+            assignment["protocol"] = cli_protocol(assignment, run=run is not None)
         self._register(key, assignment, assignment_ref)
         if not run:
             (self.state_dir / "inbox").mkdir(parents=True, exist_ok=True)
@@ -340,7 +399,13 @@ class Host:
         except FileNotFoundError:
             if current["result_id"]:
                 raise ValueError("recorded artifact snapshot missing")
-            artifact = under(result["artifactRef"], assignment["workspaceRef"])
+            # A run-per-task operation keeps its result in its own run folder (RunDir).
+            run_folder = Path(assignment["resultRef"]).parent
+            reviewed = run_folder == self.state_dir / "runs" / op_id and not writes_source(assignment)
+            if reviewed:
+                self._check_repo(op_id)
+            home = str(run_folder) if reviewed else assignment["workspaceRef"]
+            artifact = under(result["artifactRef"], home)
             with artifact.open("rb") as stream:
                 raw = stream.read(MAX_ARTIFACT_BYTES + 1)
             if len(raw) > MAX_ARTIFACT_BYTES:
@@ -351,6 +416,21 @@ class Host:
             self._snapshot_bytes(snapshot, result["digest"])
         self.spool.record(op_id, result_id, result, self.state_dir / "results" / f"{op_id}.json")
         return ResultReceipt(result_id)
+
+    def _check_repo(self, op_id: str) -> None:
+        """The real repo of a run that may not write it is as its photo before launch said. A run launched
+        without a photo (by a host from before SUA-03, or in a folder that is not a git repo) has nothing to
+        compare."""
+        record = SessionRecord.locate(self.state_dir, op_id)
+        try:
+            before = json.loads(record.repo_before.read_text(encoding="utf-8"))
+        except FileNotFoundError:
+            return
+        after = repo_photo(before["repo"])
+        changed = photo_changes(before["photo"], after)
+        if changed:
+            atomic_json(record.repo_after, {"repo": before["repo"], "photo": after, "changed": changed})
+            raise ReviewerWroteSource(changed)
 
     def result_snapshot(self, host_id: str, key: OperationKey) -> tuple[dict, bytes]:
         self._host(host_id)
@@ -472,11 +552,13 @@ class Host:
             strayed = opened is not None and opened != assignment["workspaceRef"]
             if strayed and left is None and stop_session is not None:
                 stop_session(key)
-            invalid = False
+            invalid, episode = False, None
             try:
                 accepted = status == "delivered" or self.take_acceptance(host_id, key)
                 if self.collect(host_id, key) is not None:
                     continue
+            except ReviewerWroteSource:
+                invalid, episode = True, REVIEWER_EPISODE
             except ValueError:
                 invalid = True
             except OSError:
@@ -497,7 +579,8 @@ class Host:
                 kind = "deadline-missed"
             else:
                 continue
-            incident = {"kind": kind, "episodeId": SILENT_EPISODES[kind], "evidenceRef": f"host-operation:{op_id}"}
+            incident = {"kind": kind, "episodeId": episode or SILENT_EPISODES[kind],
+                        "evidenceRef": f"host-operation:{op_id}"}
             incident_key = incident_identity(key.generation, incident)[0]
             if not self.spool.has_incident(key.task_id, incident_key):
                 self.record_incident(host_id, key, incident)

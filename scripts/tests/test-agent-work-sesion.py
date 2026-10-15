@@ -32,6 +32,8 @@ from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts" / "agent-work"))
+sys.path.insert(0, str(ROOT / "scripts"))
+import contexto  # noqa: E402
 import encargo  # noqa: E402
 import sesion  # noqa: E402
 from contracts import HostBeat, OperationKey, RunDir, SessionRecord, operation_id  # noqa: E402
@@ -39,9 +41,10 @@ from host import Host  # noqa: E402
 from modelos import ModelId, ProviderPolicy  # noqa: E402
 from native_gateway import RunHost, fetch_brief, hold_spool, pump_once  # noqa: E402
 from resources import BoundaryBusy, ResourceManager  # noqa: E402
-from sesion import (BoundaryProcess, ClosureProof, GroupBoundaryBackend, PermissionDenied, RunEvents,  # noqa: E402
-                    SessionExit, launch_script, opencode_argv, opencode_env, parse_boundary, read_events)
+from sesion import (BoundaryProcess, ClosureProof, GroupBoundaryBackend, ModelCall, PermissionDenied,  # noqa: E402
+                    RunEvents, SessionExit, launch_script, opencode_argv, opencode_env, parse_boundary, read_events)
 from spool import canonical, incident_identity  # noqa: E402
+from sistema_agentes import contrato  # noqa: E402
 
 EVIDENCE = Path("docs/evidence/agent-work")
 LISTING = (ROOT / "scripts/tests/fixtures/agent-work/opencode/models-1.18.35.txt").read_text()
@@ -168,8 +171,9 @@ class FakeR:
         self.claims, self.admits, self.reports, self.closures, self.incidents = [], [], [], [], []
         self.cancelled = {}
 
-    def offer(self, task_id, brief, revision, generation=1):
-        self.task = {"taskId": task_id, "brief": brief, "revision": revision, "generation": generation}
+    def offer(self, task_id, brief, revision, generation=1, contract="ready.v1"):
+        self.task = {"taskId": task_id, "brief": brief, "revision": revision, "generation": generation,
+                     "contract": contract}
 
     def claim_host(self, adapter_id, instance_id):
         self.claims.append((adapter_id, instance_id))
@@ -181,7 +185,7 @@ class FakeR:
                 "capability": {"taskId": task["taskId"], "generation": task["generation"], "producerId": adapter_id,
                                "token": f"CAPACIDAD-{task['taskId']}"},
                 "assignment": {"target": {"kind": "cli", "hostId": self.host_id, "adapterId": adapter_id},
-                               "inputRevision": task["revision"], "resultContract": "ready.v1",
+                               "inputRevision": task["revision"], "resultContract": task["contract"],
                                "instructionRef": {"ref": "artifact:" + digest, "digest": "sha256:" + digest}}}
 
     def brief_chunk(self, adapter_id, instance_id, task_id, claim_id, offset, length):
@@ -483,6 +487,43 @@ class Launch(Slot):
         record.stderr.write_text(stderr)
         return record.path
 
+    # The two message=stream lines of B22-fase0.md:146-147, M1.
+    TITLE_CALL = ("timestamp=2026-10-13T00:28:42.184Z level=INFO run=4a0a032c message=stream providerID=zai-coding-plan "
+                  "modelID=glm-5.3-flash session.id=ses_ecd56a597ffe6GHqp405Otldki small=true agent=title mode=primary\n")
+    BUILD_CALL = ("timestamp=2026-10-13T00:28:42.563Z level=INFO run=4a0a032c message=stream providerID=zai-coding-plan "
+                  "modelID={} session.id=ses_ecd56a597ffe6GHqp405Otldki small=false agent={} mode=primary\n")
+
+    def test_the_model_in_use_is_read_from_the_logs(self):
+        asked = "zai-coding-plan/glm-5.3-flash"
+        same = read_events(self.write_run("", self.TITLE_CALL + self.BUILD_CALL.format("glm-5.3-flash", "build")))
+        self.assertEqual(sesion.model_in_use(same, asked), (asked, None))
+        other = read_events(self.write_run("", self.TITLE_CALL + self.BUILD_CALL.format("glm-5.3-flash", "build")
+                                           + self.BUILD_CALL.format("glm-5.3", "build")))
+        self.assertEqual(sesion.model_in_use(other, asked),
+                         (None, "opencode usó zai-coding-plan/glm-5.3 y se pidió zai-coding-plan/glm-5.3-flash"))
+        # Only the title call, or only a child's: the session of the task never called the model.
+        for stderr in (self.TITLE_CALL, self.BUILD_CALL.format("glm-5.3-flash", "poteto-agent"), ""):
+            with self.subTest(stderr=stderr):
+                self.assertEqual(sesion.model_in_use(read_events(self.write_run("", stderr)), asked),
+                                 (None, "opencode no registró ninguna llamada"))
+        self.assertEqual(sesion.model_in_use(same, None),
+                         (None, "opencode usó zai-coding-plan/glm-5.3-flash y no se sabe qué se pidió"))
+        self.assertEqual(sesion.model_in_use(None, asked), (None, "no se pueden leer los logs de opencode"))
+        self.assertEqual(same.calls, (ModelCall("title", asked, True), ModelCall("build", asked, False)))
+
+    def test_allowed_and_denied_evaluations_are_both_measured(self):
+        said = read_events(self.write_run("", (
+            "timestamp=2026-10-13T05:17:40.100Z level=INFO run=79db3a9f message=evaluated permission=bash "
+            'pattern="touch b.txt" action.permission=* action.action=allow action.pattern=*\n'
+            "timestamp=2026-10-13T05:17:45.444Z level=INFO run=838095b8 message=evaluated "
+            "permission=external_directory pattern=/Users/dn/.agents/pstack-plataformas/* "
+            "action.permission=external_directory action.pattern=* action.action=deny\n"
+            "timestamp=2026-10-13T05:17:46.100Z level=INFO run=79db3a9f message=evaluated permission=bash "
+            'pattern="ls" action.permission=* action.action=allow action.pattern=*\n')))
+        self.assertEqual(said.evaluations, ("bash:allow", "external_directory:deny"))
+        self.assertEqual(said.denied, (PermissionDenied("external_directory", "/Users/dn/.agents/pstack-plataformas/*"),))
+        self.assertEqual(read_events(self.write_run("", "")).evaluations, ())
+
     def test_what_opencode_said_names_the_folder_the_providers_and_the_denied_permission(self):
         events = "".join(json.dumps(event) + "\n" for event in (
             {"type": "step_start", "timestamp": STAMP, "sessionID": "ses_1", "part": {"type": "step-start"}},
@@ -497,7 +538,10 @@ class Launch(Slot):
         self.assertEqual(said, RunEvents(
             first_at=STAMP / 1000, denied=(PermissionDenied("external_directory", "/tmp/fuera/*"),), error=None,
             session_directory="/Users/dn/dev/demo", providers_called=("zai-coding-plan",),
-            tail=(*events.splitlines(), "esto no es JSON"), log_errors=()))
+            tail=(*events.splitlines(), "esto no es JSON"), log_errors=(),
+            calls=(ModelCall("title", "zai-coding-plan/glm-5.3-flash", True),
+                   ModelCall("build", "zai-coding-plan/glm-5.3-flash", False)),
+            evaluations=("external_directory:ask",)))
         self.assertEqual(sesion.session_directory(self.spool / "sessions" / self.operation()), "/Users/dn/dev/demo")
         # Measured on opencode 1.18.35 with the "deny" rule (B22-canarios.md, M7): the model gets the error
         # and the session goes on, so these come with a result as often as without one.
@@ -727,10 +771,219 @@ class Decisions(Slot):
         self.assertEqual(self.estado(), (0, {
             "ok": True, "tarea": "task-1", "modelo": DEFAULT, "cobro": "subscription", "estado": "acknowledged",
             "cierre": "AbsenceVerified", "explicacion": None, "permisosNegados": [], "proveedoresLlamados": [],
-            "carpetaDeSesion": None, "salida": None, "logTail": []}))
+            "carpetaDeSesion": None, "salida": None, "logTail": [],
+            # SUA-03: a run without a package has no flota.v1, and the double wrote no logs.
+            "modeloUsado": None, "modeloUsadoRazon": "no se pueden leer los logs de opencode", "permisos": [],
+            "flota": None}))
         self.r.offer("task-2", b"otro\n", self.revision)
         self.assertEqual(self.one_pass()["claimed"], 1)
         self.assertEqual((self.beat()["slot"], len(self.backend.launches)), ("free", 2))
+
+    def stream(self, model, agent, small="false"):
+        provider, _, name = model.partition("/")
+        return (f"timestamp=2026-10-13T00:28:42.563Z level=INFO run=4a0a032c message=stream providerID={provider} "
+                f"modelID={name} session.id=ses_ecd56a597ffe6GHqp405Otldki small={small} agent={agent} mode=primary\n")
+
+    def packaged(self, profile="ingenieria"):
+        """What G3's launcher leaves for a run with a package: the copy in the run, and the digests it took."""
+        run = self.run_dir()
+        run.context.mkdir()
+        (run.context / "poteto.v1.json").write_text(json.dumps({"generation": 1}))
+        perfil = contexto.perfil(contexto.leer_json(contexto.PERFILES), profile)
+        (run.context / "perfil.json").write_bytes(contexto.canonico(perfil))
+        self.record().context.write_text(json.dumps({"poteto": "sha256:" + "a" * 64, "tools": "sha256:" + "b" * 64}))
+        return perfil
+
+    def test_a_run_with_a_package_leaves_its_flota_document_when_it_closes(self):
+        self.launched()
+        perfil = self.packaged()
+        record = self.record()
+        record.events.write_text("")
+        record.stderr.write_text(
+            self.stream(DEFAULT, "title", "true") + self.stream(DEFAULT, "build")
+            + self.stream("zai-coding-plan/glm-5.3", "poteto-agent")
+            + "timestamp=2026-10-13T05:17:40.100Z level=INFO run=79db3a9f message=evaluated permission=bash "
+              'pattern="ls" action.permission=* action.action=allow action.pattern=*\n')
+        self.cli_writes()
+        self.left(0)
+        self.backend.survivors = ("4321 Tue Oct 13 00:58:21 2026 /bin/sleep 300",)
+        self.one_pass()
+        self.assertEqual(self.held(), ("acknowledged", "CleanupPending", "descendant absence unverified"))
+        self.assertFalse(self.run_dir().fleet.exists(), "flota.json was written before the absence was proven")
+        self.backend.survivors = ()
+        self.one_pass()
+        self.assertEqual(self.held(), ("acknowledged", "AbsenceVerified", ""))
+        written = json.loads(self.run_dir().fleet.read_text())
+        self.assertEqual(written, {
+            "schema": "sistema-agentes.flota.v1", "rootId": "task-1", "unitId": "task-1", "attempt": 1,
+            "specialist": "ingenieria", "host": "mac-local", "executor": "opencode", "accountRef": "glm",
+            "model": {"id": DEFAULT}, "generation": 1, "permissions": ["bash:allow"],
+            "attestations": [{"what": "poteto", "digest": "sha256:" + "a" * 64},
+                             {"what": "profile", "digest": contexto.digest_de_perfil(perfil)},
+                             {"what": "tools", "digest": "sha256:" + "b" * 64}],
+            "children": [{"agent": "poteto-agent", "model": "zai-coding-plan/glm-5.3"}]})
+        self.assertEqual(contrato.validar(written), [])
+        self.assertEqual(self.estado()[1]["flota"], written)
+        # What was launched does not change: a later pass does not rewrite the document.
+        record.stderr.write_text(self.stream("zai-coding-plan/glm-5.3", "build"))
+        self.one_pass()
+        self.assertEqual(json.loads(self.run_dir().fleet.read_text()), written)
+
+    def test_a_model_the_provider_swapped_is_named_in_flota_and_estado(self):
+        self.launched()
+        self.packaged("revision")
+        record = self.record()
+        record.events.write_text("")
+        record.stderr.write_text(self.stream("zai-coding-plan/glm-5.3", "build"))
+        self.cli_writes()
+        self.left(0)
+        self.one_pass()
+        self.one_pass()
+        reason = f"opencode usó zai-coding-plan/glm-5.3 y se pidió {DEFAULT}"
+        written = json.loads(self.run_dir().fleet.read_text())
+        self.assertEqual((written["model"], written["specialist"], written["permissions"], written["children"]),
+                         ({"id": None, "reason": reason}, "revision", [], []))
+        self.assertEqual(contrato.validar(written), [])
+        _, answer = self.estado()
+        self.assertEqual((answer["modelo"], answer["modeloUsado"], answer["modeloUsadoRazon"]), (DEFAULT, None, reason))
+
+    def test_estado_names_the_providers_refusal_that_was_measured(self):
+        for said, cause in (("The usage limit has been reached.", "proveedor-sin-cuota"),
+                            ("Your current subscription plan does not yet include access to GLM-5.3-Highspeed.",
+                             "proveedor-sin-modelo"),
+                            ("Session expired, sign in again.", "launch-failed")):
+            with self.subTest(cause=cause):
+                self.setUp()
+                self.launched()
+                record = self.record()
+                record.events.write_text(json.dumps({"type": "error", "timestamp": STAMP, "error": {
+                    "name": "APIError", "data": {"message": said}}}) + "\n")
+                record.stderr.write_text("")
+                self.left(1)
+                self.assertEqual(self.one_pass()["detected"], 1)
+                _, answer = self.estado()
+                self.assertEqual((answer["explicacion"]["causa"], answer["explicacion"]["accion"]),
+                                 (cause, "cancelar"))
+                self.assertTrue(answer["explicacion"]["frase"].startswith(
+                    f"opencode salió sin acusar recibo. opencode dijo: {said}."), answer["explicacion"]["frase"])
+
+    def git(self, *args):
+        env = {key: value for key, value in os.environ.items() if not key.startswith("GIT_")}
+        subprocess.run(["git", "-C", str(self.repo), "-c", "user.name=t", "-c", "user.email=t@example.invalid",
+                        *args], check=True, env=env, capture_output=True)
+
+    def review_writes(self, artifact):
+        """What a reviewer that follows the assignment leaves: its acceptance, artifact and result."""
+        assignment = json.loads(self.run_dir().assignment.read_text())
+        Path(assignment["acceptRef"]).write_text(json.dumps(assignment["protocol"]["accept"]))
+        artifact.write_text("sin hallazgos\n")
+        Path(assignment["resultRef"]).write_text(json.dumps({
+            **assignment["protocol"]["result"], "typedPayload": {"verdict": "approved"},
+            "artifactRef": str(artifact), "digest": hashlib.sha256(b"sin hallazgos\n").hexdigest()}))
+        return assignment
+
+    def test_a_review_artifact_lives_in_the_run_folder(self):
+        self.r.offer("task-1", b"revisa el saludo\n", self.revision, contract="review.v1")
+        self.launched()
+        assignment = self.review_writes(self.run_dir().path / "hallazgos.md")
+        self.assertEqual(assignment["protocol"]["fill"]["artifactRef"],
+                         "the absolute path of the artifact file, inside the directory that holds resultRef, "
+                         "never inside workspaceRef")
+        self.left(0)
+        self.one_pass()
+        self.assertEqual(self.r.reports, [("task-1", b"sin hallazgos\n")])
+        self.assertEqual(self.r.incidents, [])
+
+    def test_a_review_artifact_in_the_repo_is_refused(self):
+        # Ignored, so the photo of the repo stays the same: what refuses it is where the artifact is.
+        (self.repo / ".gitignore").write_text("hallazgos.md\n")
+        self.git("add", ".gitignore")
+        self.git("commit", "-q", "-m", "ignora")
+        self.r.offer("task-1", b"revisa el saludo\n", self.revision, contract="review.v1")
+        self.launched()
+        self.review_writes(self.repo / "hallazgos.md")
+        self.left(0)
+        self.one_pass()
+        self.assertEqual(self.r.reports, [])
+        self.assertEqual(self.r.incidents, [("task-1", "invalid-result", "invalid-result")])
+
+    def test_a_reviewer_that_changed_the_real_repo_has_its_result_refused(self):
+        self.r.offer("task-1", b"revisa el saludo\n", self.revision, contract="review.v1")
+        self.launched()
+        before = json.loads(self.record().repo_before.read_text())
+        self.assertEqual((before["repo"], set(before["photo"])),
+                         (str(self.repo), {"head", "refs", "status", "diff", "config", "hooks"}))
+        (self.repo / "nuevo.py").write_text("escrito por el revisor\n")
+        self.review_writes(self.run_dir().path / "hallazgos.md")
+        self.left(0)
+        self.one_pass()
+        self.assertEqual(self.r.reports, [])
+        self.assertEqual(self.r.incidents, [("task-1", "invalid-result", "reviewer-wrote-source")])
+        _, answer = self.estado()
+        self.assertEqual(answer["explicacion"], {
+            "causa": "reviewer-wrote-source", "accion": "cancelar",
+            "frase": "El revisor dejó cambiado el repo del encargo, y el host no aceptó su resultado. "
+                     f"En {self.repo} cambió el status. El host no deshizo nada."})
+        self.assertTrue((self.repo / "nuevo.py").exists(), "the host undid what the reviewer wrote")
+
+    def test_a_reviewer_that_only_left_ignored_files_or_committed_is_told_apart(self):
+        (self.repo / ".gitignore").write_text("__pycache__/\n")
+        self.git("add", ".gitignore")
+        self.git("commit", "-q", "-m", "ignora")
+        self.r.offer("task-1", b"revisa el saludo\n", self.revision, contract="review.v1")
+        self.launched()
+        (self.repo / "__pycache__").mkdir()
+        (self.repo / "__pycache__" / "x.pyc").write_bytes(b"\0")
+        self.review_writes(self.run_dir().path / "hallazgos.md")
+        self.left(0)
+        self.one_pass()
+        self.assertEqual((len(self.r.reports), self.r.incidents), (1, []))
+        # A commit leaves status and diff clean: HEAD and the refs still tell.
+        self.r.offer("task-2", b"revisa otra vez\n", self.revision, contract="review.v1")
+        self.assertEqual(self.one_pass()["claimed"], 1)
+        self.git("commit", "-q", "--allow-empty", "-m", "del revisor")
+        assignment = json.loads(self.run_dir("task-2").assignment.read_text())
+        Path(assignment["acceptRef"]).write_text(json.dumps(assignment["protocol"]["accept"]))
+        artifact = self.run_dir("task-2").path / "hallazgos.md"
+        artifact.write_text("ok\n")
+        Path(assignment["resultRef"]).write_text(json.dumps({
+            **assignment["protocol"]["result"], "typedPayload": {"verdict": "approved"},
+            "artifactRef": str(artifact), "digest": hashlib.sha256(b"ok\n").hexdigest()}))
+        self.left(0, "task-2")
+        self.one_pass()
+        self.assertEqual(self.r.incidents, [("task-2", "invalid-result", "reviewer-wrote-source")])
+        self.assertEqual(json.loads(self.record("task-2").repo_after.read_text())["changed"], ["head", "refs"])
+
+    def test_a_reviewer_that_planted_a_hook_or_changed_the_git_config_is_refused(self):
+        for change, changed in (
+                (lambda: (self.repo / ".git/hooks/pre-commit").write_text("#!/bin/sh\ncurl x\n"), ["hooks"]),
+                (lambda: self.git("config", "core.hooksPath", "/tmp/ganchos"), ["config"])):
+            with self.subTest(changed=changed):
+                self.setUp()
+                task = "task-1"
+                self.r.offer(task, f"revisa {task}\n".encode(), self.revision, contract="review.v1")
+                self.assertEqual(self.one_pass().get("claimed"), 1)
+                change()
+                assignment = json.loads(self.run_dir(task).assignment.read_text())
+                Path(assignment["acceptRef"]).write_text(json.dumps(assignment["protocol"]["accept"]))
+                artifact = self.run_dir(task).path / "hallazgos.md"
+                artifact.write_text("ok\n")
+                Path(assignment["resultRef"]).write_text(json.dumps({
+                    **assignment["protocol"]["result"], "typedPayload": {"verdict": "approved"},
+                    "artifactRef": str(artifact), "digest": hashlib.sha256(b"ok\n").hexdigest()}))
+                self.left(0, task)
+                self.one_pass()
+                self.assertIn((task, "invalid-result", "reviewer-wrote-source"), self.r.incidents)
+                self.assertEqual(json.loads(self.record(task).repo_after.read_text())["changed"], changed)
+                self.assertEqual(self.r.reports, [])
+
+    def test_a_task_that_may_write_its_repo_has_no_photo(self):
+        self.launched()
+        self.cli_writes()
+        self.left(0)
+        self.one_pass()
+        self.assertFalse(self.record().repo_before.exists())
+        self.assertEqual((len(self.r.reports), self.r.incidents), (1, []))
 
     def test_estado_says_why_the_launch_script_left_before_reaching_opencode(self):
         for code, why in ((96, "El host no pudo crear la carpeta temporal del encargo."),
@@ -1278,7 +1531,8 @@ class LiveResult(LiveSlot):
             "logTail": [json.dumps({"type": kind, "timestamp": STAMP, "sessionID": "ses_doble", "part": part})
                         for kind, part in (("step_start", {"type": "step-start"}),
                                            ("text", {"type": "text", "text": "listo"}),
-                                           ("step_finish", {"type": "step-finish", "reason": "stop"}))]}))
+                                           ("step_finish", {"type": "step-finish", "reason": "stop"}))],
+            "modeloUsado": DEFAULT, "modeloUsadoRazon": None, "permisos": [], "flota": None}))
 
 
     def test_the_session_opens_in_the_task_folder_whatever_folder_the_host_and_its_tmux_server_started_in(self):

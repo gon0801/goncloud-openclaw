@@ -288,6 +288,7 @@ Consumidor: SUA-03 y SUA-04. SUA-00 fija solo los campos mínimos.
 | `generation` | Entero desde 1. Generación de flota vigente al asignar |
 | `permissions` | Lista de permisos efectivos medidos. Vacía significa "no medido", no "ninguno" |
 | `attestations` | Lista de `{ "what": "poteto" \| "profile" \| "tools", "digest": "sha256:..." }`. Un hash identifica contenido, no prueba que el modelo lo usó |
+| `children` | Opcional, desde SUA-03. Lista de `{ "agent": "<agente de la CLI>", "model": "<proveedor/modelo>" }`, uno por hijo de `task` con el modelo que corrió. Sin el campo, no se midió |
 
 ### Excepción (`sistema-agentes.excepcion.v1`)
 

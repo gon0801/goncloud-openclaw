@@ -50,14 +50,14 @@ No hay tabla de modelos en esta skill. Qué modelos existen, cuáles están perm
    ```
    python3 /Users/dn/dev/wt/agent-work-host/scripts/agent-work/encargo.py estado --tarea <taskId>
    ```
-   Contesta una línea JSON con el `modelo` que corrió de verdad, leído del proceso que el host lanzó:
+   Contesta una línea JSON con el `modelo` que el host le pidió a opencode y el `modeloUsado` que corrió de verdad, leído de los logs de opencode (`null` con su `modeloUsadoRazon` si no se sabe o si no coincide):
    ```
-   {"ok": true, "tarea": "<taskId>", "modelo": "zai-coding-plan/glm-5.3-highspeed", "cobro": "subscription", "estado": "acknowledged", "cierre": "AbsenceVerified", "explicacion": null, "permisosNegados": [], "proveedoresLlamados": ["zai-coding-plan"], "carpetaDeSesion": "/Users/dn/dev/<repo>", "salida": null, "logTail": ["…"]}
+   {"ok": true, "tarea": "<taskId>", "modelo": "zai-coding-plan/glm-5.3-highspeed", "cobro": "subscription", "estado": "acknowledged", "cierre": "AbsenceVerified", "explicacion": null, "permisosNegados": [], "proveedoresLlamados": ["zai-coding-plan"], "carpetaDeSesion": "/Users/dn/dev/<repo>", "salida": null, "logTail": ["…"], "modeloUsado": "zai-coding-plan/glm-5.3-highspeed", "modeloUsadoRazon": null, "permisos": ["bash:allow"], "flota": null}
    ```
    Si algo falló, `explicacion` deja de ser `null` y trae `causa`, `frase` y `accion`.
 3. Con resultado (`result.kind` `produced`): léelo con `managed_tasks_artifact_read` (`offset` 0, `length` 4096, en base64; sigue hasta `eof`) y compruébalo en la Mac (el archivo, el commit). Ciérralo con `managed_tasks_resolve`, que lleva solo `receipt` y `decision` (sin `taskId` aparte). El `receipt` es el `resultReceipt` del inspect, tal cual (`taskId`, `generation` y `resultDigest`). La `decision` es `{"kind": "complete", "evidenceRef": "<result.payload.evidenceRef>"}` si cumple, o `{"kind": "continue", "children": [{"slot": "correccion-1", "assignment": {...}}]}` si hay que corregir, con un brief nuevo hecho con los mismos `briefArgs` y el mismo `target`.
 4. Sin resultado y con `explicacion.accion` `cancelar`: `managed_tasks_cancel` con el `taskId` y la `explicacion.frase` como `reason`. El host cierra su sesión de opencode cuando R cancela.
-5. Cuéntale a David el resultado, o la `frase`, y el `modelo`.
+5. Cuéntale a David el resultado, o la `frase`, y el `modeloUsado` (si es `null`, el `modelo` y la `modeloUsadoRazon`).
 
 ## Proveedores
 

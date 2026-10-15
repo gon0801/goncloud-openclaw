@@ -34,14 +34,14 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Callable, Iterator, Literal
 
-from contracts import HostBeat, SessionRecord
+from contracts import HostBeat, RunDir, SessionRecord
 from modelos import (MODEL_PATTERN, POLICY_FILE, PROVIDER, Billing, Catalog, CatalogStore, CatalogUnavailable,
                      Explicacion, HostDown, HostMismatch, ModelFilter, ModelId, ModelNotListed, OperatorCitation,
                      PermittedModel, PolicyUnreadable, ProviderClosure, ProviderGrant, ProviderId,
                      ProviderNotConfigured, ProviderPolicy, SlotBlocked, UNVERIFIED_REF, WorkspaceRefused, authorize,
                      explicar, pedido, policy_document)
 from sesion import (ALLOWED_ROOT, COVERAGE_FILE, EXIT_NO_SCRATCH, EXIT_NO_WORKSPACE, EXIT_OUTSIDE_GROUP, Route, Workspace,
-                    read_events)
+                    model_in_use, read_events)
 
 HOST_ID = "mac-local"
 ADAPTER_ID = "opencode"
@@ -78,7 +78,8 @@ class EstadoTarea:
     copian los comandos del modelo, y el modelo escribe la capacidad en su acuse."""
     task_id: str
     modelo: str | None
-    """El que el host lanzó de verdad, leído de argv.json, no de la memoria de quien pidió."""
+    """El que el host pidió a opencode, leído del `-m` de argv.json, no de la memoria de quien pidió.
+    El que corrió es `modelo_usado`."""
     cobro: Billing | None
     estado: str
     cierre: str | None
@@ -91,6 +92,29 @@ class EstadoTarea:
     salida: int | None
     """El código con que salió el proceso, cuando el host lo vio salir sin resultado."""
     log_tail: tuple[str, ...]
+    modelo_usado: str | None = None
+    """El que opencode llamó de verdad, leído de sus logs y comparado con `modelo` (SUA-03, 4.7)."""
+    modelo_usado_razon: str | None = None
+    """Por qué `modelo_usado` es None."""
+    permisos: tuple[str, ...] = ()
+    """Cada permiso que opencode evaluó, permitido o negado, como "<permiso>:<acción>"."""
+    flota: dict | None = None
+    """El sistema-agentes.flota.v1 del intento, cuando la corrida tuvo paquete y ya cerró."""
+
+
+PROVIDER_CAUSES = (
+    ("The usage limit has been reached.", "proveedor-sin-cuota"),
+    ("does not yet include access", "proveedor-sin-modelo"),
+)
+"""Los textos que opencode dio cuando el proveedor se negó, medidos en B22-canarios.md (gpt y canario
+B). No hay texto medido de una sesión vencida: no se clasifica a ciegas."""
+
+
+def causa_del_proveedor(error: str | None) -> str | None:
+    for text, cause in PROVIDER_CAUSES:
+        if error and text in error:
+            return cause
+    return None
 
 
 @dataclass(frozen=True)
@@ -241,8 +265,9 @@ def _json(path: Path) -> object:
 def estado(task_id: "str | None", *, state_root: Path, checkout: Path,
            now: float) -> "EstadoTarea | HostBeat | Explicacion":
     """`encargo.py estado [--tarea <taskId>]`. Solo lectura. Sin tarea contesta el latido del host. Con
-    tarea, qué modelo corrió de verdad, en qué carpeta abrió la sesión, a qué proveedores llamó y, si hubo
-    incidencia, la frase y la acción."""
+    tarea, qué modelo pidió el host y cuál corrió de verdad, qué permisos evaluó opencode, en qué carpeta
+    abrió la sesión, a qué proveedores llamó, su flota.v1 si la tiene y, si hubo incidencia, la frase y
+    la acción."""
     if task_id is None:
         beat = latido(state_root, now)
         return explicar(beat) if isinstance(beat, HostDown) else beat
@@ -280,12 +305,25 @@ def estado(task_id: "str | None", *, state_root: Path, checkout: Path,
         else:
             explicacion = explicar(episode, eventos=events)
             explicacion = replace(explicacion, frase=limpio(explicacion.frase + _SALIDAS.get(salida, "")))
+            changed = _json(record.repo_after)
+            if episode == "reviewer-wrote-source" and isinstance(changed, dict):
+                medidas = {"head": "HEAD", "refs": "las refs", "status": "el status", "diff": "el diff",
+                           "config": ".git/config", "hooks": ".git/hooks"}
+                cambio = ", ".join(medidas.get(field, field) for field in changed.get("changed", []))
+                explicacion = replace(explicacion, frase=f"{explicacion.frase} En {changed.get('repo')} cambió "
+                                                         f"{cambio}. El host no deshizo nada.")
+            causa = causa_del_proveedor(events.error) if events else None
+            if causa and episode in ("launch-failed", "session-closed"):
+                explicacion = replace(explicacion, causa=causa)
+    usado, razon = model_in_use(events, modelo)
+    flota = _json(RunDir(Path(assignment["resultRef"]).parent).fleet) if assignment.get("resultRef") else None
     return EstadoTarea(
         task_id, modelo, grant.billing if grant else None, found["status"],
         found["resource"] if found["resource"] in ("AbsenceVerified", "CleanupPending") else None, explicacion,
         tuple(f"{denied.permission}:{denied.pattern}" for denied in events.denied) if events else (),
         events.providers_called if events else (), events.session_directory if events else None, salida,
-        tuple(limpio(line) for line in (*events.tail, *events.log_errors)) if events else ())
+        tuple(limpio(line) for line in (*events.tail, *events.log_errors)) if events else (),
+        usado, razon, events.evaluations if events else (), flota if isinstance(flota, dict) else None)
 
 
 def _cited(decision: OperatorCitation) -> str:
@@ -623,7 +661,9 @@ def _answer(result: "Preparado | Explicacion | HostBeat | EstadoTarea", now: flo
                    "permisosNegados": list(result.permisos_negados),
                    "proveedoresLlamados": list(result.proveedores_llamados),
                    "carpetaDeSesion": result.carpeta_de_sesion, "salida": result.salida,
-                   "logTail": list(result.log_tail)}
+                   "logTail": list(result.log_tail), "modeloUsado": result.modelo_usado,
+                   "modeloUsadoRazon": result.modelo_usado_razon, "permisos": list(result.permisos),
+                   "flota": result.flota}
     if isinstance(result, Preparado):
         return 0, {"ok": True, "modelo": result.modelo, "cobro": result.cobro, "inputRevision": result.input_revision,
                    "briefArgs": list(result.brief_args), "enFila": result.en_fila,

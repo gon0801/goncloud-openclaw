@@ -48,6 +48,16 @@ class RunDir:
         return self.path / "result.json"
 
     @property
+    def context(self) -> Path:
+        """The worker's package (SUA-03): poteto, its adaptation and its profile."""
+        return self.path / "contexto"
+
+    @property
+    def fleet(self) -> Path:
+        """The sistema-agentes.flota.v1 document of this attempt, written when the run closes."""
+        return self.path / "flota.json"
+
+    @property
     def scratch(self) -> Path:
         """Where the session keeps helper scripts and temporary files: its TMPDIR."""
         return self.path / "tmp"
@@ -90,6 +100,21 @@ class SessionRecord:
     @property
     def blocked(self) -> Path:
         return self.path / "blocked.json"
+
+    @property
+    def context(self) -> Path:
+        """What the launcher handed the run besides its brief: the digests of the copied package and of
+        the run config, taken before launch (SUA-03, 4.7). A run without a package has none."""
+        return self.path / "contexto.json"
+
+    @property
+    def repo_before(self) -> Path:
+        """The photo of the task's real repo taken before a run that may not write it (SUA-03, 4.8)."""
+        return self.path / "repo-antes.json"
+
+    @property
+    def repo_after(self) -> Path:
+        return self.path / "repo-despues.json"
 
     @staticmethod
     def locate(spool: Path, operation: str) -> "SessionRecord":

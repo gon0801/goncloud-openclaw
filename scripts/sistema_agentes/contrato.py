@@ -369,6 +369,10 @@ _FLOTA = _objeto(
         "attestations": _lista(
             _objeto({"what": _uno_de("poteto", "profile", "tools"), "digest": DIGEST})
         ),
+        # Opcional desde SUA-03: cada hijo de `task` de una CLI con el modelo que corrió.
+        "children": _lista(_objeto({"agent": TEXTO, "model": TEXTO}, cerrado=True))._replace(
+            requerido=False
+        ),
     }
 )
 
