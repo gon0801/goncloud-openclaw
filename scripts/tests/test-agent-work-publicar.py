@@ -786,6 +786,26 @@ class PublicadorNativo(unittest.TestCase):
         destino = self.home / ".openclaw" / "skills" / "poteto-mode" / "playbooks" / "feature.md"
         self.assertEqual(destino.stat().st_mode & 0o777, 0o755)
 
+    def test_a_managed_skill_deleted_on_the_mini_is_a_conflict(self):
+        # C4 (DeepSeek F7): borrar una skill administrada es una edición; re-aplicar no
+        # la recrea en silencio.
+        self.armar()
+        self.publicar("leer")
+        self.publicar("aplicar")
+        borrada = self.home / ".openclaw" / "skills" / "poteto-mode"
+        shutil.rmtree(borrada)
+        self.publicar("leer")
+        codigo, aplicar = self.publicar("aplicar")
+        self.assertEqual(
+            aplicar["skills"]["poteto-mode"], "conflicto: se borró después de publicar"
+        )
+        self.assertEqual((aplicar["conflictos"], codigo), (1, 4))
+        self.assertFalse(borrada.exists())
+        self.assertEqual(
+            self.estado_del_home()["skills"]["poteto-mode"],
+            self.armador.digest_de_carpeta(self.publicacion / "skills" / "poteto-mode"),
+        )
+
     def test_a_foreign_skill_with_a_managed_name_stops_that_skill(self):
         self.armar()
         ajena = self.home / ".openclaw" / "skills" / "poteto-mode"
