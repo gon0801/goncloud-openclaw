@@ -74,6 +74,12 @@ for arg in "$@"; do printf '%s\\n' "$arg" >> "$SUA_TEST_LOGS/scp.log"; done
 printf '%s\\n' --- >> "$SUA_TEST_LOGS/scp.log"
 exit 0
 """
+SCP_FALSO_ROTO = """#!/bin/sh
+# scp de juguete que falla: registra sus argumentos y sale 1 sin copiar nada.
+for arg in "$@"; do printf '%s\\n' "$arg" >> "$SUA_TEST_LOGS/scp.log"; done
+printf '%s\\n' --- >> "$SUA_TEST_LOGS/scp.log"
+exit 1
+"""
 
 
 class PublicadorNativo(unittest.TestCase):
@@ -169,6 +175,48 @@ class PublicadorNativo(unittest.TestCase):
         )
         self.publicacion = carpeta
         return carpeta
+
+    def armar_generacion(self, generation, cambios=None, quitados=None):
+        """Publicación de una generación nueva: la fuente de la generación 1 con los cambios
+        dados (y sin los archivos quitados), su manifiesto y su carpeta."""
+        fuente = self.tmp / f"fuente-{generation}"
+        shutil.copytree(self.fuente, fuente)
+        for ruta, texto in (cambios or {}).items():
+            destino = fuente / ruta
+            destino.parent.mkdir(parents=True, exist_ok=True)
+            destino.write_text(texto, encoding="utf-8")
+        for ruta in quitados or ():
+            (fuente / ruta).unlink()
+        manifiesto = contexto.manifiesto(
+            fuente,
+            self.perfiles,
+            repo="t",
+            commit="t",
+            version="0",
+            generation=generation,
+            adaptaciones=self.adaptaciones,
+            bloque=contexto.BLOQUE.read_bytes(),
+        )
+        carpeta = self.tmp / f"publicacion-{next(self._contador)}"
+        self.armador.armar_publicacion(
+            carpeta, manifiesto, self.perfiles, self.agentes, fuente=fuente, script=MODULO
+        )
+        self.publicacion = carpeta
+        return carpeta
+
+    def skill_del_home(self, nombre):
+        return self.home / ".openclaw" / "skills" / nombre / "SKILL.md"
+
+    def respaldo_de_generacion(self, generation, nombre):
+        return (
+            self.home
+            / ".openclaw"
+            / "sua-contexto"
+            / str(generation)
+            / "skills"
+            / nombre
+            / "SKILL.md"
+        )
 
     def publicar(self, accion):
         """Corre la mitad --local por subprocess y exige una sola línea JSON en stdout."""
@@ -446,6 +494,143 @@ class PublicadorNativo(unittest.TestCase):
         for skill in SKILLS_ADMINISTRADAS:
             self.assertFalse((self.home / ".openclaw" / "skills" / skill).exists(), skill)
 
+    def test_revert_keeps_the_skills_the_generation_did_not_rewrite(self):
+        # B1 del veredicto r1: la generación 2 reescribe principle-x y deja las otras igual;
+        # la reversa devuelve principle-x a los bytes de la 1 y deja las otras con ellos.
+        self.armar()
+        self.publicar("leer")
+        self.publicar("aplicar")
+        bytes_de_generacion_1 = {
+            nombre: self.skill_del_home(nombre).read_bytes() for nombre in SKILLS_ADMINISTRADAS
+        }
+        self.armar_generacion(2, cambios={"skills/principle-x/SKILL.md": "principio v2\n"})
+        self.publicar("leer")
+        codigo, aplicar = self.publicar("aplicar")
+        self.assertEqual(
+            aplicar["skills"],
+            {
+                "poteto-mode": "igual",
+                "poteto-openclaw": "igual",
+                "principle-x": "publicado",
+            },
+        )
+        self.assertEqual(codigo, 0)
+        codigo, revertir = self.publicar("revertir")
+        self.assertEqual(
+            revertir["skills"],
+            {
+                "poteto-mode": "igual",
+                "poteto-openclaw": "igual",
+                "principle-x": "revertido",
+            },
+        )
+        self.assertEqual((revertir["conflictos"], codigo), (0, 0))
+        for nombre in SKILLS_ADMINISTRADAS:
+            self.assertEqual(
+                self.skill_del_home(nombre).read_bytes(), bytes_de_generacion_1[nombre], nombre
+            )
+        estado = json.loads(
+            (self.home / ".openclaw" / "skills" / ".sua-contexto.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(estado["generacion"], 1)
+
+    def test_reapplying_a_generation_never_stomps_its_backup(self):
+        # B2 del veredicto r1: tras publicar la generación 2, una edición de la skill en el
+        # home es conflicto; la re-aplicación no pisa el respaldo ni la edición.
+        self.armar()
+        self.publicar("leer")
+        self.publicar("aplicar")
+        self.armar_generacion(2, cambios={"skills/poteto-mode/SKILL.md": "poteto v2\n"})
+        self.publicar("leer")
+        codigo, aplicar = self.publicar("aplicar")
+        self.assertEqual(aplicar["skills"]["poteto-mode"], "publicado")
+        self.assertEqual(codigo, 0)
+        respaldo = self.respaldo_de_generacion(2, "poteto-mode")
+        self.assertEqual(respaldo.read_bytes(), b"poteto de juguete\n")
+        skill = self.skill_del_home("poteto-mode")
+        skill.write_bytes(skill.read_bytes() + EDICION_AJENA)
+        self.publicar("leer")
+        codigo, segunda = self.publicar("aplicar")
+        self.assertEqual(
+            segunda["skills"],
+            {
+                "poteto-mode": "conflicto: cambió después de publicar",
+                "poteto-openclaw": "igual",
+                "principle-x": "igual",
+            },
+        )
+        self.assertEqual((segunda["conflictos"], codigo), (1, 4))
+        self.assertEqual(skill.read_bytes(), b"poteto v2\n" + EDICION_AJENA)
+        self.assertEqual(respaldo.read_bytes(), b"poteto de juguete\n")
+
+    def test_a_revert_refuses_while_another_publisher_holds_the_lock(self):
+        # S1 del veredicto r1: el candado también es de --revertir, y no cambia nada.
+        self.armar()
+        self.publicar("leer")
+        self.publicar("aplicar")
+        carpeta_candado = self.home / ".openclaw" / "sua-contexto"
+        candado = open(carpeta_candado / ".lock", "a+b")
+        self.addCleanup(candado.close)
+        fcntl.flock(candado.fileno(), fcntl.LOCK_EX)
+        foto = self.foto_del_home()
+        try:
+            codigo, respuesta = self.publicar("revertir")
+        finally:
+            fcntl.flock(candado.fileno(), fcntl.LOCK_UN)
+        self.assertEqual(
+            (codigo, respuesta), (3, {"ok": False, "error": "otro publicador en curso"})
+        )
+        self.assertEqual(self.foto_del_home(), foto)
+
+    def test_applying_a_generation_removes_the_files_it_dropped_from_a_skill(self):
+        # S2 del veredicto r1: un archivo que la publicación ya no trae sale del home.
+        self.armar()
+        self.publicar("leer")
+        self.publicar("aplicar")
+        quitado = self.home / ".openclaw" / "skills" / "poteto-mode" / "playbooks" / "feature.md"
+        self.assertTrue(quitado.exists())
+        self.armar_generacion(2, quitados=["skills/poteto-mode/playbooks/feature.md"])
+        self.publicar("leer")
+        codigo, aplicar = self.publicar("aplicar")
+        self.assertEqual(aplicar["skills"]["poteto-mode"], "publicado")
+        self.assertEqual(codigo, 0)
+        self.assertFalse(quitado.exists())
+        self.assertTrue(self.skill_del_home("poteto-mode").exists())
+
+    def test_a_half_marked_block_is_a_conflict_not_an_append(self):
+        # S3 del veredicto r1: media marca es una edición del bloque, no su ausencia.
+        self.armar()
+        meli = self.home / "workspaces" / "meli" / "AGENTS.md"
+        meli.write_bytes(
+            self.texto_propio["meli"].encode("utf-8") + b"\n<!-- sua-contexto inicio -->\n"
+        )
+        foto = meli.read_bytes()
+        self.publicar("leer")
+        codigo, aplicar = self.publicar("aplicar")
+        self.assertEqual(aplicar["agentes"]["meli"], "conflicto: el bloque fue editado")
+        self.assertEqual((aplicar["conflictos"], codigo), (1, 4))
+        self.assertEqual(meli.read_bytes(), foto)
+
+    def test_reapplying_a_generation_leaves_the_previous_state_untouched(self):
+        # S5 del veredicto r1: el estado anterior de la generación se escribe una vez; una
+        # segunda --aplicar, aunque traiga conflicto, no lo reescibe.
+        self.armar()
+        self.publicar("leer")
+        self.publicar("aplicar")
+        self.armar_generacion(2, cambios={"skills/principle-x/SKILL.md": "principio v2\n"})
+        self.publicar("leer")
+        self.publicar("aplicar")
+        ancla = self.home / ".openclaw" / "sua-contexto" / "2" / "estado-anterior.json"
+        bytes_del_ancla = ancla.read_bytes()
+        self.assertEqual(json.loads(bytes_del_ancla)["generacion"], 1)
+        skill = self.skill_del_home("poteto-mode")
+        skill.write_bytes(skill.read_bytes() + EDICION_AJENA)
+        self.publicar("leer")
+        codigo, segunda = self.publicar("aplicar")
+        self.assertEqual(segunda["skills"]["poteto-mode"], "conflicto: cambió después de publicar")
+        self.assertEqual(codigo, 4)
+        self.assertEqual(ancla.read_bytes(), bytes_del_ancla)
+
     def test_a_foreign_skill_with_a_managed_name_stops_that_skill(self):
         self.armar()
         ajena = self.home / ".openclaw" / "skills" / "poteto-mode"
@@ -561,6 +746,142 @@ class PublicadorNativo(unittest.TestCase):
                     ],
                     llamadas_ssh,
                 )
+
+    def test_the_mac_half_refuses_a_source_that_disagrees_with_the_manifest(self):
+        # S4 del veredicto r1: la mitad Mac valida cada archivo de la fuente contra el
+        # manifiesto y no copia nada si uno no coincide.
+        binarios = self.tmp / "bin-s4"
+        logs = self.tmp / "logs-s4"
+        binarios.mkdir()
+        logs.mkdir()
+        shutil.copy(self.agents_json, logs / "agents.json")
+        for nombre, texto in (("ssh", SSH_FALSO), ("scp", SCP_FALSO)):
+            ruta = binarios / nombre
+            ruta.write_text(texto, encoding="utf-8")
+            ruta.chmod(0o755)
+        contexto_dir = self.tmp / "checkout-s4" / "scripts" / "agent-work" / "contexto"
+        contexto_dir.mkdir(parents=True)
+        (contexto_dir / "poteto.v1.json").write_text(
+            json.dumps(self.manifiesto, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+        )
+        (contexto_dir / "generaciones.json").write_text(
+            json.dumps({"1": self.manifiesto["digest"]}) + "\n", encoding="utf-8"
+        )
+        shutil.copy(contexto.PERFILES, contexto_dir / "perfiles.v1.json")
+        # La fuente que el manifiesto nombra trae un archivo cuyo contenido no es el fijado:
+        # el HOME falso redirige `fuente_del_paquete` a este árbol.
+        mala = (
+            self.tmp
+            / "home-falso"
+            / ".claude"
+            / "plugins"
+            / "cache"
+            / "pstack-claude"
+            / "pstack"
+            / "0"
+            / "skills"
+            / "poteto-mode"
+            / "SKILL.md"
+        )
+        mala.parent.mkdir(parents=True)
+        mala.write_text("otro contenido\n", encoding="utf-8")
+        resultado = subprocess.run(
+            [
+                sys.executable,
+                "-I",
+                str(MODULO),
+                "--aplicar",
+                "--mini",
+                MINI,
+                "--checkout",
+                str(self.tmp / "checkout-s4"),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=60,
+            env={
+                **os.environ,
+                "HOME": str(self.tmp / "home-falso"),
+                "PATH": str(binarios) + os.pathsep + os.environ["PATH"],
+                "SUA_TEST_LOGS": str(logs),
+            },
+        )
+        self.assertEqual(resultado.stderr, "")
+        lineas = resultado.stdout.splitlines()
+        self.assertEqual(len(lineas), 1)
+        respuesta = json.loads(lineas[0])
+        self.assertFalse(respuesta["ok"])
+        self.assertIn("no coincide con el manifiesto", respuesta["error"])
+        self.assertEqual(resultado.returncode, 3)
+        self.assertFalse((logs / "scp.log").exists())
+
+    def test_the_mac_half_removes_its_staging_folder_on_the_mini_after_the_copy(self):
+        # L1 del veredicto r1: el scp no deja su carpeta en /tmp de la Mini; se borra por
+        # ssh al final, también cuando la mitad Mini falla, y solo si el scp salió bien.
+        binarios = self.tmp / "bin-l1"
+        logs = self.tmp / "logs-l1"
+        binarios.mkdir()
+        logs.mkdir()
+        shutil.copy(self.agents_json, logs / "agents.json")
+        # Checkout de juguete con manifiesto sin archivos, para que armar no copie fuente.
+        vacio = {**self.manifiesto, "files": []}
+        vacio["digest"] = contexto.digest_de(vacio)
+        contexto_dir = self.tmp / "checkout-vacio" / "scripts" / "agent-work" / "contexto"
+        contexto_dir.mkdir(parents=True)
+        (contexto_dir / "poteto.v1.json").write_text(
+            json.dumps(vacio, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+        )
+        (contexto_dir / "generaciones.json").write_text(
+            json.dumps({"1": vacio["digest"]}) + "\n", encoding="utf-8"
+        )
+        shutil.copy(contexto.PERFILES, contexto_dir / "perfiles.v1.json")
+        for salida, scp_falso in (("0", SCP_FALSO), ("4", SCP_FALSO), ("1", SCP_FALSO_ROTO)):
+            with self.subTest(salida=salida):
+                for nombre, texto in (("ssh", SSH_FALSO), ("scp", scp_falso)):
+                    ruta = binarios / nombre
+                    ruta.write_text(texto, encoding="utf-8")
+                    ruta.chmod(0o755)
+                (logs / "exit-code.txt").write_text(salida + "\n", encoding="utf-8")
+                for registro in ("ssh.log", "scp.log"):
+                    (logs / registro).unlink(missing_ok=True)
+                resultado = subprocess.run(
+                    [
+                        sys.executable,
+                        "-I",
+                        str(MODULO),
+                        "--aplicar",
+                        "--mini",
+                        MINI,
+                        "--checkout",
+                        str(self.tmp / "checkout-vacio"),
+                    ],
+                    capture_output=True,
+                    text=True,
+                    timeout=60,
+                    env={
+                        **os.environ,
+                        "PATH": str(binarios) + os.pathsep + os.environ["PATH"],
+                        "SUA_TEST_LOGS": str(logs),
+                    },
+                )
+                self.assertEqual(resultado.returncode, int(salida))
+                llamadas_ssh = self.llamadas(logs / "ssh.log")
+                nombre = None
+                for llamada in llamadas_ssh:
+                    for argumento in llamada:
+                        coincide = re.fullmatch(
+                            r"/tmp/(sua-contexto-[^/]+)/publicar-contexto\.py", argumento
+                        )
+                        if coincide:
+                            nombre = coincide.group(1)
+                if salida == "1":
+                    # El scp falló: no hubo carpeta remota ni borrado.
+                    self.assertIsNone(nombre)
+                    for llamada in llamadas_ssh:
+                        self.assertNotIn("rm", llamada)
+                else:
+                    self.assertIsNotNone(nombre)
+                    self.assertIn([MINI, "rm", "-rf", f"/tmp/{nombre}"], llamadas_ssh)
 
     def llamadas(self, registro):
         """Las llamadas de un log de juguete: argumentos por línea, --- entre llamadas."""
