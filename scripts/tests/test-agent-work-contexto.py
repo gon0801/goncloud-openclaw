@@ -430,7 +430,9 @@ class Perfiles(unittest.TestCase):
         self.assertEqual(
             contexto.admite(meli, CLI, "ready.v1", ahora=AHORA),
             contexto.Admision(
-                "perfil-no-atiende-ruta", "el perfil meli no atiende la ruta mac-local/opencode"
+                "perfil-no-atiende-ruta",
+                "el perfil meli atiende mini-native/native/meli y no atiende la ruta "
+                "mac-local/opencode con la que llega el encargo",
             ),
         )
         self.assertEqual(

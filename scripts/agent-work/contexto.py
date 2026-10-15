@@ -231,9 +231,12 @@ def admite(
     """La admisión por perfil (diseño, 4.4): la ruta, el contrato, la competencia en esa ruta y la
     vigencia de sus fuentes. Distingue un perfil de otro por sus datos, nunca por su nombre."""
     clave = clave_de_ruta(ruta)
-    if clave not in {clave_de_ruta(atiende) for atiende in perfil["routes"]}:
+    atiende = {clave_de_ruta(atiende) for atiende in perfil["routes"]}
+    if clave not in atiende:
         return Admision(
-            "perfil-no-atiende-ruta", f"el perfil {perfil['id']} no atiende la ruta {clave}"
+            "perfil-no-atiende-ruta",
+            f"el perfil {perfil['id']} atiende {', '.join(sorted(atiende)) or 'ninguna ruta'} "
+            f"y no atiende la ruta {clave} con la que llega el encargo",
         )
     if contrato not in perfil["resultContracts"]:
         return Admision(
