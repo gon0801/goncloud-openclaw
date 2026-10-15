@@ -137,23 +137,24 @@ def _status_digest(repo: str, *args: str, timeout: float = 60) -> str:
                           stderr=subprocess.DEVNULL, env=env) as done:
         deadline = time.monotonic() + timeout
         fd = done.stdout.fileno()
-        while select.select([fd], [], [], max(deadline - time.monotonic(), 0.0))[0]:
-            chunk = os.read(fd, 1 << 20)
-            if not chunk:
-                break
-            total.update(chunk)
-            pending += chunk
-            start = 0
-            while (nul := pending.find(b"\0", start)) >= 0:
-                record = pending[start:nul]
-                start = nul + 1
-                if record.startswith(b"?? "):
-                    _hash_into(total, Path(repo) / record[3:].decode("utf-8", "surrogateescape"))
-            pending = pending[start:]
-        else:
-            done.kill()
-            raise OSError(f"git {args[0]} timed out in {repo}")
         try:
+            while True:
+                remaining = deadline - time.monotonic()
+                if remaining > 0 and select.select([fd], [], [], remaining)[0]:
+                    chunk = os.read(fd, 1 << 20)
+                    if not chunk:
+                        break
+                    total.update(chunk)
+                    pending += chunk
+                    start = 0
+                    while (nul := pending.find(b"\0", start)) >= 0:
+                        record = pending[start:nul]
+                        start = nul + 1
+                        if record.startswith(b"?? "):
+                            _hash_into(total, Path(repo) / record[3:].decode("utf-8", "surrogateescape"))
+                    pending = pending[start:]
+                    continue
+                raise subprocess.TimeoutExpired(cmd=["git"], timeout=timeout)
             code = done.wait(timeout=max(deadline - time.monotonic(), 0.0))
         except subprocess.TimeoutExpired:
             done.kill()

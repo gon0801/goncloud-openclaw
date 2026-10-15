@@ -1028,12 +1028,13 @@ class Decisions(Slot):
 
     @unittest.skipUnless(PSTACK.is_dir(), "pide pstack 0.9.84 instalado en esta Mac")
     def test_a_recorded_writes_source_that_drifted_from_the_checkout_loses(self):
-        # El volteo aquí ocurre ANTES de la reclamación, así que esta prueba cubre el contraste de
-        # la reclamación — también la repetida tras la muerte del host, con una sesión viva de un
-        # intento anterior —: lo anotado no decide solo, gana el perfil que el host vuelve a leer
-        # de su checkout y queda anotado. El volteo DURANTE la corrida lo cubre la prueba del
-        # resultado, y ahí decide la foto previa, no este contraste. La sesión no queda confinada
-        # (coverage.json, directoryGuard.limitation): puede reescribir sessions/<op>/contexto.json.
+        # El volteo aquí ocurre ANTES de la reclamación, así que esta prueba fija el contraste de
+        # la reclamación — el mismo camino que recorre la reclamación repetida tras la muerte del
+        # host, con una sesión viva de un intento anterior —: lo anotado no decide solo, gana el
+        # perfil que el host vuelve a leer de su checkout y queda anotado. El volteo DURANTE la
+        # corrida lo cubre la prueba del resultado, y ahí decide la foto previa, no este
+        # contraste. La sesión no queda confinada (coverage.json, directoryGuard.limitation):
+        # puede reescribir sessions/<op>/contexto.json.
         self.checkout_contexto()
         self.start(ScriptedBackend(), canary=True)
         self.packaged("revision")
