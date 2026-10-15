@@ -5,6 +5,7 @@ import hashlib
 import hmac
 import json
 import os
+import select
 import stat
 import subprocess
 import sys
@@ -60,10 +61,18 @@ def _json_recorded(path: Path) -> dict:
 
 def writes_source(assignment: dict, *, state_dir: Path | None = None,
                   operation: OperationKey | None = None) -> bool:
-    """Whether a run may write its task's repo. A run with a package follows what the HOST recorded of
-    its profile at launch, in sessions/<op>/contexto.json: a folder outside the run, which the session's
-    tools can neither read nor write (SUA-03, 4.8). What the session could edit decides nothing. A run
-    without a package keeps the G2 rule: a review never does and everything else may, as today."""
+    """Whether a run may write its task's repo. A run with a package follows what the HOST recorded
+    of its profile at launch, in sessions/<op>/contexto.json (SUA-03, 4.8). That file is not out of
+    the session's reach: the run's shell is unconfined (docs/evidence/agent-work/coverage.json,
+    directoryGuard.limitation), so what it reads here is only as recorded while the host last wrote
+    it. What keeps the record honest is split in two. On the claim side, the launcher contrasts the
+    record with the profile it re-reads from its own checkout on every claim pass, the checkout
+    wins, and the recorded value stays noted (writesSourceRecorded) — a repeated claim after a dead
+    host included. On the result side, Host.report reviews a run the host launched with a photo
+    whatever the record says by then: the photo's existence is the launch decision. What no fix
+    closes, the same directoryGuard.limitation: an unconfined session can delete
+    sessions/<op>/repo_before.json and turn its result back into this rule. A run without a
+    package keeps the G2 rule: a review never does and everything else may, as today."""
     if state_dir is not None and operation is not None:
         launched = _json_recorded(SessionRecord.locate(state_dir, operation_id(operation)).context)
         if isinstance(launched.get("writesSource"), bool):
@@ -71,14 +80,91 @@ def writes_source(assignment: dict, *, state_dir: Path | None = None,
     return assignment["resultContract"] != REVIEW_CONTRACT
 
 
+GIT_REPO_VARS = ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_OBJECT_DIRECTORY",
+                 "GIT_ALTERNATE_OBJECT_DIRECTORIES", "GIT_COMMON_DIR")
+"""Variables que mudan el repositorio que un git hijo ve: un host que las herede de su propia
+carga fotografiaría otro árbol aunque el comando lleve -C. _git las quita de cada comando
+(SUA-03, bots: el revisor no puede cambiar el repo del encargo sin cambiar la foto)."""
+
+
 def _git(repo: str, *args: str) -> bytes:
-    done = subprocess.run(["git", "-C", repo, *args], capture_output=True, timeout=60)
+    env = {name: value for name, value in os.environ.items() if name not in GIT_REPO_VARS}
+    try:
+        done = subprocess.run(["git", "-C", repo, *args], capture_output=True, timeout=60, env=env)
+    except subprocess.TimeoutExpired as exc:
+        raise OSError(f"git {args[0]} timed out in {repo}") from exc
     if done.returncode != 0:
         raise OSError(f"git {args[0]} failed in {repo}")
     return done.stdout
 
 
-PHOTO_FIELDS = ("head", "refs", "status", "diff", "config", "hooks")
+class PhotoFailed(OSError):
+    """La foto de un repo git admitido no se pudo tomar (un HEAD por nacer incluido): lanzar en él
+    una corrida que no puede escribirlo sin foto previa dejaría pasar cualquier cambio, así que el
+    lanzamiento aborta (SUA-03, bots: fallar cerrado). No es "no es un repo": eso sigue siendo un
+    OSError que el lanzador trata como hoy."""
+
+
+def _hash_into(total, path: Path) -> None:
+    """Into a sha256 en marcha: el destino de un symlink o los bytes de un archivo regular, leídos
+    en trozos; cualquier otra cosa no suma nada (su presencia ya viaja en los bytes del status). Un
+    archivo que desaparece entre el listado y la lectura no suma: ese swallow es de la carrera, no
+    de un permiso que daba igual."""
+    try:
+        info = path.lstat()
+        if stat.S_ISLNK(info.st_mode):
+            total.update(os.readlink(path).encode("utf-8", "surrogateescape"))
+        elif stat.S_ISREG(info.st_mode):
+            with path.open("rb") as stream:
+                while chunk := stream.read(1 << 20):
+                    total.update(chunk)
+    except OSError:
+        pass
+
+
+def _status_digest(repo: str, *args: str, timeout: float = 60) -> str:
+    """El sha256 de la salida entera del status, leída en streaming —los ignorados de un
+    node_modules son más de cien MB y nada de eso se carga entero en memoria— más, por cada
+    archivo NO rastreado que lista, sus bytes: un revisor que reescribe un archivo no rastreado
+    cambia la foto sin cambiar sus rutas (SUA-03, bots). Los ignorados (marcados `!!`) siguen
+    viajando solo por su ruta: su contenido cambia legítimamente (`__pycache__`) y no debe
+    negar un resultado bueno. El mismo plazo que _git: un git que no termina (un lock, un disco
+    lento) muere a la fuerza y su fallo sale como OSError, no como una pasada colgada."""
+    total = hashlib.sha256()
+    pending = b""
+    env = {name: value for name, value in os.environ.items() if name not in GIT_REPO_VARS}
+    with subprocess.Popen(["git", "-C", repo, *args], stdout=subprocess.PIPE,
+                          stderr=subprocess.DEVNULL, env=env) as done:
+        deadline = time.monotonic() + timeout
+        fd = done.stdout.fileno()
+        try:
+            while True:
+                remaining = deadline - time.monotonic()
+                if remaining > 0 and select.select([fd], [], [], remaining)[0]:
+                    chunk = os.read(fd, 1 << 20)
+                    if not chunk:
+                        break
+                    total.update(chunk)
+                    pending += chunk
+                    start = 0
+                    while (nul := pending.find(b"\0", start)) >= 0:
+                        record = pending[start:nul]
+                        start = nul + 1
+                        if record.startswith(b"?? "):
+                            _hash_into(total, Path(repo) / record[3:].decode("utf-8", "surrogateescape"))
+                    pending = pending[start:]
+                    continue
+                raise subprocess.TimeoutExpired(cmd=["git"], timeout=timeout)
+            code = done.wait(timeout=max(deadline - time.monotonic(), 0.0))
+        except subprocess.TimeoutExpired:
+            done.kill()
+            raise OSError(f"git {args[0]} timed out in {repo}") from None
+    if code != 0:
+        raise OSError(f"git {args[0]} failed in {repo}")
+    return total.hexdigest()
+
+
+PHOTO_FIELDS = ("head", "refs", "status", "diff", "config", "hooks", "exclude")
 
 
 def _git_files(folder: Path) -> str:
@@ -89,29 +175,36 @@ def _git_files(folder: Path) -> str:
 
 
 def repo_photo(repo: str, *, ignored: bool = False) -> dict:
-    """What a reviewer's run must leave as it was: HEAD, the refs, the status with untracked files, the
-    diff against HEAD, and inside .git its config and its hooks, which run code at the next git command.
-    Ignored files only join the status when the run works in a disposable clone (SUA-03, 4.8): a
-    reviewer without one runs its tests where it works, and a __pycache__ in the repo must not refuse a
-    good result, so its photo is the G2 one, byte for byte. Which mode applies is the launcher's call,
-    and it writes it in the before-photo so the after-photo reads the same one. OSError when the folder
-    is not a git repo."""
+    """What a reviewer's run must leave as it was: HEAD, the refs, the status with untracked files
+    (hashed with their contents, in streaming), the diff against HEAD, and inside .git its config,
+    its hooks, which run code at the next git command, and its local exclude rules, where a
+    planted path would hide a file from the status. Ignored files only join the status when the
+    run works in a disposable clone (SUA-03, 4.8): a reviewer without one runs its tests where it
+    works, and a __pycache__ in the repo must not refuse a good result, so its photo is the G2
+    one, byte for byte. Which mode applies is the launcher's call, and it writes it in the
+    before-photo so the after-photo reads the same one. OSError when the folder is not a git repo,
+    PhotoFailed when it is one and the photo itself failed (a repo without commits included)."""
     git_dir = Path(_git(repo, "rev-parse", "--absolute-git-dir").decode().strip())
     config = git_dir / "config"
+    exclude = git_dir / "info" / "exclude"
     status = ["status", "--porcelain=v1", "-z", "--untracked-files=all"]
     if ignored:
         # --ignored=traditional lists the files inside an ignored directory; --ignored=matching would
         # collapse the directory into one entry, and a new file inside one that already existed would
         # never change the photo.
         status.append("--ignored=traditional")
-    return {
-        "head": _git(repo, "rev-parse", "HEAD").decode().strip(),
-        "refs": hashlib.sha256(_git(repo, "for-each-ref")).hexdigest(),
-        "status": hashlib.sha256(_git(repo, *status)).hexdigest(),
-        "diff": hashlib.sha256(_git(repo, "diff", "--binary", "HEAD")).hexdigest(),
-        "config": hashlib.sha256(config.read_bytes() if config.is_file() else b"").hexdigest(),
-        "hooks": _git_files(git_dir / "hooks"),
-    }
+    try:
+        return {
+            "head": _git(repo, "rev-parse", "HEAD").decode().strip(),
+            "refs": hashlib.sha256(_git(repo, "for-each-ref")).hexdigest(),
+            "status": _status_digest(repo, *status),
+            "diff": hashlib.sha256(_git(repo, "diff", "--binary", "HEAD")).hexdigest(),
+            "config": hashlib.sha256(config.read_bytes() if config.is_file() else b"").hexdigest(),
+            "hooks": _git_files(git_dir / "hooks"),
+            "exclude": hashlib.sha256(exclude.read_bytes() if exclude.is_file() else b"").hexdigest(),
+        }
+    except OSError as exc:
+        raise PhotoFailed(f"la foto de {repo} falló: {exc}") from exc
 
 
 def photo_changes(before: dict, after: dict) -> list[str]:
@@ -429,8 +522,15 @@ class Host:
                 raise ValueError("recorded artifact snapshot missing")
             # A run-per-task operation keeps its result in its own run folder (RunDir).
             run_folder = Path(assignment["resultRef"]).parent
-            reviewed = run_folder == self.state_dir / "runs" / op_id and not writes_source(
-                assignment, state_dir=self.state_dir, operation=key)
+            # La decisión de lanzamiento no se re-lee de un archivo que la sesión pudo editar
+            # durante su corrida: una foto previa solo se escribe cuando el host lanzó al revisor
+            # sin permiso de escritura, así que su existencia ES esa decisión y el resultado se
+            # compara con ella pase lo que pase con lo anotado. Sin foto previa (una carpeta que
+            # no es repo git, un host anterior a SUA-03) sigue la regla del contrato.
+            record = SessionRecord.locate(self.state_dir, op_id)
+            reviewed = run_folder == self.state_dir / "runs" / op_id and (
+                record.repo_before.exists() or not writes_source(
+                    assignment, state_dir=self.state_dir, operation=key))
             if reviewed:
                 self._check_repo(op_id)
             home = str(run_folder) if reviewed else assignment["workspaceRef"]
@@ -449,12 +549,17 @@ class Host:
     def _check_repo(self, op_id: str) -> None:
         """The real repo of a run that may not write it is as its photo before launch said. A run launched
         without a photo (by a host from before SUA-03, or in a folder that is not a git repo) has nothing to
-        compare."""
+        compare. A change already measured (repo_after on disk) is not measured again: a refused result
+        stays in awaiting_results, and re-photographing the real repo on every pass cost six git commands
+        twice per pass (SUA-03, bots); the recorded verdict is raised as it was recorded."""
         record = SessionRecord.locate(self.state_dir, op_id)
         try:
             before = json.loads(record.repo_before.read_text(encoding="utf-8"))
         except FileNotFoundError:
             return
+        recorded = _json_recorded(record.repo_after).get("changed")
+        if isinstance(recorded, list) and recorded and all(isinstance(field, str) for field in recorded):
+            raise ReviewerWroteSource(recorded)
         after = repo_photo(before["repo"], ignored=bool(before.get("ignored")))
         changed = photo_changes(before["photo"], after)
         if changed:

@@ -2,6 +2,7 @@
 import hashlib
 import json
 import os
+import signal
 import subprocess
 import sys
 import tempfile
@@ -9,12 +10,14 @@ import unittest
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from dataclasses import replace
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts" / "agent-work"))
 
 from contracts import AuthorizedOperation, OperationKey
 from cutover_live import uncertain_operations
+import host
 from host import Host, main as host_main, operation_id
 
 
@@ -478,6 +481,108 @@ class HostReceipts(unittest.TestCase):
         self.assertEqual(self.host.spool.get(op_id)["status"], "delivered")
         self.assertEqual(uncertain_operations([str(self.root / "host")]), [])
         self.assertEqual(self.watch(self.host.spool.delivered_at(op_id) + 60), ["host:2:deadline-missed:deadline"])
+
+
+def git(repo, *args):
+    env = {name: value for name, value in os.environ.items() if not name.startswith("GIT_")}
+    subprocess.run(["git", "-C", str(repo), "-c", "user.name=t", "-c", "user.email=t@example.invalid", *args],
+                   check=True, env=env, capture_output=True)
+
+
+class GitPhoto(unittest.TestCase):
+    """Los comandos git detrás de repo_photo (bots de SUA-03): un git que tarda más de su timeout
+    no se escapa como TimeoutExpired, y las variables de repositorio heredadas no mudan la foto."""
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory(prefix="agent-work-git-")
+        self.addCleanup(tmp.cleanup)
+        self.root = Path(tmp.name)
+        self.repo = self.root / "repo"
+        self.repo.mkdir()
+        git(self.repo, "init", "-q")
+        git(self.repo, "commit", "-q", "--allow-empty", "-m", "base")
+
+    def test_a_timed_out_git_command_raises_oserror_and_not_timeoutexpired(self):
+        with mock.patch.object(host.subprocess, "run",
+                               side_effect=subprocess.TimeoutExpired(cmd="git", timeout=60)):
+            with self.assertRaisesRegex(OSError, "timed out"):
+                host._git(str(self.repo), "rev-parse", "HEAD")
+
+    def test_a_timed_out_git_status_kills_its_child_and_raises_oserror(self):
+        # El mismo contrato que _git, plazo de pared incluido: un git status que no termina en su
+        # plazo (un lock, un disco lento que gotea datos sin parar) no cuelga la pasada del host
+        # para siempre. Al vencer el plazo, el hijo muere a la fuerza y el fallo sale como
+        # OSError, que repo_photo convierte en PhotoFailed.
+        falso = self.root / "bin"
+        falso.mkdir()
+        (falso / "git").write_text("#!/bin/sh\ni=0\nwhile [ $i -lt 200 ]; do\n"
+                                   "  printf '?? borrador.txt\\0'\n  i=$((i+1))\n  sleep 0.05\n"
+                                   "done\n")
+        (falso / "git").chmod(0o755)
+        with mock.patch.dict(os.environ, {"PATH": f"{falso}{os.pathsep}{os.environ['PATH']}"}):
+            spawned = []
+            real_popen = host.subprocess.Popen
+
+            def registrar(*args, **kwargs):
+                hijo = real_popen(*args, **kwargs)
+                spawned.append(hijo)
+                return hijo
+
+            with mock.patch.object(host.subprocess, "Popen", side_effect=registrar):
+                with self.assertRaisesRegex(OSError, "git status timed out in"):
+                    host._status_digest(str(self.repo), "status", "--porcelain=v1", "-z",
+                                        "--untracked-files=all", timeout=2)
+        self.assertIsNotNone(spawned[0].poll(), "the timed-out git status child stayed alive")
+        self.assertEqual(spawned[0].returncode, -signal.SIGKILL,
+                         "the child died of a broken pipe or of old age, not of the kill")
+
+    def test_inherited_git_repository_variables_do_not_move_the_photo(self):
+        other = self.root / "otro"
+        other.mkdir()
+        git(other, "init", "-q")
+        git(other, "commit", "-q", "--allow-empty", "-m", "otro")
+        # Sin rastrear a propósito: el status quimérico tiene que verlo.
+        (other / "propio.txt").write_text("del otro repo\n")
+        with mock.patch.dict(os.environ, {"GIT_DIR": str(other / ".git"), "GIT_WORK_TREE": str(other)}):
+            photo = host.repo_photo(str(self.repo))
+        self.assertEqual(photo, host.repo_photo(str(self.repo)),
+                         "the photo followed the inherited GIT_DIR instead of the task's repo")
+
+    def test_the_contents_of_untracked_files_travel_in_the_status(self):
+        untracked = self.repo / "borrador.txt"
+        untracked.write_text("versión de antes\n")
+        before = host.repo_photo(str(self.repo))
+        untracked.write_text("versión que el revisor escribió\n")
+        after = host.repo_photo(str(self.repo))
+        self.assertIn("status", host.photo_changes(before, after),
+                      "overwriting an untracked file changed no field of the photo")
+        self.assertNotIn("head", host.photo_changes(before, after))
+
+    def test_the_local_exclude_rules_travel_in_the_photo(self):
+        before = host.repo_photo(str(self.repo))
+        self.assertEqual(set(before), set(host.PHOTO_FIELDS))
+        exclude = self.repo / ".git" / "info" / "exclude"
+        exclude.parent.mkdir(parents=True, exist_ok=True)
+        exclude.write_text("secreto.py\n")
+        (self.repo / "secreto.py").write_text("planted\n")
+        after = host.repo_photo(str(self.repo))
+        self.assertEqual(host.photo_changes(before, after), ["exclude"],
+                         "an exclude rule that hides a planted file changed no field of the photo")
+
+    def test_a_repo_without_commits_fails_closed_and_a_non_repo_does_not(self):
+        unborn = self.root / "por-nacer"
+        unborn.mkdir()
+        git(unborn, "init", "-q")
+        with self.assertRaises(host.PhotoFailed):
+            host.repo_photo(str(unborn))
+        self.assertTrue(issubclass(host.PhotoFailed, OSError),
+                        "the after-photo path may only catch OSError, never a bare failure")
+        vacio = self.root / "no-repo"
+        vacio.mkdir()
+        with self.assertRaises(OSError) as raised:
+            host.repo_photo(str(vacio))
+        self.assertNotIsInstance(raised.exception, host.PhotoFailed,
+                                 "a folder that is not a repo keeps the G2 path (no photo, launch proceeds)")
 
 
 if __name__ == "__main__":

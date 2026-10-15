@@ -158,6 +158,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--resultado", type=Path, required=True)
     args = parser.parse_args(argv)
     try:
+        if "contexto/" not in args.playbook.as_posix():
+            raise ValueError(
+                f"--playbook debe ser la ruta del playbook dentro del paquete "
+                f"(con contexto/): {args.playbook}"
+            )
         pasos = pasos_opencode(
             args.eventos.read_text(encoding="utf-8", errors="replace").splitlines()
         )

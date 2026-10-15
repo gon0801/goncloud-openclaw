@@ -71,6 +71,15 @@ fase_blobs() {
     real="$("$GIT_BIN" -C "$RAIZ" hash-object "$RAIZ/agent-work/$f" 2>/dev/null)" || falla "no se pudo leer $rel"
     [ "$esperado" = "$real" ] || falla "blob distinto de $REF en $rel"
   done
+  # El paquete de datos de SUA-03 (manifiesto, perfiles, competencia) pasa por el mismo guard:
+  # un blob distinto de la rama aborta antes de tocar disco; ausente en la rama, se declara y se
+  # sigue (bots de #304: se instalaba sin comprobacion).
+  while IFS= read -r f; do
+    rel="scripts/agent-work/$f"
+    esperado="$("$GIT_BIN" -C "$RAIZ" rev-parse "$REF:$rel" 2>/dev/null)" || { avisa "sin referencia en $REF: $rel (se declara y se sigue)"; continue; }
+    real="$("$GIT_BIN" -C "$RAIZ" hash-object "$RAIZ/agent-work/$f" 2>/dev/null)" || falla "no se pudo leer $rel"
+    [ "$esperado" = "$real" ] || falla "blob distinto de $REF en $rel"
+  done < <(cd "$RAIZ/agent-work" && find contexto -type f | sort)
   return 0
 }
 

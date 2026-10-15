@@ -35,6 +35,7 @@ sys.path.insert(0, str(ROOT / "scripts" / "agent-work"))
 sys.path.insert(0, str(ROOT / "scripts"))
 import contexto  # noqa: E402
 import encargo  # noqa: E402
+import host as host_mod  # noqa: E402
 import sesion  # noqa: E402
 from contracts import HostBeat, OperationKey, RunDir, SessionRecord, operation_id  # noqa: E402
 from host import Host  # noqa: E402
@@ -1025,6 +1026,61 @@ class Decisions(Slot):
         self.assertEqual(self.r.reports, [], "a flipped profile in the run copy changed nothing")
         self.assertEqual(self.r.incidents, [("task-1", "invalid-result", "reviewer-wrote-source")])
 
+    @unittest.skipUnless(PSTACK.is_dir(), "pide pstack 0.9.84 instalado en esta Mac")
+    def test_a_recorded_writes_source_that_drifted_from_the_checkout_loses(self):
+        # El volteo aquí ocurre ANTES de la reclamación, así que esta prueba fija el contraste de
+        # la reclamación — el mismo camino que recorre la reclamación repetida tras la muerte del
+        # host, con una sesión viva de un intento anterior —: lo anotado no decide solo, gana el
+        # perfil que el host vuelve a leer de su checkout y queda anotado. El volteo DURANTE la
+        # corrida lo cubre la prueba del resultado, y ahí decide la foto previa, no este
+        # contraste. La sesión no queda confinada (coverage.json, directoryGuard.limitation):
+        # puede reescribir sessions/<op>/contexto.json.
+        self.checkout_contexto()
+        self.start(ScriptedBackend(), canary=True)
+        self.packaged("revision")
+        atacado = json.loads(self.record().context.read_text())
+        atacado["writesSource"] = True
+        self.record().context.write_text(json.dumps(atacado))
+        sha = self.git_out("-C", str(self.repo), "rev-parse", "HEAD")
+        self.r.offer("task-1", b"agent-work.launch.v1\nprofile: revision\n---\nrevisa\n",
+                     {"kind": "code", "repository": str(self.repo), "sha": sha}, contract="review.v1")
+        self.assertEqual(self.one_pass()["claimed"], 1)
+        contrastado = json.loads(self.record().context.read_text())
+        self.assertEqual((contrastado["writesSource"], contrastado["writesSourceRecorded"]), (False, True))
+        self.assertTrue(self.record().repo_before.exists(), "the run launched as a writer, without a photo")
+        (self.repo / "nuevo.py").write_text("escrito por el revisor\n")
+        assignment = json.loads(self.run_dir().assignment.read_text())
+        Path(assignment["acceptRef"]).write_text(json.dumps(assignment["protocol"]["accept"]))
+        artifact = self.run_dir().path / "hallazgos.md"
+        artifact.write_text("sin hallazgos\n")
+        Path(assignment["resultRef"]).write_text(json.dumps({
+            **assignment["protocol"]["result"], "typedPayload": {"verdict": "approved"},
+            "artifactRef": str(artifact), "digest": hashlib.sha256(b"sin hallazgos\n").hexdigest()}))
+        self.left(0)
+        self.one_pass()
+        self.assertEqual(self.r.incidents, [("task-1", "invalid-result", "reviewer-wrote-source")])
+
+    def test_a_writes_source_flipped_mid_run_does_not_unreview_the_result(self):
+        # El volteo de sessions/<op>/contexto.json no solo cabe antes del lanzamiento: la sesión
+        # sigue viva y puede reescribirlo durante su corrida, cuando contrastar_writes_source ya
+        # pasó. La decisión de lanzar al revisor con foto es la foto misma: si repo_before existe,
+        # el resultado se compara con ella, y lo que la sesión dejó escrito en el registro no
+        # des-revisa nada.
+        self.r.offer("task-1", b"revisa el saludo\n", self.revision, contract="review.v1")
+        self.packaged("revision")
+        self.launched()
+        self.assertTrue(self.record().repo_before.exists(), "the run launched as a reviewer, without a photo")
+        atacado = json.loads(self.record().context.read_text())
+        atacado["writesSource"] = True
+        self.record().context.write_text(json.dumps(atacado))
+        (self.repo / "nuevo.py").write_text("escrito por el revisor\n")
+        assignment = json.loads(self.run_dir().assignment.read_text())
+        self.review_writes(Path(assignment["workspaceRef"]) / "hallazgos.md")
+        self.left(0)
+        self.one_pass()
+        self.assertEqual(self.r.reports, [], "the flipped record delivered the reviewer's result")
+        self.assertEqual(self.r.incidents, [("task-1", "invalid-result", "reviewer-wrote-source")])
+
     def test_a_review_artifact_lives_in_the_run_folder(self):
         self.r.offer("task-1", b"revisa el saludo\n", self.revision, contract="review.v1")
         self.launched()
@@ -1070,7 +1126,7 @@ class Decisions(Slot):
         self.launched()
         before = json.loads(self.record().repo_before.read_text())
         self.assertEqual((before["repo"], set(before["photo"])),
-                         (str(self.repo), {"head", "refs", "status", "diff", "config", "hooks"}))
+                         (str(self.repo), {"head", "refs", "status", "diff", "config", "hooks", "exclude"}))
         (self.repo / "nuevo.py").write_text("escrito por el revisor\n")
         self.review_writes(self.run_dir().path / "hallazgos.md")
         self.left(0)
@@ -1083,6 +1139,23 @@ class Decisions(Slot):
             "frase": "El revisor dejó cambiado el repo del encargo, y el host no aceptó su resultado. "
                      f"En {self.repo} cambió el status. El host no deshizo nada."})
         self.assertTrue((self.repo / "nuevo.py").exists(), "the host undid what the reviewer wrote")
+
+    def test_a_refused_review_is_not_measured_again_on_every_pass(self):
+        # El resultado de un revisor que cambió el repo nunca se registra: se queda en
+        # awaiting_results, y volver a fotografiar el repo en cada pasada costaba seis comandos
+        # git, dos veces por pasada, para siempre (bots de #303). El repo_after ya grabado se
+        # relanza tal cual, sin tocar el repo.
+        self.r.offer("task-1", b"revisa el saludo\n", self.revision, contract="review.v1")
+        self.launched()
+        (self.repo / "nuevo.py").write_text("escrito por el revisor\n")
+        self.review_writes(self.run_dir().path / "hallazgos.md")
+        self.left(0)
+        self.one_pass()
+        self.assertEqual(self.r.incidents, [("task-1", "invalid-result", "reviewer-wrote-source")])
+        with mock.patch.object(host_mod, "repo_photo", wraps=host_mod.repo_photo) as foto:
+            self.one_pass()
+        self.assertEqual(foto.call_count, 0, "the refused repo was photographed again")
+        self.assertEqual(self.r.incidents, [("task-1", "invalid-result", "reviewer-wrote-source")])
 
     def test_a_reviewer_that_only_left_ignored_files_or_committed_is_told_apart(self):
         # A review without a profile works in the real repo: its photo is the G2 one, without ignored
@@ -1147,6 +1220,23 @@ class Decisions(Slot):
         self.one_pass()
         self.assertFalse(self.record().repo_before.exists())
         self.assertEqual((len(self.r.reports), self.r.incidents), (1, []))
+
+    def test_a_photo_that_fails_in_the_task_repo_aborts_the_launch(self):
+        # Un repo git admitido sin commits no tiene foto: lanzar en él una corrida que no puede
+        # escribirlo sin foto previa aceptaría su resultado sin comparar nada, así que el
+        # lanzamiento no ocurre (bots: fallar cerrado). La entrega queda uncertain y la resuelve R.
+        por_nacer = self.root / "dev" / "por-nacer"
+        por_nacer.mkdir()
+        env = {key: value for key, value in os.environ.items() if not key.startswith("GIT_")}
+        subprocess.run(["git", "-C", str(por_nacer), "init", "-q"], check=True, env=env, capture_output=True)
+        self.r.offer("task-1", b"revisa\n", {"kind": "code", "repository": str(por_nacer), "sha": "b" * 40},
+                     contract="review.v1")
+        self.assertEqual(self.one_pass()["claimed"], 1)
+        self.assertEqual(self.backend.launches, [], "a run launched without a before-photo")
+        self.assertFalse(self.record().repo_before.exists())
+        self.assertEqual(self.held()[0], "attempted")
+        self.one_pass()
+        self.assertEqual(self.backend.launches, [], "the replayed claim launched without a photo either")
 
     def test_estado_says_why_the_launch_script_left_before_reaching_opencode(self):
         for code, why in ((96, "El host no pudo crear la carpeta temporal del encargo."),

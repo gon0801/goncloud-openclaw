@@ -24,8 +24,8 @@ from contracts import (HOST_BEAT_FILE, AuthorizedOperation, HostBeat, HostObserv
                        RunDir, SessionRecord, operation_id)
 import contexto
 import flota
-from host import (ACCEPT_DEADLINE_SECONDS, RESULT_DEADLINE_SECONDS, DeliveryDeferred, Host, repo_photo,
-                  writes_source)
+from host import (ACCEPT_DEADLINE_SECONDS, RESULT_DEADLINE_SECONDS, DeliveryDeferred, Host, PhotoFailed,
+                  repo_photo, writes_source)
 from modelos import (POLICY_FILE, CatalogStore, CatalogUnavailable, ContextoIncompleto, ExactModel, ModelNotListed,
                      PerfilRechazado, ProviderNotConfigured, ProviderPolicy, authorize, explicar)
 from progress_bridge import transfer_host_projection, transfer_projection
@@ -405,6 +405,26 @@ def build_clone(repository: str, sha: str, destino: Path) -> None:
         raise ValueError("git remote remove origin failed")
 
 
+def contrastar_writes_source(record: SessionRecord, perfil: dict) -> None:
+    """Lo anotado de writesSource contrastado con el perfil que esta pasada de reclamación volvió a
+    leer del checkout. Cubre el lado de la reclamación — también la repetida tras la muerte del
+    host, con una sesión viva de un intento anterior —: si difieren, gana el checkout, el registro
+    se reescribe con su valor y el anotado queda guardado en writesSourceRecorded. No cubre el
+    volteo durante la corrida: de ese responde el reporte, que siempre revisa a quien el host
+    lanzó con foto previa. La sesión no queda confinada (docs/evidence/agent-work/coverage.json,
+    directoryGuard.limitation), y el hueco que queda abierto es ese mismo: una sesión sin confinar
+    puede borrar sessions/<op>/repo_before.json y con ello la foto que decide el reporte."""
+    try:
+        grabado = json.loads(record.context.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return
+    if not isinstance(grabado, dict) or not isinstance(grabado.get("writesSource"), bool) \
+            or grabado["writesSource"] == perfil["writesSource"]:
+        return
+    atomic_json(record.context, {**grabado, "writesSource": perfil["writesSource"],
+                                 "writesSourceRecorded": grabado["writesSource"]})
+
+
 def claim_run_once(client, *, host, manager, backend, instance_id, deps):
     """Claim one task and launch its own opencode process inside the slot's group, or refuse it with an
     incident. A slot whose group holds processes of no task has no room either: nothing is claimed that
@@ -445,11 +465,13 @@ def claim_run_once(client, *, host, manager, backend, instance_id, deps):
         if registered is not None:
             raise ValueError(f"the launch of a registered operation is now refused: {why.causa}")
         return host.refuse(key, authorized, client.admit_host, {"causa": why.causa, "frase": why.frase})
-    if plan.perfil is not None and plan.config is not None and not record.context.exists():
+    if plan.perfil is not None and plan.config is not None:
         # El paquete de la corrida, copiado ANTES de registrar la asignación: el protocolo que la
         # asignación le dice al CLI depende de si su perfil escribe fuente, y un protocolo que cambia
         # entre intentos no puede registrarse dos veces (SUA-03, 4.5). Un host que murió después de
-        # copiar encuentra la copia entera y solo re-lee su digest de la copia.
+        # copiar encuentra la copia entera y solo re-lee su digest de la copia. Y lo anotado de
+        # writesSource se contrasta aquí con el perfil de esta pasada, antes de que la asignación
+        # y el lanzamiento lean el registro: si difiere, el checkout gana y queda anotado.
         try:
             if not run.context.exists():
                 contexto.construir(plan.package.source, plan.package.manifest, plan.perfil, run.context,
@@ -459,12 +481,14 @@ def claim_run_once(client, *, host, manager, backend, instance_id, deps):
             if registered is not None:
                 raise ValueError(f"the launch of a registered operation is now refused: {why.causa}") from error
             return host.refuse(key, authorized, client.admit_host, {"causa": why.causa, "frase": why.frase})
-        atomic_json(record.context, {"poteto": contexto.digest_del_paquete(run.context),
-                                     "tools": "sha256:" + hashlib.sha256(canonical(plan.config).encode()).hexdigest(),
-                                     "writesSource": plan.perfil["writesSource"],
-                                     "specialist": plan.perfil["id"],
-                                     "generation": plan.package.manifest["generation"],
-                                     "profile": contexto.digest_de_perfil(plan.perfil)})
+        contrastar_writes_source(record, plan.perfil)
+        if not record.context.exists():
+            atomic_json(record.context, {"poteto": contexto.digest_del_paquete(run.context),
+                                         "tools": "sha256:" + hashlib.sha256(canonical(plan.config).encode()).hexdigest(),
+                                         "writesSource": plan.perfil["writesSource"],
+                                         "specialist": plan.perfil["id"],
+                                         "generation": plan.package.manifest["generation"],
+                                         "profile": contexto.digest_de_perfil(plan.perfil)})
 
     def launch(_assignment_ref, _session):
         deps.recheck(plan)
@@ -481,6 +505,11 @@ def claim_run_once(client, *, host, manager, backend, instance_id, deps):
             if protected is not None:
                 try:
                     photo = repo_photo(str(protected), ignored=en_clon)
+                except PhotoFailed:
+                    # Un repo git admitido cuya foto falló (un HEAD por nacer incluido) no lanza:
+                    # sin foto previa, el resultado del revisor se aceptaría sin comparar nada
+                    # (SUA-03, bots: fallar cerrado). La entrega queda uncertain y la resuelve R.
+                    raise
                 except OSError:
                     photo = None
             if photo is not None:

@@ -9,9 +9,11 @@ entrada estándar. Las reglas:
 - `dependsOn` son las filas de su columna Depends que también se eligieron. Una dependencia que
   no se eligió y está cerrada (`cc:完了`) es un supuesto. Abierta, el importador falla: la raíz
   no puede esperar una fila que nadie va a hacer. Depends lleva ids, rangos (`6.0–6.8`, las
-  filas del ledger entre los dos extremos, con guion `-` o raya `–`), separadores (`,`, `;`,
-  `y`), marcas de celda vacía (`-`, `–`, `—`) y notas entre paréntesis. Cualquier otra cosa es
-  una condición que el importador no sabe leer, y falla con ella.
+  filas del ledger entre los dos extremos **por número de fila**, con guion `-` o raya `–`;
+  el ledger puede listarlas en otro orden, como la 9.9 del Plans.md real, que va después de
+  la 9.12), separadores (`,`, `;`, `y`), marcas de celda vacía (`-`, `–`, `—`) y notas entre
+  paréntesis. Cualquier otra cosa es una condición que el importador no sabe leer, y falla
+  con ella.
 - Elegir cero filas falla: un plan sin unidades es `plan-invalid` en R.
 - Cada cláusula de la compuerta verificable (la tercera columna), separada por `;`, es un
   criterio literal con rol `verifier`, con id `<fila>-<n>`. Una celda puede llevar `\\|`: es un
@@ -37,6 +39,20 @@ FILA = re.compile(r"^\|\s*(\d+\.\d+[a-z]?)\s*\|(.*)\|\s*$")
 # Un `|` sin `\` antes es un borde de columna; `\|` es contenido.
 BORDE = re.compile(r"(?<!\\)\|")
 ID = re.compile(r"\d+\.\d+[a-z]?")
+CLAVE_DE_ID = re.compile(r"(\d+)\.(\d+)([a-z]?)")
+
+
+def clave_de_id(id_fila: str) -> tuple[int, int, str]:
+    """La fila por su número: mayor, menor y sufijo. La clave que ordena un rango de Depends,
+    porque la posición del id en el ledger no es su número (la 9.9 del Plans.md real va
+    después de la 9.12)."""
+    hallado = CLAVE_DE_ID.fullmatch(id_fila)
+    if hallado is None:
+        raise DependenciaIlegible(f"{id_fila} no es un id de fila")
+    mayor, menor, sufijo = hallado.groups()
+    return (int(mayor), int(menor), sufijo)
+
+
 # Un rango `6.0–6.8` (raya o guion) o un id suelto, en el orden de la celda.
 PIEZA = re.compile(r"(\d+\.\d+[a-z]?)\s*[–-]\s*(\d+\.\d+[a-z]?)|\d+\.\d+[a-z]?")
 NOTA = re.compile(r"\([^)]*\)")
@@ -105,15 +121,22 @@ def titulo(entrega: str) -> str:
 
 def dependencias(id_fila: str, columna: str, orden: list[str]) -> list[str]:
     """Las filas de la columna Depends, en su orden y sin repetir. Un rango son las filas del
-    ledger entre sus dos extremos, en el orden del ledger."""
+    ledger entre sus dos extremos por número de fila, en orden numérico: expanderlo por la
+    posición en el ledger pierde o arrastra filas en silencio cuando el ledger no está ordenado
+    (la 9.9 del Plans.md real va después de la 9.12)."""
     texto = NOTA.sub(" ", columna)
+    por_numero = sorted(orden, key=clave_de_id)
     ids: list[str] = []
     for pieza in PIEZA.finditer(texto):
         desde, hasta = pieza.group(1), pieza.group(2)
         if desde is None:
             ids.append(pieza.group(0))
-        elif desde in orden and hasta in orden and orden.index(desde) <= orden.index(hasta):
-            ids += orden[orden.index(desde) : orden.index(hasta) + 1]
+        elif desde in orden and hasta in orden and clave_de_id(desde) <= clave_de_id(hasta):
+            ids += [
+                id_fila
+                for id_fila in por_numero
+                if clave_de_id(desde) <= clave_de_id(id_fila) <= clave_de_id(hasta)
+            ]
         else:
             raise DependenciaIlegible(
                 f"la fila {id_fila} depende del rango {pieza.group(0)}, que no está en Plans.md"

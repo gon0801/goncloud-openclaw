@@ -733,6 +733,8 @@ class BriefHelper(unittest.TestCase):
         self.assertEqual((brief.LAUNCH_SCHEMA, brief.HEADER_END), (sesion.LAUNCH_SCHEMA, sesion.HEADER_END))
         self.assertEqual((brief.PROVIDER.pattern, brief.MODEL_NAME.pattern),
                          (modelos.PROVIDER.pattern, modelos.MODEL_NAME.pattern))
+        # La comparación que el docstring de sesion.PROFILE_ID anuncia (bots de #304, F11).
+        self.assertEqual(brief.PROFILE_ID.pattern, sesion.PROFILE_ID.pattern)
 
 
 if __name__ == "__main__":
