@@ -58,17 +58,6 @@ def _json_recorded(path: Path) -> dict:
     return recorded if isinstance(recorded, dict) else {}
 
 
-def run_profile(assignment: dict) -> dict | None:
-    """The profile a run received in its package (SUA-03): read from the copy inside its run folder.
-    None for a run without one."""
-    try:
-        perfil = Path(assignment["resultRef"]).parent / "contexto" / "perfil.json"
-        profile = json.loads(perfil.read_bytes().decode("utf-8"))
-    except (OSError, ValueError, KeyError, TypeError):
-        return None
-    return profile if isinstance(profile, dict) and isinstance(profile.get("writesSource"), bool) else None
-
-
 def writes_source(assignment: dict, *, state_dir: Path | None = None,
                   operation: OperationKey | None = None) -> bool:
     """Whether a run may write its task's repo. A run with a package follows what the HOST recorded of
