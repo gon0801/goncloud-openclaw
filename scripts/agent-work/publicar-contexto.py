@@ -255,6 +255,10 @@ def respalda_carpeta(origen: Path, respaldo: Path) -> None:
             )
             os.replace(respaldo, viejo / "vieja")
         os.replace(copia / "nueva", respaldo)
+    except BaseException:
+        if viejo is not None and (viejo / "vieja").exists() and not respaldo.exists():
+            os.replace(viejo / "vieja", respaldo)
+        raise
     finally:
         # El temporal que quede (una copia fallida, o el wrapper que ya se vació) es
         # basura puntual: se limpia sin fallar; el respaldo anterior no se tocó.

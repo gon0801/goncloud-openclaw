@@ -425,6 +425,28 @@ class Perfiles(unittest.TestCase):
         )
         self.assertEqual(contexto.admite(ingenieria, CLI, "ready.v1", ahora=AHORA).causa, None)
 
+    def test_the_five_cli_profiles_have_certified_competence_until_their_sources_expire(self):
+        # C4 de SUA03-G5c-r5: M-16 certifica la ruta CLI de los cinco perfiles;
+        # su competence vale hasta que vencen sus fuentes (2027-01-14).
+        _, perfiles = real()
+        vigente = datetime(2026, 10, 16, tzinfo=timezone.utc)
+        vencida = datetime(2027, 1, 15, tzinfo=timezone.utc)
+        for identificador in (
+            "ingenieria",
+            "revision",
+            "adversario",
+            "verificacion",
+            "exploracion",
+        ):
+            with self.subTest(perfil=identificador):
+                perfil = contexto.perfil(perfiles, identificador)
+                contrato = perfil["resultContracts"][0]
+                self.assertIsNone(contexto.admite(perfil, CLI, contrato, ahora=vigente).causa)
+                self.assertEqual(
+                    contexto.admite(perfil, CLI, contrato, ahora=vencida).causa,
+                    "perfil-sin-competencia",
+                )
+
     def test_an_expired_source_or_a_missing_competence_closes_only_that_profile(self):
         _, perfiles = real()
         meli = con_competencia(contexto.perfil(perfiles, "meli"))
@@ -449,8 +471,17 @@ class Perfiles(unittest.TestCase):
             contexto.admite(fallida, nativa("amazon"), "ready.v1", ahora=AHORA).causa,
             "perfil-sin-competencia",
         )
-        # Generation 1 has no competence yet: only a canary admits, and only on its own routes.
-        pendiente = contexto.perfil(perfiles, "ingenieria")
+        # Una competence pending solo admite en canario, y solo en sus rutas: la
+        # real de ingenieria ya está certificada por M-16 (r5), así que el pending
+        # se pone en una copia.
+        pendiente = copy.deepcopy(contexto.perfil(perfiles, "ingenieria"))
+        pendiente["competence"]["mac-local/opencode"] = {
+            "status": "pending",
+            "model": None,
+            "evidence": None,
+            "at": None,
+            "validUntil": None,
+        }
         self.assertEqual(
             contexto.admite(pendiente, CLI, "ready.v1", ahora=AHORA).causa, "perfil-sin-competencia"
         )

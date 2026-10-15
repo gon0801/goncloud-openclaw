@@ -187,6 +187,38 @@ class Conducta(unittest.TestCase):
             ),
         )
 
+    def test_a_relative_write_is_resolved_against_the_workers_directory(self):
+        # C5 de SUA03-G5c: una ruta relativa de un evento se resuelve contra la
+        # carpeta de trabajo del trabajador (--directorio), no contra el cwd de
+        # conducta; con ella, el write excluido no cuenta como cambio tras las pruebas.
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            repo = tmp / "repo"
+            repo.mkdir()
+            lineas = corrida() + [herramienta("write", filePath="RESULTADO.md")]
+            (tmp / "events.jsonl").write_text("\n".join(lineas) + "\n")
+            libro = tmp / "run" / PLAYBOOK
+            libro.parent.mkdir(parents=True)
+            libro.write_text(TEXTO)
+            (tmp / "resultado.md").write_text("Ran 4 tests in 0.01s\n")
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                code = conducta.main(
+                    [
+                        "--eventos",
+                        str(tmp / "events.jsonl"),
+                        "--playbook",
+                        str(libro),
+                        "--resultado",
+                        str(tmp / "resultado.md"),
+                        "--directorio",
+                        str(repo),
+                        "--excluir",
+                        str(repo / "RESULTADO.md"),
+                    ]
+                )
+        self.assertEqual((code, json.loads(out.getvalue())), (0, {"ok": True, "razones": []}))
+
     def test_a_playbook_outside_the_package_is_a_usage_error_and_not_a_false_missing_read(self):
         # split("contexto/", 1)[-1] sobre una ruta sin contexto/ devolvía la ruta entera: la
         # etiqueta nunca calzaba con lectura alguna y el veredicto reportaba un falso "falta la
@@ -286,6 +318,102 @@ class Conducta(unittest.TestCase):
                 )
         self.assertEqual(codigo, 0, out.getvalue())
         self.assertEqual(json.loads(out.getvalue()), {"ok": True, "razones": []})
+
+    def test_the_real_m16e_engineering_run_measures_green_with_its_protocol_list_first(self):
+        # Corrida 5 del banco (único rojo, ingenieria): el primer todowrite copia
+        # los tres steps del protocolo y va antes de leer el playbook; el que va
+        # después de leerlo sí empieza, en sus elementos del playbook, por el paso 1.
+        corrida = (
+            "/private/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T"
+            "/agent-work-banco-4bn00_zn/state/enc-1/runs"
+            "/9b7f53dd611638de0175ae24b40708f6e327dc580c55f215ade65948290f19eb"
+        )
+        repo = (
+            "/private/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T"
+            "/agent-work-banco-4bn00_zn/dev/demo"
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                codigo = conducta.main(
+                    [
+                        "--eventos",
+                        str(FIXTURAS / "m16e-ingenieria.jsonl"),
+                        "--playbook",
+                        str(self.playbook_de_fixture(tmp)),
+                        "--resultado",
+                        str(FIXTURAS / "m16e-ingenieria-RESULTADO.md"),
+                        "--directorio",
+                        repo,
+                        "--excluir",
+                        corrida,
+                        "--excluir",
+                        f"{repo}/RESULTADO.md",
+                    ]
+                )
+        self.assertEqual(codigo, 0, out.getvalue())
+        self.assertEqual(json.loads(out.getvalue()), {"ok": True, "razones": []})
+
+    def test_the_real_m16g_engineering_run_measures_green_without_the_final_period(self):
+        # Corrida 7 del banco (ingenieria): el elemento del paso 1 en la lista que
+        # sigue al playbook no trae el punto final que el playbook sí trae.
+        corrida = (
+            "/private/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T"
+            "/agent-work-banco-wrzlwwd4/state/enc-1/runs"
+            "/c64379d9d1e439a561736979511b4dc053cabc1d53d5c973146a426638ca342e"
+        )
+        repo = (
+            "/private/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T"
+            "/agent-work-banco-wrzlwwd4/dev/demo"
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                codigo = conducta.main(
+                    [
+                        "--eventos",
+                        str(FIXTURAS / "m16g-ingenieria.jsonl"),
+                        "--playbook",
+                        str(self.playbook_de_fixture(tmp)),
+                        "--resultado",
+                        str(FIXTURAS / "m16g-ingenieria-RESULTADO.md"),
+                        "--directorio",
+                        repo,
+                        "--excluir",
+                        corrida,
+                        "--excluir",
+                        f"{repo}/RESULTADO.md",
+                    ]
+                )
+        self.assertEqual(codigo, 0, out.getvalue())
+        self.assertEqual(json.loads(out.getvalue()), {"ok": True, "razones": []})
+
+    def test_a_list_whose_first_playbook_step_is_the_second_is_red(self):
+        # El accept del protocolo puede ir antes en la lista que sigue al playbook,
+        # pero el primer elemento del playbook tiene que ser el paso 1, no el 2.
+        filas = [
+            herramienta("read", filePath=f"{RUN}/contexto/skills/poteto-mode/SKILL.md"),
+            herramienta("read", filePath=f"{RUN}/{PLAYBOOK}"),
+            herramienta(
+                "todowrite",
+                todos=[
+                    {"content": "Before any other work, write the accept object."},
+                    {"content": "2. `architect` for parallel design exploration."},
+                    {"content": "1. `how` over the affected subsystem."},
+                ],
+            ),
+            herramienta("edit", filePath="/repo/calc.py", oldString="-", newString="+"),
+            herramienta("bash", command="python3 -m unittest test_calc.py", output=SALIDA),
+        ]
+        self.assertEqual(
+            juzgar(filas).razones,
+            (
+                "la primera lista no empieza con el primer paso del playbook: "
+                "'`how` over the affected subsystem.'",
+            ),
+        )
 
     def test_the_real_m16b_control_stays_red_for_the_missing_package_read(self):
         # El control cargó poteto-mode desde ~/.agents/skills (el global): no cuenta.

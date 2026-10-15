@@ -646,10 +646,10 @@ class Routes(unittest.TestCase):
         self.assertEqual(coverage["hostAdapterRoute"]["mac-local"]["opencode"]["form"], "run-per-task")
         route = sesion.Route.load(coverage, "mac-local")
         self.assertEqual(route, sesion.Route("mac-local", "opencode", "run-per-task", "certified",
-                                             frozenset({"1.18.35"}), frozenset()))
+                                             frozenset({"1.18.35"}), frozenset({"1"})))
         self.assertIsNone(route.open_for("1.18.35", canary=False))
-        self.assertEqual(route.open_for("1.18.35", 1, canary=False), modelos.GenerationNotCertified(1, ()),
-                         "the package generation stays uncertified until M-16 (M-13 point b)")
+        self.assertIsNone(route.open_for("1.18.35", 1, canary=False),
+                          "M-16 certifies generation 1 of the package (SUA-03-mediciones.md)")
         self.assertEqual(route.open_for("1.18.36", canary=False), modelos.RouteNotCertified("1.18.36", ("1.18.35",)))
         self.assertEqual(modelos.explicar(route.open_for("1.18.36", canary=False)).frase,
                          "Ruta certificada para 1.18.35, la Mac tiene opencode 1.18.36.")
@@ -715,14 +715,14 @@ class Routes(unittest.TestCase):
         self.assertIsNone(route({"1": "M-13"}).open_for("1.18.35", canary=False),
                           "a brief without a package only asks the version of the CLI")
 
-    def test_the_repos_coverage_does_not_certify_generation_1_of_the_package(self):
-        # M-13 punto b: las skills de la generación 1 pierden contra ~/.agents/skills, así que la
-        # generación 1 NO está certificada: solo un canario la corre, hasta la generación 2 de G4.
-        # El nombre anterior decía lo contrario de lo que el cuerpo exige (bots de #304, F10).
+    def test_the_repos_coverage_certifies_generation_1_of_the_package(self):
+        # M-16 (corrida 5 + corrida 8) certifica la generación 1: la 2 sigue sin
+        # certificar y solo un canario la corre (antes de M-16 era al revés).
         route = sesion.Route.load(json.loads(COVERAGE.read_text(encoding="utf-8")), "mac-local")
-        self.assertEqual(route.certified_context_generations, frozenset())
-        self.assertEqual(route.open_for("1.18.35", 1, canary=False), modelos.GenerationNotCertified(1, ()))
-        self.assertIsNone(route.open_for("1.18.35", 1, canary=True))
+        self.assertEqual(route.certified_context_generations, frozenset({"1"}))
+        self.assertIsNone(route.open_for("1.18.35", 1, canary=False))
+        self.assertEqual(route.open_for("1.18.35", 2, canary=False), modelos.GenerationNotCertified(2, (1,)))
+        self.assertIsNone(route.open_for("1.18.35", 2, canary=True))
 
 
 class Plans(Policies):
@@ -762,7 +762,8 @@ class Plans(Policies):
                                          "inputRevision": revision or {"kind": "code", "repository": str(self.repo),
                                                                        "sha": "a" * 40},
                                          "resultContract": contract})
-        return self.plan(brief, package=self.package(), **kwargs)
+        kwargs.setdefault("package", self.package())
+        return self.plan(brief, **kwargs)
 
     def test_the_run_folder_is_private_and_holds_the_four_protocol_files(self):
         self.assertEqual(self.run.path, self.root / "spool/runs" / self.OPERATION)
@@ -892,7 +893,18 @@ class Plans(Policies):
         self.assertEqual(fuera.causa, "perfil-no-atiende-ruta")
         revision = self.profiled(contract="review.v1")
         self.assertEqual(revision.causa, "perfil-no-admite-contrato")
-        sin = self.profiled(canary=False)
+        # La competence real ya está certificada por M-16 (r5): el perfil sin
+        # competencia se arma en una copia con su ruta CLI en pending.
+        paquete = self.package()
+        perfiles_pendientes = copy.deepcopy(paquete.profiles)
+        for perfil in perfiles_pendientes["profiles"]:
+            if perfil["id"] == "ingenieria":
+                perfil["competence"]["mac-local/opencode"] = {
+                    "status": "pending", "model": None, "evidence": None,
+                    "at": None, "validUntil": None,
+                }
+        pendiente = sesion.Package(paquete.manifest, perfiles_pendientes, paquete.source)
+        sin = self.profiled(canary=False, package=pendiente)
         self.assertEqual(sin.causa, "perfil-sin-competencia")
 
     def test_the_planned_config_delivers_the_package_and_the_model_of_the_encargo(self):

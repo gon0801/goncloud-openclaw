@@ -108,8 +108,8 @@ def pasos_opencode(lineas: list[str]) -> list[Paso]:
         herramienta = str(part.get("tool"))
         if herramienta == "todowrite":
             todos = entrada.get("todos") if isinstance(entrada.get("todos"), list) else []
-            detalle = (
-                str(todos[0].get("content", "")) if todos and isinstance(todos[0], dict) else ""
+            detalle = "\n".join(
+                str(todo.get("content", "")) for todo in todos if isinstance(todo, dict)
             )
         elif herramienta == "bash":
             detalle = str(entrada.get("command", ""))
@@ -255,6 +255,15 @@ def pasos_openclaw(lineas: list[str]) -> list[Paso]:
     return [paso for _, paso in sorted(pasos, key=lambda par: par[0])]
 
 
+def _primeras_frases_numeradas(texto: str) -> dict[int, str]:
+    """La primera frase de cada paso numerado del playbook, sin backticks."""
+    frases = {}
+    for hallado in re.finditer(r"^(\d+)\.\s+(.+)$", texto, re.MULTILINE):
+        frase = re.split(r"(?<=\.)\s", hallado[2].strip(), maxsplit=1)[0]
+        frases[int(hallado[1])] = _espacios(frase).replace("`", "")
+    return frases
+
+
 def juzgar(
     pasos: list[Paso],
     *,
@@ -280,6 +289,49 @@ def juzgar(
     paso_uno = re.split(r"(?<=\.)\s", primer_paso(texto_del_playbook), maxsplit=1)[0]
     if not listas:
         razones.append("no hay lista de pasos (todowrite)")
+    elif prefijo == "contexto/":
+        # K2 y K3 (corrida 5): la lista que cuenta es la primera tras leer el
+        # playbook (la del protocolo, anterior a esa lectura, no es la del
+        # playbook), y en ella el primer elemento del playbook tiene que ser el
+        # paso 1; lo que no es del playbook puede ir antes.
+        lectura_libro = next((i for i, paso in enumerate(pasos) if _lee(paso, libro)), None)
+        elegidas = [
+            paso
+            for i, paso in enumerate(pasos)
+            if paso.tool == "todowrite" and (lectura_libro is None or i > lectura_libro)
+        ]
+        objetivo = _espacios(paso_uno).replace("`", "").rstrip(".")
+        otros = {
+            frase.rstrip(".")
+            for numero, frase in _primeras_frases_numeradas(texto_del_playbook).items()
+            if numero != 1
+        }
+        posicion = None
+        if elegidas:
+            elementos = [
+                _espacios(elemento).replace("`", "")
+                for elemento in elegidas[0].detail.split("\n")
+                if elemento.strip()
+            ]
+            # Un elemento puede traer su propio salto de línea: el paso se busca
+            # desde cada elemento en adelante, con los espacios ya colapsados.
+            posicion = next(
+                (
+                    j
+                    for j in range(len(elementos))
+                    if objetivo in _espacios(" ".join(elementos[j:]))
+                    and objetivo not in _espacios(" ".join(elementos[j + 1 :]))
+                ),
+                None,
+            )
+            if posicion is not None and any(
+                any(otro in elemento for otro in otros) for elemento in elementos[:posicion]
+            ):
+                posicion = None
+        if posicion is None:
+            razones.append(
+                f"la primera lista no empieza con el primer paso del playbook: {paso_uno!r}"
+            )
     # Sin el marcado de los dos lados (D4): el playbook escribe "`how` over..." y la lista
     # del modelo lo deja sin backticks.
     elif paso_uno.replace("`", "") not in _espacios(listas[0].detail).replace("`", ""):
@@ -315,6 +367,13 @@ def main(argv: list[str] | None = None) -> int:
         "(repetible; la corrida pasa su carpeta y su artefacto)",
     )
     parser.add_argument(
+        "--directorio",
+        type=Path,
+        default=None,
+        help="carpeta de trabajo del trabajador: una ruta relativa de un evento se "
+        "resuelve contra ella antes de compararla con --excluir",
+    )
+    parser.add_argument(
         "--forma",
         choices=tuple(RAIZ_DE_FORMA),
         default="opencode",
@@ -343,7 +402,11 @@ def main(argv: list[str] | None = None) -> int:
             def excluido(paso: Paso) -> bool:
                 if paso.tool not in EDITS or paso.path is None:
                     return False
-                resuelta = Path(paso.path).resolve()
+                cruda = Path(paso.path)
+                if args.directorio is not None and not cruda.is_absolute():
+                    resuelta = (args.directorio / cruda).resolve()
+                else:
+                    resuelta = cruda.resolve()
                 return any(resuelta == raiz or raiz in resuelta.parents for raiz in raices)
 
             pasos = [paso for paso in pasos if not excluido(paso)]

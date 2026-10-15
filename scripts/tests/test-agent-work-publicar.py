@@ -10,9 +10,11 @@ El fixture usa los perfiles reales del repo, para que `meli` tenga su perfil por
 from __future__ import annotations
 
 import ast
+import contextlib
 import copy
 import fcntl
 import importlib.util
+import io
 import itertools
 import json
 import os
@@ -274,6 +276,34 @@ class PublicadorNativo(unittest.TestCase):
         lineas = resultado.stdout.splitlines()
         self.assertEqual(len(lineas), 1, resultado.stdout)
         return resultado.returncode, json.loads(lineas[0])
+
+    def revertir_con_copia_que_falla(self):
+        """La reversa en proceso con la copia rota a medias (C6 de SUA03-G5c): el
+        fallo se inyecta en copytree y no depende de permisos, así que también
+        falla cuando quien corre lee un archivo 000 (un runner como root)."""
+
+        def copia_que_falla(origen, destino, **kwargs):
+            destino.mkdir(parents=True)
+            (destino / "SKILL.md").write_text("a medias\n", encoding="utf-8")
+            raise OSError("copia rota a medias")
+
+        salida = io.StringIO()
+        with mock.patch.object(self.armador.shutil, "copytree", copia_que_falla):
+            with contextlib.redirect_stdout(salida):
+                codigo = self.armador.main(
+                    [
+                        "--local",
+                        "--revertir",
+                        "--publicacion",
+                        str(self.publicacion),
+                        "--home",
+                        str(self.home),
+                        "--agentes-json",
+                        str(self.agents_json),
+                    ]
+                )
+        lineas = salida.getvalue().splitlines()
+        return codigo, json.loads(lineas[-1]) if lineas else {}
 
     def estado_del_home(self):
         return json.loads(
@@ -929,6 +959,30 @@ class PublicadorNativo(unittest.TestCase):
             "la copia a medias quedó tirada en la carpeta de respaldos",
         )
 
+    def test_a_failed_final_replace_restores_what_was_set_aside(self):
+        # C4 de SUA03-G5c: lo apartado (.viejo-*) se borra solo después de que entra
+        # el os.replace final; si ese replace falla, lo apartado vuelve a su lugar.
+        origen = self.tmp / "origen-c4"
+        (origen / "intern").mkdir(parents=True)
+        (origen / "SKILL.md").write_text("nueva\n", encoding="utf-8")
+        destino = self.tmp / "respaldos" / "poteto-mode"
+        destino.mkdir(parents=True)
+        (destino / "SKILL.md").write_text("de antes\n", encoding="utf-8")
+        reemplazo_real = os.replace
+        llamadas = []
+
+        def reemplazo_que_falla_en_la_segunda(fuente, meta, **kwargs):
+            llamadas.append(1)
+            if len(llamadas) == 2:
+                raise OSError("replace final roto")
+            return reemplazo_real(fuente, meta, **kwargs)
+
+        with mock.patch.object(self.armador.os, "replace", reemplazo_que_falla_en_la_segunda):
+            with self.assertRaises(OSError):
+                self.armador.respalda_carpeta(origen, destino)
+        self.assertEqual((destino / "SKILL.md").read_bytes(), b"de antes\n")
+        self.assertEqual([p.name for p in destino.parent.iterdir()], ["poteto-mode"])
+
     def test_two_reverts_in_a_row_do_not_invent_a_conflict(self):
         # C1a (R1 del veredicto r3): una edición del dueño fuera del bloque entre la gen 2
         # y la gen 3 que pasó por --leer no conflicta la segunda reversa.
@@ -1035,9 +1089,7 @@ class PublicadorNativo(unittest.TestCase):
         respaldo = self.home / ".openclaw" / "sua-contexto" / "2" / "skills" / "principle-x"
         self.assertTrue(respaldo.is_dir())
         (respaldo / "extra.md").write_bytes(b"otro archivo del respaldo\n")
-        roto = respaldo / "SKILL.md"
-        roto.chmod(0o000)
-        codigo, respuesta = self.publicar("revertir")
+        codigo, respuesta = self.revertir_con_copia_que_falla()
         self.assertEqual(codigo, 3, respuesta)
         destino = self.home / ".openclaw" / "skills" / "principle-x"
         self.assertFalse(destino.exists(), "quedó una restauración a medias")
@@ -1049,7 +1101,6 @@ class PublicadorNativo(unittest.TestCase):
             ],
             [],
         )
-        roto.chmod(0o644)
         codigo, revertir = self.publicar("revertir")
         self.assertEqual((revertir["conflictos"], codigo), (0, 0))
         self.assertEqual(revertir["skills"]["principle-x"], "revertido")
@@ -1068,16 +1119,13 @@ class PublicadorNativo(unittest.TestCase):
         publicada = self.skill_del_home("poteto-mode").read_bytes()
         respaldo = self.home / ".openclaw" / "sua-contexto" / "2" / "skills" / "poteto-mode"
         self.assertTrue(respaldo.is_dir())
-        roto = respaldo / "SKILL.md"
-        roto.chmod(0o000)
-        codigo, respuesta = self.publicar("revertir")
+        codigo, respuesta = self.revertir_con_copia_que_falla()
         self.assertEqual(codigo, 3, respuesta)
         self.assertEqual(
             self.skill_del_home("poteto-mode").read_bytes(),
             publicada,
             "la skill publicada desapareció con la copia fallida",
         )
-        roto.chmod(0o644)
         codigo, revertir = self.publicar("revertir")
         self.assertEqual((revertir["conflictos"], codigo), (0, 0))
         self.assertEqual(revertir["skills"]["poteto-mode"], "revertido")

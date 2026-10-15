@@ -6,6 +6,7 @@ Each case runs in its own checkout copy, state root, prompt store and opencode d
 """
 
 import contextlib
+import copy
 import io
 import json
 import os
@@ -570,6 +571,37 @@ class Perfiles(Mac):
                 self.assertFalse(respuesta["ok"])
                 self.assertIn(campo, respuesta["error"], f"el mensaje no nombra {campo}")
 
+
+    def test_a_profiles_file_with_broken_root_agents_or_route_keys_is_an_error(self):
+        # C1 de SUA03-G5c: el agents de la raíz es una lista de objetos con agentId de
+        # texto; cada ruta trae host y executor de texto, y agentId de texto si viene.
+        ruta_perfiles = self.checkout / "scripts" / "agent-work" / "contexto" / "perfiles.v1.json"
+        perfil = {
+            "id": "x", "purpose": "p", "resultContracts": ["ready.v1"],
+            "routes": [{"host": "mac-local", "executor": "opencode", "via": ["task"]}],
+            "writesSource": False, "competence": {},
+        }
+        casos = []
+        for agentes in ([1], {"x": 1}):
+            doc = {"schema": "x", "profiles": [perfil], "agents": agentes}
+            casos.append((doc, "agents"))
+        sin_host = copy.deepcopy(perfil)
+        sin_host["routes"] = [{"executor": "opencode", "via": ["task"]}]
+        casos.append(({"schema": "x", "profiles": [sin_host]}, "host"))
+        agente_malo = copy.deepcopy(perfil)
+        agente_malo["routes"] = [
+            {"host": "mac-local", "executor": "opencode", "agentId": 5, "via": ["task"]}]
+        casos.append(({"schema": "x", "profiles": [agente_malo]}, "agentId"))
+        for documento, campo in casos:
+            with self.subTest(campo=campo, documento=documento):
+                ruta_perfiles.write_text(json.dumps(documento) + "\n", encoding="utf-8")
+                code, out, err = self.cli("perfiles")
+                self.assertEqual(code, 3)
+                self.assertEqual(out, "")
+                self.assertNotIn("Traceback", err)
+                respuesta = json.loads(err)
+                self.assertFalse(respuesta["ok"])
+                self.assertIn(campo, respuesta["error"], f"el mensaje no nombra {campo}")
 
 class Permitir(Mac):
     def permitir(self, *args):
