@@ -178,7 +178,7 @@ class BancoE2E(unittest.TestCase):
             self.fail(f"{what} en {seconds} s; log del host: {self.log.read_text()[-3000:]}")
         return value
 
-    def ask(self, brief, contract, perfil=None):
+    def ask(self, texto, contract, perfil=None):
         """main asks as it does in production, with or without a profile, and returns the task's id."""
         where = ["--checkout", str(ROOT), "--state-root", str(self.state), "--opencode", OPENCODE,
                  "--workspace-root", str(self.root / "dev")]
@@ -191,7 +191,7 @@ class BancoE2E(unittest.TestCase):
         ready = json.loads(out.getvalue())
         self.assertEqual((code, ready["ok"]), (0, True), ready)
         text = self.root / "brief.txt"
-        text.write_text(brief)
+        text.write_text(texto)
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
             code = brief.main(["--root", str(self.gateway.state_dir), "--file", str(text),
@@ -249,7 +249,8 @@ class BancoE2E(unittest.TestCase):
         self.assertTrue((run.context / "AGENTS.md").is_file())
         self.assertTrue((run.context / "skills/poteto-mode/SKILL.md").is_file())
         digests = json.loads(self.record(task_id).context.read_text())
-        self.assertEqual(set(digests), {"poteto", "tools"})
+        self.assertEqual(set(digests), {"poteto", "tools", "writesSource", "specialist", "generation",
+                                        "profile"})
         flota_doc = self.reached(lambda: run.fleet if run.fleet.exists() else None, 120,
                                  "el host nunca escribió flota.json")
         document = json.loads(flota_doc.read_text())
@@ -267,8 +268,11 @@ class BancoE2E(unittest.TestCase):
         code, verdict = self.conducta_verdict(task_id, artifact)
         self.assertEqual((code, verdict), (0, {"ok": True, "razones": []}), verdict["razones"])
         self.assert_package_and_flota(task_id, "ingenieria")
-        self.assertEqual(self.photo_changes(), [], "el repo real cambió en un encargo que escribe")
-        print(f"BANCO_E2E case=ingenieria task={task_id} conducta=ok", flush=True)
+        # ingenieria escribe fuente: su trabajo se ve en el repo, y la suite que estaba roja pasa ahora.
+        self.assertNotIn('"hola"', (self.repo / "saluda.py").read_text(), "el modelo no arregló el defecto")
+        done = subprocess.run([sys.executable, "test-saluda.py"], cwd=self.repo, capture_output=True)
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        print(f"BANCO_E2E case=ingenieria task={task_id} conducta=ok suite_repo=pasa", flush=True)
 
     def test_the_control_without_a_package_is_red_for_the_expected_reason(self):
         task_id = self.ask(FIX_BRIEF, "ready.v1")
