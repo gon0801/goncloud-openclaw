@@ -902,6 +902,33 @@ class PublicadorNativo(unittest.TestCase):
         self.publicar("revertir")
         self.assertFalse(destino.exists())
 
+    def test_a_failed_skill_backup_copy_leaves_the_previous_backup_whole(self):
+        # C2: el respaldo de una skill se arma en una carpeta temporal hermana y se pone
+        # en su lugar con os.replace, de modo que una copia a medias no rompa el respaldo.
+        origen = self.tmp / "origen-respaldo"
+        (origen / "intern").mkdir(parents=True)
+        (origen / "SKILL.md").write_text("nueva\n", encoding="utf-8")
+        respaldo = self.tmp / "respaldos" / "poteto-mode"
+        respaldo.mkdir(parents=True)
+        (respaldo / "SKILL.md").write_text("respaldo anterior\n", encoding="utf-8")
+        copia_real = shutil.copytree
+
+        def copia_que_falla(Origen, destino, **kwargs):
+            destino.mkdir(parents=True)
+            (destino / "SKILL.md").write_text("a medias\n", encoding="utf-8")
+            raise OSError("se acabó el disco")
+
+        with mock.patch.object(self.armador.shutil, "copytree", copia_que_falla):
+            with self.assertRaises(OSError):
+                self.armador.respalda_carpeta(origen, respaldo)
+        self.assertEqual((respaldo / "SKILL.md").read_bytes(), b"respaldo anterior\n")
+        self.assertEqual(copia_real, shutil.copytree)
+        self.assertEqual(
+            [p.name for p in respaldo.parent.iterdir()],
+            ["poteto-mode"],
+            "la copia a medias quedó tirada en la carpeta de respaldos",
+        )
+
     def test_a_foreign_skill_with_a_managed_name_stops_that_skill(self):
         self.armar()
         ajena = self.home / ".openclaw" / "skills" / "poteto-mode"
