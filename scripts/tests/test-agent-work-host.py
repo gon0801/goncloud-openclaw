@@ -153,6 +153,55 @@ class HostReceipts(unittest.TestCase):
         self.assertIsNotNone(self.host.collect("mac-test", self.key))
         self.assertEqual(self.host.pending("mac-test"), [self.report()])
 
+    def test_a_malformed_typed_payload_is_refused_and_a_valid_one_is_recorded(self):
+        # C1 (anexo de G5b): un typedPayload que no cumple el contrato se rechaza con el
+        # contrato en el mensaje (el pump lo vuelve incidente invalid-result) y nada se
+        # graba; las formas válidas de ambos contratos siguen grabándose.
+        for contrato, carga in (
+            ("ready.v1", {"evidenceRef": "evidence.txt"}),
+            ("review.v1", {"verdict": "approved", "evidenceRef": "evidence.txt"}),
+            ("review.v1", {"verdict": "changes", "findingsRef": "evidence.txt"}),
+        ):
+            with self.subTest(contrato=contrato, carga=sorted(carga)):
+                sufijo = contrato + "-" + "-".join(sorted(carga))
+                clave = replace(self.key, task_id=f"task-{sufijo}")
+                operacion = replace(self.operation, key=clave, result_contract=contrato)
+                entregas = []
+                maquina = Host("mac-test", self.root / f"host-{sufijo}")
+                maquina.apply(clave, operacion, lambda ref, sesion: entregas.append(ref), self.admit)
+                asignacion = json.loads(Path(entregas[0]).read_text())
+                cuerpo = dict(
+                    self.report(typedPayload=carga),
+                    taskId=f"task-{sufijo}",
+                )
+                Path(asignacion["resultRef"]).write_text(json.dumps(cuerpo))
+                recibo = maquina.collect("mac-test", clave)
+                self.assertIsNotNone(recibo)
+                self.assertEqual(len(list((maquina.state_dir / "results").glob("*.json"))), 1)
+
+    def test_a_typed_payload_that_breaks_its_contract_becomes_invalid_result(self):
+        # C1 (anexo de G5b): el resultado mal formado sale ValueError nombrando el
+        # contrato — lo que el pump convierte en el incidente invalid-result — y no
+        # queda resultado grabado.
+        for contrato, carga in (
+            ("ready.v1", {"status": "pass"}),
+            ("review.v1", {"schema": "review.v1", "verdict": "approved", "findings": []}),
+        ):
+            with self.subTest(contrato=contrato):
+                maquina = Host("mac-test", self.root / f"host-malo-{contrato}")
+                clave = replace(self.key, task_id=f"task-malo-{contrato}")
+                operacion = replace(self.operation, key=clave, result_contract=contrato)
+                entregas = []
+                maquina.apply(clave, operacion, lambda ref, sesion: entregas.append(ref), self.admit)
+                asignacion = json.loads(Path(entregas[0]).read_text())
+                cuerpo = dict(self.report(typedPayload=carga), taskId=f"task-malo-{contrato}")
+                Path(asignacion["resultRef"]).write_text(json.dumps(cuerpo))
+                with self.assertRaisesRegex(ValueError, f"typedPayload no cumple {contrato}"):
+                    maquina.collect("mac-test", clave)
+                self.assertEqual(list((maquina.state_dir / "results").glob("*.json")), [])
+                # F3: tampoco queda snapshot del artefacto.
+                self.assertEqual(list((maquina.state_dir / "artifacts").rglob("*.bin")), [])
+
     def test_a_cli_result_with_extra_fields_reaches_the_runtime_with_only_its_schema(self):
         # Live canary 2026-10-11: GLM copied claimId into result.v1, and R's strict schema refused the report.
         operation = replace(self.operation, adapter_id="opencode")

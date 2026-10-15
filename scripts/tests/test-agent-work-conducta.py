@@ -245,6 +245,92 @@ class Conducta(unittest.TestCase):
         self.assertIn("resuelta", respuesta["error"])
         self.assertNotIn("razones", respuesta)
 
+    def playbook_de_fixture(self, tmp, nombre="feature.md"):
+        """El playbook del fixture bajo un árbol con contexto/, como lo exige la guarda,
+        con el nombre que la corrida real leyó."""
+        libro = tmp / "contexto" / "skills" / "poteto-mode" / "playbooks" / nombre
+        libro.parent.mkdir(parents=True)
+        shutil.copy(FIXTURAS / "m16b-feature.md", libro)
+        return libro
+
+    def test_the_real_m16b_engineering_run_measures_green_with_its_exclusions(self):
+        # D1 a D4 sobre la corrida real del banco (M-16 corrida 2): la skill cargada con
+        # la herramienta skill cuenta como lectura del paquete, los escritos de la propia
+        # corrida y del artefacto no son cambios, delegar sí lo es, y el primer paso se
+        # compara sin backticks.
+        corrida = (
+            "/private/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T"
+            "/agent-work-banco-rd0b4swq/state/enc-1"
+        )
+        artefacto = (
+            "/private/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T"
+            "/agent-work-banco-rd0b4swq/dev/demo/RESULTADO.md"
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                codigo = conducta.main(
+                    [
+                        "--eventos",
+                        str(FIXTURAS / "m16b-ingenieria.jsonl"),
+                        "--playbook",
+                        str(self.playbook_de_fixture(tmp)),
+                        "--resultado",
+                        str(FIXTURAS / "m16b-ingenieria-RESULTADO.md"),
+                        "--excluir",
+                        corrida,
+                        "--excluir",
+                        artefacto,
+                    ]
+                )
+        self.assertEqual(codigo, 0, out.getvalue())
+        self.assertEqual(json.loads(out.getvalue()), {"ok": True, "razones": []})
+
+    def test_the_real_m16b_control_stays_red_for_the_missing_package_read(self):
+        # El control cargó poteto-mode desde ~/.agents/skills (el global): no cuenta.
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                codigo = conducta.main(
+                    [
+                        "--eventos",
+                        str(FIXTURAS / "m16b-control.jsonl"),
+                        "--playbook",
+                        str(self.playbook_de_fixture(tmp)),
+                        "--resultado",
+                        str(FIXTURAS / "m16b-ingenieria-RESULTADO.md"),
+                        "--excluir",
+                        "/private/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T"
+                        "/agent-work-banco-rd0b4swq/state/enc-1",
+                    ]
+                )
+        self.assertEqual(codigo, 1, out.getvalue())
+        self.assertEqual(
+            json.loads(out.getvalue())["razones"][0],
+            "falta la lectura de contexto/skills/poteto-mode/SKILL.md antes del primer cambio",
+        )
+
+    def test_delegating_counts_as_a_change_so_tests_must_come_after_it(self):
+        # D3: el arreglo lo hizo el hijo del task, y sus eventos no están en este flujo;
+        # el task del padre es el último cambio visible y las pruebas le sigan o no hay.
+        filas = [
+            herramienta("skill", name="poteto-mode", output="cargada"),
+            herramienta("read", filePath="/repo/contexto/skills/poteto-mode/SKILL.md"),
+            herramienta("read", filePath="/repo/contexto/skills/poteto-mode/playbooks/feature.md"),
+            herramienta(
+                "todowrite",
+                todos=[{"content": "how over the affected subsystem.", "status": "pending"}],
+            ),
+            herramienta("bash", command="python3 -m unittest -v", output="OK (1 test)"),
+            herramienta("task", description="arregla saluda()"),
+        ]
+        veredicto = juzgar(filas, resultado="OK (1 test)")
+        self.assertEqual(
+            veredicto, conducta.Veredicto(False, ("no corrió pruebas después del último cambio",))
+        )
+
 
 MODULO_NATIVO = ROOT / "scripts" / "agent-work" / "extraer-nativo.py"
 FIXTURAS = ROOT / "scripts" / "tests" / "fixtures" / "conducta"
@@ -733,18 +819,68 @@ class ExtractorNativo(unittest.TestCase):
         self.assertIn(shlex.quote(base), llamadas)
         self.assertIn(shlex.quote("agent:x:turno"), llamadas)
 
-    def test_without_any_zstd_decoder_it_answers_an_error_and_writes_nothing(self):
+    def test_without_a_decoder_a_json_only_session_still_extracts(self):
+        # B2 (Minor de CodeRabbit en #307): el decodificador se exige solo al llegar una
+        # fila comprimida; una sesión con solo filas event_json se extrae sin zstd.
         especificacion = importlib.util.spec_from_file_location("extraer_nativo", MODULO_NATIVO)
         modulo = importlib.util.module_from_spec(especificacion)
         especificacion.loader.exec_module(modulo)
+        filas = "[filas]\n" + self.cruda("agent:x:turno", 0, 1, {"type": "session", "version": 4})
+
+        def ssh_falso(comando, input=None, capture_output=True, text=True, timeout=None, **kwargs):
+            assert "python3" in comando, comando
+            return subprocess.CompletedProcess(
+                comando, 0, stdout=filas.replace("[filas]\n", ""), stderr=""
+            )
+
         out = io.StringIO()
-        # Si llegara a ssh, el parche revienta: sin decodificador no debió intentar nada.
-        con_ssh_roto = mock.patch.object(
-            modulo.subprocess, "run", side_effect=AssertionError("no debió ssh")
-        )
         with (
             mock.patch.object(modulo, "_decodificador", return_value=None),
-            con_ssh_roto,
+            mock.patch.object(modulo.subprocess, "run", side_effect=ssh_falso),
+            contextlib.redirect_stdout(out),
+        ):
+            codigo = modulo.main(
+                [
+                    "--mini",
+                    MINI,
+                    "--agente",
+                    "x",
+                    "--sesion",
+                    "agent:x:turno",
+                    "--salida",
+                    str(self.salida),
+                ]
+            )
+        self.assertEqual(codigo, 0)
+        filas_escritas = [
+            json.loads(linea) for linea in self.salida.read_text(encoding="utf-8").splitlines()
+        ]
+        self.assertEqual(
+            filas_escritas,
+            [
+                {
+                    "session_key": "agent:x:turno",
+                    "session_id": "s-turno",
+                    "seq": 0,
+                    "created_at": 1,
+                    "event": {"type": "session", "version": 4},
+                }
+            ],
+        )
+
+    def test_without_a_decoder_a_compressed_row_is_an_error_line_and_writes_nothing(self):
+        especificacion = importlib.util.spec_from_file_location("extraer_nativo", MODULO_NATIVO)
+        modulo = importlib.util.module_from_spec(especificacion)
+        especificacion.loader.exec_module(modulo)
+        filas = self.cruda("agent:x:turno", 0, 1, {"type": "session"}, comprimido=True)
+
+        def ssh_falso(comando, input=None, capture_output=True, text=True, timeout=None, **kwargs):
+            return subprocess.CompletedProcess(comando, 0, stdout=filas + "\n", stderr="")
+
+        out = io.StringIO()
+        with (
+            mock.patch.object(modulo, "_decodificador", return_value=None),
+            mock.patch.object(modulo.subprocess, "run", side_effect=ssh_falso),
             contextlib.redirect_stdout(out),
         ):
             codigo = modulo.main(

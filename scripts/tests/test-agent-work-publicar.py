@@ -1021,6 +1021,68 @@ class PublicadorNativo(unittest.TestCase):
         codigo, revertir = self.publicar("revertir")
         self.assertFalse((self.home / ".openclaw" / "skills" / ".poteto-mode.xyz").exists())
 
+    def test_the_restore_of_a_dropped_skill_is_atomic_when_the_copy_fails(self):
+        # B3 (Minor de CodeRabbit en #307): la restauración de una skill que salió del
+        # manifiesto copia a un temporal hermano y entra con os.replace; una copia que
+        # falla a medias no deja destino a medias y la segunda reversa la restaura.
+        self.armar()
+        self.publicar("leer")
+        self.publicar("aplicar")
+        self.armar_sin_skill(2, "principle-x")
+        self.publicar("leer")
+        self.publicar("aplicar")
+        self.assertFalse((self.home / ".openclaw" / "skills" / "principle-x").exists())
+        respaldo = self.home / ".openclaw" / "sua-contexto" / "2" / "skills" / "principle-x"
+        self.assertTrue(respaldo.is_dir())
+        (respaldo / "extra.md").write_bytes(b"otro archivo del respaldo\n")
+        roto = respaldo / "SKILL.md"
+        roto.chmod(0o000)
+        codigo, respuesta = self.publicar("revertir")
+        self.assertEqual(codigo, 3, respuesta)
+        destino = self.home / ".openclaw" / "skills" / "principle-x"
+        self.assertFalse(destino.exists(), "quedó una restauración a medias")
+        self.assertEqual(
+            [
+                p.name
+                for p in destino.parent.iterdir()
+                if p.name.startswith(".") and p.name != ".sua-contexto.json"
+            ],
+            [],
+        )
+        roto.chmod(0o644)
+        codigo, revertir = self.publicar("revertir")
+        self.assertEqual((revertir["conflictos"], codigo), (0, 0))
+        self.assertEqual(revertir["skills"]["principle-x"], "revertido")
+        self.assertEqual(self.skill_del_home("principle-x").read_bytes(), b"principio de juguete\n")
+
+    def test_a_failed_restore_of_a_managed_skill_keeps_the_published_one(self):
+        # F4 (DeepSeek Low): la restauración de una skill administrada con respaldo es
+        # atómica; una copia que falla a medias deja la skill publicada en su sitio y la
+        # segunda reversa restaura sin conflicto.
+        self.armar()
+        self.publicar("leer")
+        self.publicar("aplicar")
+        self.armar_generacion(2, cambios={"skills/poteto-mode/SKILL.md": "poteto v2\n"})
+        self.publicar("leer")
+        self.publicar("aplicar")
+        publicada = self.skill_del_home("poteto-mode").read_bytes()
+        respaldo = self.home / ".openclaw" / "sua-contexto" / "2" / "skills" / "poteto-mode"
+        self.assertTrue(respaldo.is_dir())
+        roto = respaldo / "SKILL.md"
+        roto.chmod(0o000)
+        codigo, respuesta = self.publicar("revertir")
+        self.assertEqual(codigo, 3, respuesta)
+        self.assertEqual(
+            self.skill_del_home("poteto-mode").read_bytes(),
+            publicada,
+            "la skill publicada desapareció con la copia fallida",
+        )
+        roto.chmod(0o644)
+        codigo, revertir = self.publicar("revertir")
+        self.assertEqual((revertir["conflictos"], codigo), (0, 0))
+        self.assertEqual(revertir["skills"]["poteto-mode"], "revertido")
+        self.assertEqual(self.skill_del_home("poteto-mode").read_bytes(), b"poteto de juguete\n")
+
     def test_a_foreign_skill_with_a_managed_name_stops_that_skill(self):
         self.armar()
         ajena = self.home / ".openclaw" / "skills" / "poteto-mode"

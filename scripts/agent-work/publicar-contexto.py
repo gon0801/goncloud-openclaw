@@ -675,7 +675,8 @@ def revertir_en_la_mini(home: Path, agentes_json: Path | None) -> int:
                 conflictos += 1
                 nuevo["skills"].pop(nombre, None)
             else:
-                shutil.copytree(respaldo, destino)
+                # El mismo camino atómico que la restauración de una administrada (F4).
+                respalda_carpeta(respaldo, destino)
                 salida_skills[nombre] = "revertido"
                 nuevo["skills"][nombre] = digest_de_carpeta(destino)
             continue
@@ -689,8 +690,10 @@ def revertir_en_la_mini(home: Path, agentes_json: Path | None) -> int:
             nuevo["skills"][nombre] = estado["skills"][nombre]
             continue
         if respaldo.exists():
-            shutil.rmtree(destino)
-            shutil.copytree(respaldo, destino)
+            # Restauración atómica (F4): respalda_carpeta copia a un temporal hermano y
+            # entra con os.replace; si la copia falla, la skill publicada queda en su
+            # sitio y la reversa puede reintentarse.
+            respalda_carpeta(respaldo, destino)
             salida_skills[nombre] = "revertido"
             nuevo["skills"][nombre] = digest_de_carpeta(destino)
         else:
