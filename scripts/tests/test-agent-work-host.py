@@ -9,12 +9,14 @@ import unittest
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from dataclasses import replace
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts" / "agent-work"))
 
 from contracts import AuthorizedOperation, OperationKey
 from cutover_live import uncertain_operations
+import host
 from host import Host, main as host_main, operation_id
 
 
@@ -478,6 +480,42 @@ class HostReceipts(unittest.TestCase):
         self.assertEqual(self.host.spool.get(op_id)["status"], "delivered")
         self.assertEqual(uncertain_operations([str(self.root / "host")]), [])
         self.assertEqual(self.watch(self.host.spool.delivered_at(op_id) + 60), ["host:2:deadline-missed:deadline"])
+
+
+def git(repo, *args):
+    env = {name: value for name, value in os.environ.items() if not name.startswith("GIT_")}
+    subprocess.run(["git", "-C", str(repo), "-c", "user.name=t", "-c", "user.email=t@example.invalid", *args],
+                   check=True, env=env, capture_output=True)
+
+
+class GitPhoto(unittest.TestCase):
+    """Los comandos git detrás de repo_photo (bots de SUA-03): un git que tarda más de su timeout
+    no se escapa como TimeoutExpired, y las variables de repositorio heredadas no mudan la foto."""
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory(prefix="agent-work-git-")
+        self.addCleanup(tmp.cleanup)
+        self.root = Path(tmp.name)
+        self.repo = self.root / "repo"
+        self.repo.mkdir()
+        git(self.repo, "init", "-q")
+        git(self.repo, "commit", "-q", "--allow-empty", "-m", "base")
+
+    def test_a_timed_out_git_command_raises_oserror_and_not_timeoutexpired(self):
+        with mock.patch.object(host.subprocess, "run",
+                               side_effect=subprocess.TimeoutExpired(cmd="git", timeout=60)):
+            with self.assertRaisesRegex(OSError, "timed out"):
+                host._git(str(self.repo), "rev-parse", "HEAD")
+
+    def test_inherited_git_repository_variables_do_not_move_the_photo(self):
+        other = self.root / "otro"
+        other.mkdir()
+        git(other, "init", "-q")
+        git(other, "commit", "-q", "--allow-empty", "-m", "otro")
+        with mock.patch.dict(os.environ, {"GIT_DIR": str(other / ".git"), "GIT_WORK_TREE": str(other)}):
+            photo = host.repo_photo(str(self.repo))
+        self.assertEqual(photo["head"], host.repo_photo(str(self.repo))["head"],
+                         "the photo followed the inherited GIT_DIR instead of the task's repo")
 
 
 if __name__ == "__main__":

@@ -71,8 +71,19 @@ def writes_source(assignment: dict, *, state_dir: Path | None = None,
     return assignment["resultContract"] != REVIEW_CONTRACT
 
 
+GIT_REPO_VARS = ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_OBJECT_DIRECTORY",
+                 "GIT_ALTERNATE_OBJECT_DIRECTORIES", "GIT_COMMON_DIR")
+"""Variables que mudan el repositorio que un git hijo ve: un host que las herede de su propia
+carga fotografiaría otro árbol aunque el comando lleve -C. _git las quita de cada comando
+(SUA-03, bots: el revisor no puede cambiar el repo del encargo sin cambiar la foto)."""
+
+
 def _git(repo: str, *args: str) -> bytes:
-    done = subprocess.run(["git", "-C", repo, *args], capture_output=True, timeout=60)
+    env = {name: value for name, value in os.environ.items() if name not in GIT_REPO_VARS}
+    try:
+        done = subprocess.run(["git", "-C", repo, *args], capture_output=True, timeout=60, env=env)
+    except subprocess.TimeoutExpired as exc:
+        raise OSError(f"git {args[0]} timed out in {repo}") from exc
     if done.returncode != 0:
         raise OSError(f"git {args[0]} failed in {repo}")
     return done.stdout
