@@ -23,6 +23,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts" / "agent-work"))
@@ -872,6 +873,12 @@ class PublicadorNativo(unittest.TestCase):
                 self.assertTrue(
                     any(MINI in llamada and "agents" in llamada for llamada in llamadas_ssh)
                 )
+                # C6: toda llamada ssh y scp lleva las opciones de no colgarse.
+                for llamada in llamadas_ssh:
+                    if not any("agents" in argumento for argumento in llamada):
+                        continue
+                    for opcion in self.armador.SSH_OPCIONES:
+                        self.assertIn(opcion, llamada)
                 llamadas_scp = self.llamadas(logs / "scp.log")
                 self.assertTrue(
                     any(
@@ -880,6 +887,9 @@ class PublicadorNativo(unittest.TestCase):
                         for llamada in llamadas_scp
                     )
                 )
+                for llamada in llamadas_scp:
+                    for opcion in self.armador.SSH_OPCIONES:
+                        self.assertIn(opcion, llamada)
                 nombre = None
                 for llamada in llamadas_ssh:
                     for arg in llamada:
@@ -887,10 +897,12 @@ class PublicadorNativo(unittest.TestCase):
                         if coincide:
                             nombre = coincide.group(1)
                 self.assertIsNotNone(nombre)
-                # La llamada remota es exactamente la del contrato.
+                # La llamada remota es exactamente la del contrato, con sus opciones y sin
+                # timeout duro (C6): la Mini puede tardar lo que tarde la publicación.
                 self.assertIn(
                     [
                         MINI,
+                        *self.armador.SSH_OPCIONES,
                         "python3",
                         f"/tmp/{nombre}/publicar-contexto.py",
                         "--local",
@@ -900,6 +912,19 @@ class PublicadorNativo(unittest.TestCase):
                     ],
                     llamadas_ssh,
                 )
+
+    def test_the_publisher_answers_a_line_of_json_when_ssh_expires(self):
+        # C6 (DeepSeek F4): un ssh que se pasa del timeout contesta Rechazo (línea JSON,
+        # salida 3) y no un traceback con el candado tomado.
+        self.assertEqual(self.armador.TIMEOUT_AGENTES, 120)
+        self.assertEqual(self.armador.TIMEOUT_SCP, 300)
+        self.assertEqual(self.armador.TIMEOUT_BORRADO, 60)
+        expirado = subprocess.TimeoutExpired(cmd="ssh", timeout=120)
+        with mock.patch.object(self.armador.subprocess, "run", side_effect=expirado):
+            with self.assertRaises(self.armador.Rechazo):
+                self.armador.agentes_por_ssh(MINI)
+            with self.assertRaises(self.armador.Rechazo):
+                self.armador.listar_agentes(None)
 
     def test_the_mac_half_refuses_a_source_that_disagrees_with_the_manifest(self):
         # S4 del veredicto r1: la mitad Mac valida cada archivo de la fuente contra el
@@ -1035,7 +1060,10 @@ class PublicadorNativo(unittest.TestCase):
                         self.assertNotIn("rm", llamada)
                 else:
                     self.assertIsNotNone(nombre)
-                    self.assertIn([MINI, "rm", "-rf", f"/tmp/{nombre}"], llamadas_ssh)
+                    self.assertIn(
+                        [MINI, *self.armador.SSH_OPCIONES, "rm", "-rf", f"/tmp/{nombre}"],
+                        llamadas_ssh,
+                    )
 
     def llamadas(self, registro):
         """Las llamadas de un log de juguete: argumentos por línea, --- entre llamadas."""
