@@ -7,6 +7,8 @@
 #   3. Datos que no son gzip o llegan truncados: sale 3 y no queda archivo ni temporal.
 #   4. Retención: 7 de cada prefijo en openclaw (uno no poda al otro); el mismo día reemplaza.
 #   5. hermes: hermes-backup en hermes/ (7) y el nombre viejo claw-backup en claw/ (8).
+#   5b. Fecha del nombre: acepta de hoy-60 a hoy+1 (también cruzando mes y año); fuera de
+#       eso sale 2 sin escribir nada.
 #   6. Vigía: todo al día no avisa ni imprime nada.
 #   7. Vigía: falta, viejo y encogido van en un solo aviso HTML escapado al chat del env.
 #   8. Vigía: si Telegram falla sale 2 y el token no aparece en ninguna salida.
@@ -31,7 +33,8 @@ head -c 40 "$SB/bueno.tar.gz" > "$SB/truncado.tar.gz"
 printf 'esto no es gzip\n' > "$SB/basura"
 
 recibir() { # $1 familia, $2 nombre, $3 archivo -> stdout en $SB/out, stderr en $SB/err
-  SSH_ORIGINAL_COMMAND="$2" RECIBE_BASE="$B" sh "$R" "$1" < "$3" > "$SB/out" 2> "$SB/err"
+  SSH_ORIGINAL_COMMAND="$2" RECIBE_BASE="${BASE_PRUEBA:-$B}" RECIBE_HOY="${HOY:-20261015}" \
+    sh "$R" "$1" < "$3" > "$SB/out" 2> "$SB/err"
 }
 
 # 1
@@ -86,6 +89,22 @@ done
 [ "$(ls "$B/hermes" | wc -l | tr -d ' ')" = 7 ] || fail "hermes/ no guardó 7: $(ls "$B/hermes" | tr "\n" " ")"
 [ "$(ls "$B/claw" | wc -l | tr -d ' ')" = 8 ] || fail "claw/ no guardó 8: $(ls "$B/claw" | tr "\n" " ")"
 [ -e "$B/claw/claw-backup-20261002.tar.gz" ] || fail "claw/ borró uno de los 8 más nuevos"
+
+# 5b
+for caso in "20261015 20261016 si" "20261015 20260816 si" "20261015 20261017 no" "20261015 20260815 no" \
+            "20261015 20991231 no" "20270101 20261102 si" "20270101 20261101 no" "20270101 20270102 si"; do
+  set -- $caso  # shellcheck disable=SC2086
+  rm -rf "$SB/fechas"
+  BASE_PRUEBA="$SB/fechas" HOY="$1" recibir openclaw "openclaw-backup-$2.tar.gz" "$SB/bueno.tar.gz"; rc=$?
+  if [ "$3" = si ]; then
+    [ "$rc" -eq 0 ] || fail "hoy $1: rechazó la fecha $2 (rc=$rc): $(cat "$SB/err")"
+    [ -f "$SB/fechas/openclaw/openclaw-backup-$2.tar.gz" ] || fail "hoy $1: no guardó la fecha $2"
+  else
+    [ "$rc" -eq 2 ] || fail "hoy $1: aceptó la fecha $2 (rc=$rc)"
+    grep -q "fecha fuera de rango" "$SB/err" || fail "hoy $1: rechazo de $2 sin causa: $(cat "$SB/err")"
+    [ ! -e "$SB/fechas" ] || fail "hoy $1: la fecha $2 dejó algo escrito: $(find "$SB/fechas")"
+  fi
+done
 
 # Vigía. Telegram de mentira en 127.0.0.1: registra cada POST y responde ok, o 500 si existe $SB/tg-falla.
 cat > "$SB/tg.py" <<'E'

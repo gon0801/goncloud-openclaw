@@ -80,7 +80,7 @@ case "\${FAKE_SSH:-}" in
   mudo) exec sleep 30 ;;
   sha-malo) cat > /dev/null; echo 0000; exit 0 ;;
 esac
-SSH_ORIGINAL_COMMAND="\$nombre" RECIBE_BASE="$SB/servidor" sh "$RECEPTOR" openclaw
+SSH_ORIGINAL_COMMAND="\$nombre" RECIBE_BASE="$SB/servidor" RECIBE_HOY=$F sh "$RECEPTOR" openclaw
 EOS
 chmod +x "$SB/ssh"
 
