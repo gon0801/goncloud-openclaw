@@ -42,7 +42,17 @@ exec >>"$RC_LOG" 2>&1
 log() { printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*"; }
 FALLAS=""
 falla() { FALLAS="${FALLAS:+$FALLAS; }$*"; log "FALLA: $*"; }
-con_tope() { /usr/bin/perl -e 'alarm shift; exec @ARGV or exit 127' "$@"; }
+# En segundo plano y con `wait` para que una señal a la corrida se atienda en el acto y
+# no al terminar el hijo (una subida puede durar 30 min). `<&0` le pasa el stdin que el
+# `&` cambiaría por /dev/null. El 2>/dev/null de `wait` calla el "Alarm clock" que bash
+# imprime al vencer el tope, para que no se mezcle con el error de ssh.
+HIJO=""
+con_tope() {
+  local rc
+  /usr/bin/perl -e 'alarm shift; exec @ARGV or exit 127' "$@" <&0 &
+  HIJO=$!; wait "$HIJO" 2>/dev/null; rc=$?; HIJO=""
+  return "$rc"
+}
 sha256() { shasum -a 256 "$1" | cut -d' ' -f1; }
 
 avisar() {
@@ -58,13 +68,19 @@ avisar() {
   log "no se pudo avisar"
 }
 # El aviso sale una vez, al terminar, con todas las causas. El lock de otra corrida
-# viva (3) no es una falla del respaldo.
+# viva (3) no es una falla del respaldo. Lo pesado se borra antes de avisar: tras un
+# SIGTERM, launchd manda SIGKILL a los 20 s.
 al_salir() {
   local rc=$?
+  [ -z "$HIJO" ] || kill "$HIJO" 2>/dev/null
   rm -rf "${TMP:-}" "${LOCK_PROPIO:-}"
   case "$rc" in 0|3) ;; *) avisar "${FALLAS:-salida inesperada (rc=$rc)}" ;; esac
 }
 trap al_salir EXIT
+for senal in HUP INT TERM; do
+  # shellcheck disable=SC2064  # la señal se fija al poner la trampa
+  trap "falla 'corrida interrumpida por SIG$senal'; exit 1" "$senal"
+done
 
 LOCK="$RC_DIR/.lock"
 # Identidad de un proceso = PID + hora de inicio: tras un reinicio el PID de una
@@ -82,6 +98,12 @@ if ! mkdir "$LOCK" 2>/dev/null; then
 fi
 identidad $$ > "$LOCK/dueno"
 LOCK_PROPIO="$LOCK"
+# Con el lock tomado, un temporal que quede es de una corrida que murió sin limpiar
+# (SIGKILL o apagón) y puede pesar 3.9 GB.
+for viejo in "$RC_DIR"/.tmp.*; do
+  [ -e "$viejo" ] || continue
+  rm -rf "$viejo"; log "temporal de una corrida anterior borrado: $(basename "$viejo")"
+done
 TMP="$(mktemp -d "$RC_DIR/.tmp.XXXXXX")"
 log "inicio $RC_FECHA"
 
@@ -91,10 +113,10 @@ subir() {
   nombre="$(basename "$archivo")"; local_sha="$(sha256 "$archivo")"
   while :; do
     host="$(echo "$RC_SERVIDORES" | awk -v i="$intento" '{ print $((i - 1) % NF + 1) }')"
-    remoto="$(con_tope "$RC_TOPE" "$RC_SSH" -i "$RC_LLAVE" -o IdentitiesOnly=yes -o BatchMode=yes \
+    con_tope "$RC_TOPE" "$RC_SSH" -i "$RC_LLAVE" -o IdentitiesOnly=yes -o BatchMode=yes \
       -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20 -o ServerAliveInterval=15 \
-      -o ServerAliveCountMax=4 "$RC_USUARIO@$host" "$nombre" < "$archivo" 2> "$TMP/ssh.err")"
-    rc=$?
+      -o ServerAliveCountMax=4 "$RC_USUARIO@$host" "$nombre" < "$archivo" > "$TMP/ssh.out" 2> "$TMP/ssh.err"
+    rc=$?; remoto="$(cat "$TMP/ssh.out")"
     if [ "$rc" -eq 0 ] && [ "$remoto" = "$local_sha" ]; then
       log "$nombre: subido a $host ($(du -h "$archivo" | cut -f1), sha256 $local_sha)"; return 0
     elif [ "$rc" -eq 0 ]; then

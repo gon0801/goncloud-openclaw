@@ -17,6 +17,9 @@
 #   9. Una subida muda no retiene la corrida: cada intento tiene tope.
 #  10. El plist, con la plantilla llena, es válido: 03:30, PATH con node, apunta al script.
 #  11. Un extra que tar no puede leer: dos intentos, falla y avisa; el backup igual sube.
+#  12. SIGTERM a media subida: sale en el acto por la limpieza, mata la subida, no deja
+#      temporal ni lock, y avisa la causa.
+#  13. SIGKILL a media subida deja el temporal; la corrida siguiente lo borra.
 #
 # Corre el script con /bin/bash: en macOS es el 3.2 de la Mini.
 # Uso: bash scripts/tests/test-respaldo-completo.sh
@@ -77,7 +80,7 @@ printf '%s\n' "\$*" >> "$SB/ssh-llamadas"
 for a in "\$@"; do host="\$nombre"; nombre="\$a"; done
 if [ "\$n" -le "\${FAKE_SSH_FALLAS:-0}" ]; then cat > /dev/null; echo "ssh: connect to host \${host#*@}: Network is unreachable" >&2; exit 255; fi
 case "\${FAKE_SSH:-}" in
-  mudo) exec sleep 30 ;;
+  mudo) echo \$\$ > "$SB/ssh-pid"; exec sleep 30 ;;
   sha-malo) cat > /dev/null; echo 0000; exit 0 ;;
 esac
 SSH_ORIGINAL_COMMAND="\$nombre" RECIBE_BASE="$SB/servidor" RECIBE_HOY=$F sh "$RECEPTOR" openclaw
@@ -88,6 +91,14 @@ correr() { # variables extra como argumentos de env
   rm -f "$SB/ssh-n"
   env HOME="$H" RC_DIR="$SB/local" RC_LOG="$SB/log" RC_FECHA="$F" OPENCLAW_BIN="$SB/openclaw" \
     RC_SSH="$SB/ssh" RC_ESPERA=0 RC_LLAVE="$H/.ssh/claw_goncloud" "$@" /bin/bash "$S"
+}
+lanzar() { # como correr, en segundo plano; deja el pid del script en PID
+  rm -f "$SB/ssh-n" "$SB/ssh-pid"
+  env HOME="$H" RC_DIR="$SB/local" RC_LOG="$SB/log" RC_FECHA="$F" OPENCLAW_BIN="$SB/openclaw" \
+    RC_SSH="$SB/ssh" RC_ESPERA=0 RC_LLAVE="$H/.ssh/claw_goncloud" "$@" /bin/bash "$S" &
+  PID=$!
+  for _ in $(seq 100); do [ -s "$SB/ssh-pid" ] && return 0; sleep 0.1; done
+  fail "la corrida no llegó a la subida"
 }
 avisos() { [ -f "$SB/avisos" ] && wc -l < "$SB/avisos" | tr -d ' ' || echo 0; }
 L="$SB/local"; SV="$SB/servidor/openclaw"
@@ -204,6 +215,28 @@ grep -q "FALLA: no se pudo armar los extras: .*ilegible" "$SB/log" || fail "el l
 [ -e "$SV/openclaw-extras-$F.tar.gz" ] && fail "se subieron extras incompletos"
 [ -f "$SV/openclaw-backup-$F.tar.gz" ] || fail "con los extras rotos el backup no se subió"
 [ "$(avisos)" = 1 ] || fail "los extras rotos no avisaron exactamente una vez"
+
+# 12
+rm -rf "$SB/servidor" "$L"; rm -f "$SB/avisos"
+lanzar FAKE_SSH=mudo RC_TOPE=60
+ls -d "$L"/.tmp.* > /dev/null 2>&1 || fail "no había temporal a media subida"
+t0=$(date +%s); kill -TERM "$PID"; wait "$PID"; rc=$?
+[ "$rc" -eq 1 ] || fail "SIGTERM a media subida no salió 1 (rc=$rc)"
+[ $(( $(date +%s) - t0 )) -lt 10 ] || fail "SIGTERM esperó a que terminara la subida"
+kill -0 "$(cat "$SB/ssh-pid")" 2>/dev/null && { kill "$(cat "$SB/ssh-pid")"; fail "SIGTERM dejó viva la subida"; }
+ls -A "$L" | grep -q '^\.' && fail "SIGTERM dejó: $(ls -A "$L" | grep '^\.' | tr '\n' ' ')"
+[ "$(avisos)" = 1 ] || fail "SIGTERM no avisó exactamente una vez: $(avisos)"
+grep -q "falló: corrida interrumpida por SIGTERM\. Revisa" "$SB/avisos" || fail "el aviso no dice que fue SIGTERM: $(cat "$SB/avisos")"
+
+# 13
+rm -f "$SB/avisos"
+lanzar FAKE_SSH=mudo RC_TOPE=60
+kill -KILL "$PID"; wait "$PID" 2>/dev/null; kill "$(cat "$SB/ssh-pid")" 2>/dev/null
+set -- "$L"/.tmp.*
+[ -d "$1" ] || fail "SIGKILL no dejó temporal"
+correr || { cat "$SB/log"; fail "la corrida tras un SIGKILL falló"; }
+ls -A "$L" | grep -q '^\.' && fail "la corrida tras un SIGKILL dejó: $(ls -A "$L" | grep '^\.' | tr '\n' ' ')"
+grep -q "temporal de una corrida anterior borrado: $(basename "$1")" "$SB/log" || fail "el log no dice qué temporal viejo borró"
 
 # 10
 sed -e "s|__HOME__|/Users/gon|g" -e "s|__NODE_BIN__|/Users/gon/.openclaw/tools/node-v24.19.0/bin|g" "$P" > "$SB/p.plist"
