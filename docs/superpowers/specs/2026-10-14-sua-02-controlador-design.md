@@ -602,7 +602,7 @@ Las pruebas de R son de `vitest` y llaman las herramientas o las órdenes como l
 
 ## 6. El corte en rebanadas
 
-Diez rebanadas de R (R0 a R9) y tres de G. <!-- corr: DeepSeek #298 F3 --> Cada una trae su prueba y deja verde lo anterior.
+Once rebanadas de R (R0 a R10) y tres de G. <!-- corr: DeepSeek #298 F3 --> Cada una trae su prueba y deja verde lo anterior.
 
 **Dónde se corre.** Como en SUA-01: `RWT` es el worktree de R de la rebanada, con su `pnpm install` y su `pnpm build`. `GWT` es un checkout de G en `origin/main` con el diseño mergeado. Antes de correr nada, `git -C "$RWT" rev-parse HEAD` imprime el SHA de la rebanada.
 
@@ -621,6 +621,7 @@ Diez rebanadas de R (R0 a R9) y tres de G. <!-- corr: DeepSeek #298 F3 --> Cada 
 | R7 | Restringir | `restrictManagedRootAuthority` y el despertar tras `resume` o restricción del operador | `managed-root.authority.test.ts` | No |
 | R8 | Controlador | `reconcileManagedRoot` y el residual 1 | `managed-root.controller.test.ts` | No |
 | R9 | Herramientas | Las seis herramientas, `rootRequesters`, los textos de despertar de raíz, la prueba de redacción | `managed-roots-tool.test.ts`, `openclaw-tools.managed-tools.test.ts`, la tabla de redacción | Sí: la lista de herramientas y la configuración |
+| R10 | La guarda del registro fallido, pineada | La prueba que pinea la guarda de R8 (solo la admisión de una raíz asienta un registro fallido), el comentario que la nombra en `spawn-pipeline.ts` y la línea base de configuración regenerada | `managed-root.native-registry.test.ts`, con sus dos mutaciones en rojo | Sí, por el comentario |
 | G2 | Skill e importador | `raiz/SKILL.md` (no se publica en la Mini), `importar_plans.py` con su entrada en `ruff.toml` y en los hooks | `test-sistema-agentes-importar.py`, `pre-commit` | No |
 | G3 | Casos en G y cierre | `raiz_controlador` en `test-agent-work-e2e.sh`, los tres casos de `test-runtime.sh`, `runtime-map.json`, `sombra.mjs` y su prueba, la corrida de la sombra, el recibo `SUA-02.md` | Cada caso corre su archivo de R | No |
 
@@ -630,17 +631,17 @@ Diez rebanadas de R (R0 a R9) y tres de G. <!-- corr: DeepSeek #298 F3 --> Cada 
 - **G1 va antes que R3.** La prueba de R compara su tabla con el fixture de G.
 - **R3 no depende de nada nuevo.** Es puro. Se puede escribir en paralelo con R1 y R2. Su merge espera, como todas.
 - **El esquema entra completo en R4**, como en SUA-01. Las tablas perezosas no existen en la Mini hasta que alguien abra una raíz, y nadie puede hasta SUA-09O.
-- **R9 es la última de R.** Es la única que cambia lo que `main` ve, y su prueba compara la lista de herramientas con la de hoy.
+- **R10 es la última de R.** Solo agrega la prueba que pinea la guarda y la línea base regenerada. R9 es la que cambia lo que `main` ve, y su prueba compara la lista de herramientas con la de hoy.
 
-### Instalación en la Mini: una, después de R9
+### Instalación en la Mini: una, después de R10
 
-R1, R2 y R9 tocan código que corre la ruta viva. Las demás solo corren para una raíz, y en producción no hay raíces. En SUA-01 hubo dos instalaciones para separar la ruta viva de lo nuevo. Aquí la última rebanada que toca la ruta viva es también la última de R, así que una instalación basta. Instalar tras R2 probaría solo el traslado de la admisión, que `ruta_viva` ya prueba en local.
+R1, R2 y R9 tocan código que corre la ruta viva. Las demás solo corren para una raíz, y en producción no hay raíces. En SUA-01 hubo dos instalaciones para separar la ruta viva de lo nuevo. Aquí la última rebanada que toca la ruta viva es R9 y la última de R, R10, solo pinea la guarda y la línea base, así que una instalación basta. Instalar tras R2 probaría solo el traslado de la admisión, que `ruta_viva` ya prueba en local.
 
 Sigue la "Regla de instalación en vivo": a cualquier hora, en un hueco sin turnos, crons ni encargos en vuelo, hasta 20 minutos de espera, con foto y reversa listas, con un `t12-actualizar-<sha>.sh` como el de SUA-01. Antes, la T11-c con el paquete instalado de `65432d0` sobre una base sembrada con las trece tablas, una raíz, una excepción y una restricción.
 
 | Comprobación | Comando en la Mini | Esperado |
 |---|---|---|
-| El binario es el de R9 | `cat ~/.openclaw/tools/node-v24.19.0/lib/node_modules/openclaw/dist/build-info.json` | `commit` igual al SHA mergeado |
+| El binario es el de R10 | `cat ~/.openclaw/tools/node-v24.19.0/lib/node_modules/openclaw/dist/build-info.json` | `commit` igual al SHA mergeado |
 | La versión del esquema no se movió | `sqlite3 'file:/Users/gon/.openclaw/state/openclaw.sqlite?mode=ro' "PRAGMA user_version"` con el gateway arriba | `27` |
 | No apareció ninguna tabla de raíz | `sqlite3 'file:…?mode=ro' "select count(*) from sqlite_master where name like 'managed_root%'"` | `0` |
 | La configuración no tiene la llave | `openclaw gateway call config.get --params '{}' --json` y leer `managedTasks` | Sin `rootRequesters` |

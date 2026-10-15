@@ -8,9 +8,10 @@ entrada estándar. Las reglas:
   segunda columna) hasta el primer punto, sin las marcas `[...]` del inicio ni los `**`.
 - `dependsOn` son las filas de su columna Depends que también se eligieron. Una dependencia que
   no se eligió y está cerrada (`cc:完了`) es un supuesto. Abierta, el importador falla: la raíz
-  no puede esperar una fila que nadie va a hacer. Depends lleva ids, rangos (`6.0–6.8`, las filas
-  del ledger entre los dos extremos), separadores (`,`, `;`, `y`), `-` y notas entre paréntesis.
-  Cualquier otra cosa es una condición que el importador no sabe leer, y falla con ella.
+  no puede esperar una fila que nadie va a hacer. Depends lleva ids, rangos (`6.0–6.8`, las
+  filas del ledger entre los dos extremos, con guion `-` o raya `–`), separadores (`,`, `;`,
+  `y`), marcas de celda vacía (`-`, `–`, `—`) y notas entre paréntesis. Cualquier otra cosa es
+  una condición que el importador no sabe leer, y falla con ella.
 - Elegir cero filas falla: un plan sin unidades es `plan-invalid` en R.
 - Cada cláusula de la compuerta verificable (la tercera columna), separada por `;`, es un
   criterio literal con rol `verifier`, con id `<fila>-<n>`. Una celda puede llevar `\\|`: es un
@@ -39,7 +40,7 @@ ID = re.compile(r"\d+\.\d+[a-z]?")
 # Un rango `6.0–6.8` (raya o guion) o un id suelto, en el orden de la celda.
 PIEZA = re.compile(r"(\d+\.\d+[a-z]?)\s*[–-]\s*(\d+\.\d+[a-z]?)|\d+\.\d+[a-z]?")
 NOTA = re.compile(r"\([^)]*\)")
-SIN_DEPENDENCIA = {"", "-", "—", "y"}
+SIN_DEPENDENCIA = {"", "-", "–", "—", "y"}
 MARCAS = re.compile(r"^(?:\s*`[^`]*`)+\s*")
 CERRADA = "cc:完了"
 # La regla de R para partir el pedido en frases: un salto de línea, o un punto seguido de espacio.
@@ -73,7 +74,8 @@ def frases(texto: str) -> list[str]:
 
 def filas_de(texto: str) -> dict[str, list[str]]:
     """Las filas del ledger: su id y sus columnas, que en el ledger son entrega, compuerta,
-    depends y estado. Si un id sale en varias tablas, gana su fila de cuatro columnas."""
+    depends y estado. Si un id sale en varias tablas, gana su fila de cuatro columnas, y el
+    orden de los ids es el de esa fila, no el de su primera aparición."""
     filas: dict[str, list[str]] = {}
     for linea in texto.splitlines():
         coincide = FILA.match(linea)
@@ -81,6 +83,7 @@ def filas_de(texto: str) -> dict[str, list[str]]:
             continue
         columnas = [c.strip().replace("\\|", "|") for c in BORDE.split(coincide.group(2))]
         if len(filas.get(coincide.group(1), [])) != 4:
+            filas.pop(coincide.group(1), None)
             filas[coincide.group(1)] = columnas
     return filas
 

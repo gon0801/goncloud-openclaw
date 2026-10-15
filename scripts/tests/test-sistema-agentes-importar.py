@@ -19,6 +19,9 @@ from sistema_agentes.importar_plans import (  # noqa: E402
     FilaMalFormada,
     PedidoVacio,
     SinFilas,
+    dependencias,
+    fila,
+    filas_de,
     frases,
     importar,
     main,
@@ -26,6 +29,7 @@ from sistema_agentes.importar_plans import (  # noqa: E402
 
 FIXTURE = ROOT / "scripts/tests/fixtures/importar-plans"
 PLANS = (FIXTURE / "Plans.md").read_text(encoding="utf-8")
+PLANS_REAL = (ROOT / "Plans.md").read_text(encoding="utf-8")
 ALCANCE = "owner-01/repo-a"
 PEDIDO = "Haz las filas 7.2 y 7.3."
 
@@ -194,6 +198,82 @@ class Importar(unittest.TestCase):
             importar(
                 PLANS.replace("| - | cc:完了 |", "| 7.3–7.2 | cc:完了 |"), ["7.1"], ALCANCE, PEDIDO
             )
+
+    def test_un_id_repetido_en_una_resumen_anterior_no_mueve_a_nadie(self):
+        plan = importar(
+            PLANS, ["7.11", "7.12", "7.1", "7.2", "7.3", "7.4", "7.5"], ALCANCE, PEDIDO
+        )["plan"]
+        self.assertEqual(
+            [(u["unitId"], u["dependsOn"]) for u in plan["units"]],
+            [
+                ("7.11", ["7.1", "7.2", "7.3", "7.4", "7.5"]),
+                ("7.12", ["7.2", "7.3", "7.4"]),
+                ("7.1", []),
+                ("7.2", ["7.1"]),
+                ("7.3", ["7.2", "7.1"]),
+                ("7.4", []),
+                ("7.5", ["7.4"]),
+            ],
+        )
+        self.assertEqual(plan["assumptions"], [])
+
+    def test_las_dependencias_de_las_filas_9_7_y_9_9_del_plans_real_son_completas(self):
+        filas = filas_de(PLANS_REAL)
+        orden = list(filas)
+        self.assertEqual(
+            dependencias("9.7", fila(filas, "9.7")[2], orden),
+            ["9.2", "9.3", "9.4", "9.5", "9.6"],
+        )
+        self.assertEqual(
+            dependencias("9.9", fila(filas, "9.9")[2], orden),
+            ["9.0", "9.1", "9.2", "9.3", "9.4", "9.5", "9.6", "9.7", "9.8"],
+        )
+
+    def test_importar_las_filas_9_7_y_9_9_del_plans_real(self):
+        plan = importar(PLANS_REAL, ["9.7", "9.5", "9.4", "9.1"], ALCANCE, "Haz la 9.7.")["plan"]
+        por_id = {u["unitId"]: u for u in plan["units"]}
+        self.assertEqual(por_id["9.7"]["dependsOn"], ["9.4", "9.5"])
+        self.assertEqual(por_id["9.5"]["dependsOn"], ["9.4"])
+        self.assertEqual(por_id["9.4"]["dependsOn"], ["9.1"])
+        self.assertEqual(
+            plan["assumptions"],
+            [
+                "La fila 9.2 está cerrada.",
+                "La fila 9.3 está cerrada.",
+                "La fila 9.6 está cerrada.",
+            ],
+        )
+
+        plan = importar(
+            PLANS_REAL, ["9.9", "9.0", "9.5", "9.8", "9.4", "9.1"], ALCANCE, "Haz la 9.9."
+        )["plan"]
+        por_id = {u["unitId"]: u for u in plan["units"]}
+        self.assertEqual(por_id["9.9"]["dependsOn"], ["9.0", "9.1", "9.4", "9.5", "9.8"])
+        self.assertEqual(
+            plan["assumptions"],
+            [
+                "La fila 9.2 está cerrada.",
+                "La fila 9.3 está cerrada.",
+                "La fila 9.6 está cerrada.",
+                "La fila 9.7 está cerrada.",
+            ],
+        )
+        self.assertEqual(por_id["9.8"]["dependsOn"], ["9.5"])
+
+    def test_una_raya_corta_suelta_es_sin_dependencia(self):
+        plan = importar(
+            PLANS.replace("| - | cc:完了 |", "| – | cc:完了 |"), ["7.1"], ALCANCE, PEDIDO
+        )["plan"]
+        self.assertEqual(plan["units"][0]["dependsOn"], [])
+
+    def test_un_guion_espaciado_es_un_rango(self):
+        plan = importar(
+            PLANS.replace("| 7.1; 7.2 (implementación) |", "| 7.2 - 7.3 |"),
+            ["7.2", "7.3", "7.9"],
+            ALCANCE,
+            PEDIDO,
+        )["plan"]
+        self.assertEqual(plan["units"][2]["dependsOn"], ["7.2", "7.3"])
 
     def test_sin_filas_elegidas_falla_antes_de_armar_un_plan_vacio(self):
         with self.assertRaisesRegex(SinFilas, "^no se eligió ninguna fila$"):
