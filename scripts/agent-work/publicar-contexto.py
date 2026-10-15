@@ -495,6 +495,27 @@ def aplicar_en_la_mini(publicacion: Path, home: Path, agentes_json: Path | None)
     nuevos_bloques = dict(estado["bloques"])
     nuevos_workspaces = dict(estado["workspaces"])
     nuevas_skills = dict(estado["skills"])
+    for nombre in sorted(set(estado["skills"]) - set(nombres)):
+        # Una skill administrada que esta generación ya no trae (fila L2 de G5): sale del
+        # home con respaldo para la reversa, o conflicto si cambió después de publicar.
+        destino = skills_dir / nombre
+        if not destino.exists():
+            salida_skills[nombre] = "quitado"
+            nuevas_skills.pop(nombre, None)
+            continue
+        if digest_de_carpeta(destino) != estado["skills"][nombre]:
+            salida_skills[nombre] = "conflicto: cambió después de publicar"
+            conflictos += 1
+            continue
+        respaldo = suya / gen / "skills" / nombre
+        respaldo.parent.mkdir(parents=True, exist_ok=True)
+        if respaldo.exists():
+            shutil.rmtree(respaldo)
+        shutil.copytree(destino, respaldo)
+        shutil.rmtree(destino)
+        salida_skills[nombre] = "quitado"
+        nuevas_skills.pop(nombre, None)
+
     for agente in agentes:
         identificador = agente["id"]
         ruta = Path(agente["workspace"]) / "AGENTS.md"
@@ -550,6 +571,7 @@ def aplicar_en_la_mini(publicacion: Path, home: Path, agentes_json: Path | None)
     cambios = (
         conflictos > 0
         or "publicado" in salida_skills.values()
+        or "quitado" in salida_skills.values()
         or ("publicado" in salida_agentes.values())
     )
     # El estado anterior de la generación es el estado tal como estaba antes de esta
@@ -600,9 +622,25 @@ def revertir_en_la_mini(home: Path, agentes_json: Path | None) -> int:
     anterior_path = suya / gen / "estado-anterior.json"
     anterior = leer_json(anterior_path) if anterior_path.exists() else estado_vacio()
     nuevo = copy.deepcopy(anterior)
-    for nombre in sorted(estado["skills"]):
+    respaldos = suya / gen / "skills"
+    nombres_en_respaldo = (
+        {p.name for p in respaldos.iterdir() if p.is_dir()} if respaldos.is_dir() else set()
+    )
+    for nombre in sorted(set(estado["skills"]) | nombres_en_respaldo):
         destino = skills_dir / nombre
         respaldo = suya / gen / "skills" / nombre
+        if nombre not in estado["skills"]:
+            # La generación la quitó (solo vive como respaldo): vuelve si nadie ocupa su
+            # nombre; algo ajeno ahí dentro no se toca (4.3).
+            if destino.exists():
+                salida_skills[nombre] = "conflicto: no es del publicador"
+                conflictos += 1
+                nuevo["skills"].pop(nombre, None)
+            else:
+                shutil.copytree(respaldo, destino)
+                salida_skills[nombre] = "revertido"
+                nuevo["skills"][nombre] = digest_de_carpeta(destino)
+            continue
         if not respaldo.exists() and nombre in anterior["skills"]:
             salida_skills[nombre] = "igual"
             nuevo["skills"][nombre] = estado["skills"][nombre]
