@@ -63,9 +63,14 @@ def writes_source(assignment: dict, *, state_dir: Path | None = None,
     """Whether a run may write its task's repo. A run with a package follows what the HOST recorded
     of its profile at launch, in sessions/<op>/contexto.json (SUA-03, 4.8). That file is not out of
     the session's reach: the run's shell is unconfined (docs/evidence/agent-work/coverage.json,
-    directoryGuard.limitation), so the launcher contrasts the record with the profile it re-reads
-    from its own checkout on every pass, the checkout wins, and the recorded value stays noted
-    (writesSourceRecorded). What the session could edit decides nothing on its own. A run without a
+    directoryGuard.limitation), so what it reads here is only as recorded while the host last wrote
+    it. What keeps the record honest is split in two. On the claim side, the launcher contrasts the
+    record with the profile it re-reads from its own checkout on every claim pass, the checkout
+    wins, and the recorded value stays noted (writesSourceRecorded) — a repeated claim after a dead
+    host included. On the result side, Host.report reviews a run the host launched with a photo
+    whatever the record says by then: the photo's existence is the launch decision. What no fix
+    closes, the same directoryGuard.limitation: an unconfined session can delete
+    sessions/<op>/repo_before.json and turn its result back into this rule. A run without a
     package keeps the G2 rule: a review never does and everything else may, as today."""
     if state_dir is not None and operation is not None:
         launched = _json_recorded(SessionRecord.locate(state_dir, operation_id(operation)).context)
@@ -501,8 +506,15 @@ class Host:
                 raise ValueError("recorded artifact snapshot missing")
             # A run-per-task operation keeps its result in its own run folder (RunDir).
             run_folder = Path(assignment["resultRef"]).parent
-            reviewed = run_folder == self.state_dir / "runs" / op_id and not writes_source(
-                assignment, state_dir=self.state_dir, operation=key)
+            # La decisión de lanzamiento no se re-lee de un archivo que la sesión pudo editar
+            # durante su corrida: una foto previa solo se escribe cuando el host lanzó al revisor
+            # sin permiso de escritura, así que su existencia ES esa decisión y el resultado se
+            # compara con ella pase lo que pase con lo anotado. Sin foto previa (una carpeta que
+            # no es repo git, un host anterior a SUA-03) sigue la regla del contrato.
+            record = SessionRecord.locate(self.state_dir, op_id)
+            reviewed = run_folder == self.state_dir / "runs" / op_id and (
+                record.repo_before.exists() or not writes_source(
+                    assignment, state_dir=self.state_dir, operation=key))
             if reviewed:
                 self._check_repo(op_id)
             home = str(run_folder) if reviewed else assignment["workspaceRef"]

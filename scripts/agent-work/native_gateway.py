@@ -406,11 +406,14 @@ def build_clone(repository: str, sha: str, destino: Path) -> None:
 
 
 def contrastar_writes_source(record: SessionRecord, perfil: dict) -> None:
-    """Lo anotado de writesSource contrastado con el perfil que esta pasada volvió a leer del
-    checkout. La sesión no queda confinada (docs/evidence/agent-work/coverage.json,
-    directoryGuard.limitation), así que sessions/<op>/contexto.json está a su alcance y lo que ella
-    pudo editar no decide sola: si difieren, gana el checkout — el registro se reescribe con su
-    valor y el anotado queda guardado en writesSourceRecorded."""
+    """Lo anotado de writesSource contrastado con el perfil que esta pasada de reclamación volvió a
+    leer del checkout. Cubre el lado de la reclamación — también la repetida tras la muerte del
+    host, con una sesión viva de un intento anterior —: si difieren, gana el checkout, el registro
+    se reescribe con su valor y el anotado queda guardado en writesSourceRecorded. No cubre el
+    volteo durante la corrida: de ese responde el reporte, que siempre revisa a quien el host
+    lanzó con foto previa. La sesión no queda confinada (docs/evidence/agent-work/coverage.json,
+    directoryGuard.limitation), y el hueco que queda abierto es ese mismo: una sesión sin confinar
+    puede borrar sessions/<op>/repo_before.json y con ello la foto que decide el reporte."""
     try:
         grabado = json.loads(record.context.read_text(encoding="utf-8"))
     except (OSError, ValueError):
