@@ -367,6 +367,22 @@ class ClasesDeExcepcion(unittest.TestCase):
                 )
                 self.assertEqual(validar(respondido), [])
 
+    def test_cada_excepcion_valida_de_los_fixtures_ofrece_opciones_de_su_clase(self):
+        opciones = {clase["type"]: set(clase["options"]) for clase in self.clases}
+        validas = [
+            caso["archivo"]
+            for caso in cargar_json(FIXTURES / "casos.json")
+            if caso["esquema"] == "sistema-agentes.excepcion.v1" and caso["veredicto"] == "valido"
+        ]
+        self.assertEqual(
+            validas, ["excepcion/necesita-david.json", "excepcion/necesita-david-respondida.json"]
+        )
+        for archivo in validas:
+            with self.subTest(archivo=archivo):
+                documento = cargar_json(FIXTURES / archivo)
+                ofrecidas = {opcion["optionId"] for opcion in documento["options"]}
+                self.assertLessEqual(ofrecidas, opciones[documento["type"]])
+
     def test_un_tipo_fuera_de_la_tabla_no_es_del_contrato(self):
         hallazgos = validar(self.documento("PREGUNTA_LIBRE", ["seguir"]))
         self.assertEqual([(h.regla, h.ruta) for h in hallazgos], [("schema", "type")])
