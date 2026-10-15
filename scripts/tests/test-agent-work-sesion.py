@@ -833,6 +833,21 @@ class Decisions(Slot):
         self.assertIn("venció", answer["explicacion"]["frase"])
 
     @unittest.skipUnless(PSTACK.is_dir(), "pide pstack 0.9.84 instalado en esta Mac")
+    def test_a_profile_on_the_wrong_route_names_what_it_serves_and_what_arrived(self):
+        # B1 de G5d-r2: la frase para el operador nombra las rutas que el perfil
+        # atiende y la ruta con la que llega el encargo, no solo la causa.
+        self.checkout_contexto()
+        self.start(ScriptedBackend(), canary=True)
+        self.r.offer("task-1", b"agent-work.launch.v1\nprofile: meli\n---\nhaz el saludo\n", self.revision)
+        self.assertEqual(self.one_pass()["claimed"], 1)
+        self.assertEqual(self.backend.launches, [])
+        _, answer = self.estado()
+        self.assertEqual(answer["explicacion"]["causa"], "perfil-no-atiende-ruta")
+        frase = answer["explicacion"]["frase"]
+        self.assertIn("mini-native/native/meli", frase)
+        self.assertIn("mac-local/opencode", frase)
+
+    @unittest.skipUnless(PSTACK.is_dir(), "pide pstack 0.9.84 instalado en esta Mac")
     def test_a_package_source_that_drifted_is_refused_and_launches_nothing(self):
         self.checkout_contexto()
         drifted = self.root / "pstack"
