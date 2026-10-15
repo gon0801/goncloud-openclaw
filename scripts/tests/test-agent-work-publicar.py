@@ -901,8 +901,8 @@ class PublicadorNativo(unittest.TestCase):
                 # timeout duro (C6): la Mini puede tardar lo que tarde la publicación.
                 self.assertIn(
                     [
-                        MINI,
                         *self.armador.SSH_OPCIONES,
+                        MINI,
                         "python3",
                         f"/tmp/{nombre}/publicar-contexto.py",
                         "--local",
@@ -1061,7 +1061,7 @@ class PublicadorNativo(unittest.TestCase):
                 else:
                     self.assertIsNotNone(nombre)
                     self.assertIn(
-                        [MINI, *self.armador.SSH_OPCIONES, "rm", "-rf", f"/tmp/{nombre}"],
+                        [*self.armador.SSH_OPCIONES, MINI, "rm", "-rf", f"/tmp/{nombre}"],
                         llamadas_ssh,
                     )
 

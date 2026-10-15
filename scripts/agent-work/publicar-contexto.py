@@ -32,6 +32,22 @@ from pathlib import Path
 MARCA_INICIO = b"sua-contexto inicio"
 MARCA_FIN = b"sua-contexto fin"
 ESTADO_SCHEMA = "sua-contexto.v1"
+SSH_OPCIONES = (
+    "-o",
+    "BatchMode=yes",
+    "-o",
+    "ConnectTimeout=15",
+    "-o",
+    "ServerAliveInterval=15",
+)
+"""En toda llamada ssh y scp (C6): sin cola de clave, con límite de conexión y latido, para
+que una Mini caída conteste en vez de colgar al operador sin salida."""
+TIMEOUT_AGENTES = 120
+TIMEOUT_SCP = 300
+TIMEOUT_BORRADO = 60
+"""Límites por llamada: la lista de agentes (local y remota), el scp y el borrado de /tmp.
+El --aplicar y el --revertir remotos no llevan timeout duro: pueden tardar lo que tarde
+publicar en la Mini."""
 
 
 class Rechazo(ValueError):
@@ -156,11 +172,15 @@ def listar_agentes(ruta_json: Path | None) -> list[dict]:
     if ruta_json is not None:
         agentes = leer_json(ruta_json)
     else:
-        corrida = subprocess.run(
-            [os.path.expanduser("~/.openclaw/bin/openclaw"), "agents", "list", "--json"],
-            capture_output=True,
-            text=True,
-        )
+        try:
+            corrida = subprocess.run(
+                [os.path.expanduser("~/.openclaw/bin/openclaw"), "agents", "list", "--json"],
+                capture_output=True,
+                text=True,
+                timeout=TIMEOUT_AGENTES,
+            )
+        except subprocess.TimeoutExpired as error:
+            raise Rechazo(f"openclaw agents list no contestó en {TIMEOUT_AGENTES}s") from error
         if corrida.returncode != 0:
             raise Rechazo(f"openclaw agents list falló: {corrida.stderr.strip()}")
         agentes = json.loads(corrida.stdout)
@@ -287,11 +307,15 @@ def armar_publicacion(
 
 
 def agentes_por_ssh(mini: str) -> list[dict]:
-    corrida = subprocess.run(
-        ["ssh", mini, "~/.openclaw/bin/openclaw", "agents", "list", "--json"],
-        capture_output=True,
-        text=True,
-    )
+    try:
+        corrida = subprocess.run(
+            ["ssh", *SSH_OPCIONES, mini, "~/.openclaw/bin/openclaw", "agents", "list", "--json"],
+            capture_output=True,
+            text=True,
+            timeout=TIMEOUT_AGENTES,
+        )
+    except subprocess.TimeoutExpired as error:
+        raise Rechazo(f"ssh no contestó la lista de agentes en {TIMEOUT_AGENTES}s") from error
     try:
         agentes = json.loads(corrida.stdout) if corrida.returncode == 0 else None
     except ValueError:
@@ -344,9 +368,15 @@ def correr_desde_la_mac(accion: str, mini: str, checkout: Path) -> int:
             print(json.dumps({"ok": False, "error": str(error)}, ensure_ascii=False))
             return 3
         nombre = carpeta.name
-        copia = subprocess.run(
-            ["scp", "-q", "-r", str(carpeta), f"{mini}:/tmp/"], capture_output=True, text=True
-        )
+        try:
+            copia = subprocess.run(
+                ["scp", "-q", *SSH_OPCIONES, "-r", str(carpeta), f"{mini}:/tmp/"],
+                capture_output=True,
+                text=True,
+                timeout=TIMEOUT_SCP,
+            )
+        except subprocess.TimeoutExpired as error:
+            raise Rechazo(f"scp no terminó en {TIMEOUT_SCP}s") from error
         if copia.returncode != 0:
             print(copia.stderr.strip(), file=sys.stderr)
             return 1
@@ -354,6 +384,7 @@ def correr_desde_la_mac(accion: str, mini: str, checkout: Path) -> int:
         remoto = subprocess.run(
             [
                 "ssh",
+                *SSH_OPCIONES,
                 mini,
                 "python3",
                 f"/tmp/{nombre}/publicar-contexto.py",
@@ -372,8 +403,15 @@ def correr_desde_la_mac(accion: str, mini: str, checkout: Path) -> int:
     finally:
         if copiado:
             # Pase lo que pase en la Mini, la publicación no se queda en su /tmp (4.3):
-            # la mitad Mac la borra por ssh al terminar.
-            subprocess.run(["ssh", mini, "rm", "-rf", f"/tmp/{nombre}"], capture_output=True)
+            # la mitad Mac la borra por ssh al terminar (best effort, con su timeout).
+            try:
+                subprocess.run(
+                    ["ssh", *SSH_OPCIONES, mini, "rm", "-rf", f"/tmp/{nombre}"],
+                    capture_output=True,
+                    timeout=TIMEOUT_BORRADO,
+                )
+            except subprocess.TimeoutExpired:
+                pass
         shutil.rmtree(carpeta, ignore_errors=True)
 
 
