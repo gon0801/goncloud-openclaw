@@ -990,6 +990,8 @@ class PublicadorNativo(unittest.TestCase):
         self.armar_generacion(2, cambios={"skills/poteto-mode/SKILL.md": "poteto 2\n"})
         self.publicar("leer")
         self.publicar("aplicar")
+        huella = self.home / ".openclaw" / "sua-contexto" / "2" / "perfiles.v1.json"
+        self.assertEqual(huella.read_bytes(), foto, "la gen 2 no dejó la foto de sus perfiles")
         self.publicar("revertir")
         self.assertTrue(destino.exists(), "la reversa de gen 2 borró perfiles.v1.json")
         self.assertEqual(destino.read_bytes(), foto)
