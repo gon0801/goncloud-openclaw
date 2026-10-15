@@ -158,6 +158,21 @@ out="$(GIT_BIN="$T/bin/git-adulterado" bash "$INST" 2>&1)" && fail "instalo con 
 printf '%s' "$out" | grep -q "tablero-trabajo.sh" || fail "no nombra el archivo con blob distinto: $out"
 [ -e "$T/casa2/bin" ] && fail "escribio archivos antes de fallar el blob"
 
+# (7b) blob contra la rama para contexto/: el paquete de datos no se instala adulterado
+# (mutacion: fase_blobs sin el bucle de contexto).
+export HOME="$T/casa2b"; mkdir -p "$HOME"
+cat >"$T/bin/git-contexto" <<STUB
+#!/bin/sh
+case "\$*" in
+  *rev-parse*contexto/poteto.v1.json*) printf '0000000000000000000000000000000000000000\n';;
+  *) exec "$T/bin/git-integrado" "\$@";;
+esac
+STUB
+chmod +x "$T/bin/git-contexto"
+out="$(GIT_BIN="$T/bin/git-contexto" bash "$INST" 2>&1)" && fail "instalo con el blob de contexto adulterado"
+printf '%s' "$out" | grep -q "contexto/poteto.v1.json" || fail "no nombra el blob distinto de contexto: $out"
+[ -e "$T/casa2b/bin" ] && fail "escribio archivos antes de fallar el blob de contexto"
+
 # (8) archivo ausente en la rama se declara y no aborta.
 cat >"$T/bin/git-ausente" <<STUB
 #!/bin/sh
