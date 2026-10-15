@@ -19,6 +19,7 @@
 11	test-agent-work-encargo.sh
 65	test-agent-work-host.sh
 14	test-agent-work-integration.sh
+3	test-agent-work-python.sh
 0	test-agent-work-requester-queue-mapper.sh
 20	test-agent-work-sesion.sh
 0	test-agente-usuario.sh
