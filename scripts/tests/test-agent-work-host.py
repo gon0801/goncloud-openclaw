@@ -15,7 +15,7 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts" / "agent-work"))
 
-from contracts import AuthorizedOperation, OperationKey
+from contracts import AuthorizedOperation, OperationKey, SessionRecord
 from cutover_live import uncertain_operations
 import host
 from host import Host, main as host_main, operation_id
@@ -201,6 +201,30 @@ class HostReceipts(unittest.TestCase):
                 self.assertEqual(list((maquina.state_dir / "results").glob("*.json")), [])
                 # F3: tampoco queda snapshot del artefacto.
                 self.assertEqual(list((maquina.state_dir / "artifacts").rglob("*.bin")), [])
+
+    def test_the_ready_protocol_names_artifact_ref_for_a_profile_that_does_not_write(self):
+        # B de SUA03-G5c: ready.v1 de un perfil que no escribe (exploracion) deja su
+        # artefacto en la carpeta de la corrida, no en workspaceRef; su typedPayload
+        # nombra <artifactRef> como review.v1. El que escribe sigue con workspaceRef.
+        for escribe, esperado, prohibido in (
+            (False, "<artifactRef>", "workspaceRef"),
+            (True, "workspaceRef", "<artifactRef>"),
+        ):
+            with self.subTest(escribe=escribe):
+                spool = self.root / f"spool-{escribe}"
+                registro = SessionRecord.for_operation(spool, host.operation_id(self.key))
+                registro.context.write_text(json.dumps({"writesSource": escribe}))
+                asignacion = {
+                    "capability": "c", "hostId": "mac-test", "taskId": "task-1",
+                    "generation": 2, "instanceId": "instance-1", "claimId": "claim-1",
+                    "producerId": "scout", "resultContract": "ready.v1",
+                    "inputRevision": {"kind": "code", "repository": "repo", "sha": "a" * 40},
+                }
+                protocolo = host.cli_protocol(
+                    asignacion, run=True, state_dir=spool, operation=self.key)
+                forma = protocolo["fill"]["typedPayload"]
+                self.assertIn(esperado, forma)
+                self.assertNotIn(prohibido, forma)
 
     def test_a_cli_result_with_extra_fields_reaches_the_runtime_with_only_its_schema(self):
         # Live canary 2026-10-11: GLM copied claimId into result.v1, and R's strict schema refused the report.
