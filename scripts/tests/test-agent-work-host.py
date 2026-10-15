@@ -508,12 +508,15 @@ class GitPhoto(unittest.TestCase):
                 host._git(str(self.repo), "rev-parse", "HEAD")
 
     def test_a_timed_out_git_status_kills_its_child_and_raises_oserror(self):
-        # El mismo contrato que _git: un git status que no termina (un lock, un disco lento) no
-        # cuelga la pasada del host para siempre. Al vencer el plazo, el hijo muere a la fuerza y
-        # el fallo sale como OSError, que repo_photo convierte en PhotoFailed.
+        # El mismo contrato que _git, plazo de pared incluido: un git status que no termina en su
+        # plazo (un lock, un disco lento que gotea datos sin parar) no cuelga la pasada del host
+        # para siempre. Al vencer el plazo, el hijo muere a la fuerza y el fallo sale como
+        # OSError, que repo_photo convierte en PhotoFailed.
         falso = self.root / "bin"
         falso.mkdir()
-        (falso / "git").write_text("#!/bin/sh\nprintf '?? borrador.txt\\0'\nexec sleep 8\n")
+        (falso / "git").write_text("#!/bin/sh\ni=0\nwhile [ $i -lt 200 ]; do\n"
+                                   "  printf '?? borrador.txt\\0'\n  i=$((i+1))\n  sleep 0.05\n"
+                                   "done\n")
         (falso / "git").chmod(0o755)
         with mock.patch.dict(os.environ, {"PATH": f"{falso}{os.pathsep}{os.environ['PATH']}"}):
             spawned = []
