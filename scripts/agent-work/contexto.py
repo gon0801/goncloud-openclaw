@@ -194,6 +194,17 @@ def archivos_del_perfil(manifiesto: dict, perfil: dict) -> list[str]:
     return [f["path"] for f in manifiesto["files"] if del_paquete(f["path"], perfil["skills"])]
 
 
+def archivos_nativos(manifiesto: dict) -> list[str]:
+    """Los archivos del conjunto nativo (4.3): poteto-mode sin scripts/, las principle-* y
+    poteto-openclaw, tal como están en el manifiesto. Es el paquete menos las skills que cada
+    perfil lleva por su cuenta: el agente nativo conserva su workshop."""
+    return [
+        f["path"]
+        for f in manifiesto["files"]
+        if del_paquete(f["path"], ()) or f["path"] == OPENCLAW_SKILL
+    ]
+
+
 def clave_de_ruta(ruta: dict) -> str:
     """`host/executor`, más `/agentId` en una ruta nativa: la llave de `competence`."""
     partes = [ruta["host"], ruta["executor"]]

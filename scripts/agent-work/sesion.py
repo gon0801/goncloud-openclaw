@@ -236,7 +236,8 @@ def run_config(run: RunDir, model: ModelId, *, writes: bool) -> dict:
     corrida no tiene. Un perfil que no escribe fuente no recibe la herramienta de editar: M-13 midió que
     con `permission.edit: "deny"` opencode 1.18.35 se la quita al modelo.
     Limitación medida (M-13, punto b): una skill del paquete con el mismo nombre que una de
-    `~/.agents/skills` o `~/.claude/skills` pierde contra la global. Lo declara coverage.json."""
+    `~/.agents/skills` o `~/.claude/skills` pierde contra la global. Lo declara coverage.json, y
+    `opencode_env` la mitiga desde G4 apagando las skills externas en toda corrida con paquete."""
     permission: dict = {"external_directory": {"*": "deny", f"{run.path}/**": "allow"}}
     if not writes:
         permission["edit"] = "deny"
@@ -367,13 +368,19 @@ def opencode_env(spec: LaunchSpec) -> dict[str, str]:
         "enabled_providers": [model.provider],
         "small_model": str(model),
     }
-    return {
+    env = {
         "PWD": str(spec.workspace.root),
         "TMPDIR": str(spec.run.scratch),
         "OPENCODE_DISABLE_AUTOUPDATE": "1",
         "AGENT_WORK_MANAGED": "1",
         "OPENCODE_CONFIG_CONTENT": json.dumps(config, separators=(",", ":")),
     }
+    if spec.config is not None:
+        # Medición del 2026-10-15 (SUA-03-mediciones.md, nota del punto b): la variable deja fuera
+        # ~/.agents/skills y ~/.claude/skills a la vez, y con skills.paths del paquete quedan solo
+        # las del paquete. Solo en una corrida con paquete: un encargo sin perfil queda igual.
+        env["OPENCODE_DISABLE_EXTERNAL_SKILLS"] = "1"
+    return env
 
 
 EXIT_NO_SCRATCH = 96

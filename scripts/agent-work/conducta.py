@@ -158,17 +158,21 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--resultado", type=Path, required=True)
     args = parser.parse_args(argv)
     try:
-        if "contexto/" not in args.playbook.as_posix():
+        # La guarda mira el lugar y no el texto (hallazgo de CodeRabbit en #305): resuelve primero
+        # y exige un componente `contexto` en la ruta resuelta; el archivo se lee de esa misma
+        # ruta y la etiqueta se deriva desde ahí, para que `raiz/contexto/../feature.md` no pase.
+        resuelta = args.playbook.resolve()
+        if "contexto" not in resuelta.parts:
             raise ValueError(
                 f"--playbook debe ser la ruta del playbook dentro del paquete "
-                f"(con contexto/): {args.playbook}"
+                f"(con contexto/ en su ruta resuelta): {args.playbook}"
             )
         pasos = pasos_opencode(
             args.eventos.read_text(encoding="utf-8", errors="replace").splitlines()
         )
-        texto = args.playbook.read_text(encoding="utf-8")
+        texto = resuelta.read_text(encoding="utf-8")
         resultado = args.resultado.read_text(encoding="utf-8", errors="replace")
-        ruta = "contexto/" + args.playbook.as_posix().split("contexto/", 1)[-1]
+        ruta = "contexto/" + "/".join(resuelta.parts[resuelta.parts.index("contexto") + 1 :])
         veredicto = juzgar(pasos, playbook=ruta, texto_del_playbook=texto, resultado=resultado)
     except (OSError, ValueError) as error:
         print(json.dumps({"ok": False, "error": str(error)}, ensure_ascii=False))

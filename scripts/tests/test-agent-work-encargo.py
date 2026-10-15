@@ -466,6 +466,51 @@ class Estado(Mac):
                      "haya reclamado."}))
 
 
+class Perfiles(Mac):
+    def test_the_command_lists_the_profiles_of_the_checkout_and_the_agents_without_one(self):
+        # El archivo real: once perfiles y los siete agentes que la medición P1 dejó sin perfil.
+        code, out, err = self.cli("perfiles")
+        self.assertEqual((code, err), (0, ""))
+        respuesta = json.loads(out)
+        self.assertEqual([p["id"] for p in respuesta["perfiles"]],
+                         ["ingenieria", "revision", "adversario", "verificacion", "exploracion", "aceptacion",
+                          "operaciones", "amazon", "meli", "mail", "odoo"])
+        self.assertEqual(respuesta["agentesSinPerfil"],
+                         ["pers", "limpia", "arras", "gonserver", "skillverif", "tinkabot", "eggbot"])
+        meli = next(p for p in respuesta["perfiles"] if p["id"] == "meli")
+        self.assertEqual(meli["purpose"], "Trabajo de MercadoLibre: pedidos, demoras y preguntas. "
+                                          "Rechaza lo que no es de MercadoLibre con FUERA-DE-PERFIL.")
+        self.assertEqual(meli["resultContracts"], ["ready.v1"])
+        self.assertEqual(meli["rutas"], [{"ruta": "mini-native/native/meli", "via": ["turn", "child"]}])
+        self.assertEqual((meli["writesSource"], meli["competencia"]),
+                         (False, {"mini-native/native/meli": {"status": "pending", "validUntil": None}}))
+        ingenieria = next(p for p in respuesta["perfiles"] if p["id"] == "ingenieria")
+        self.assertEqual(ingenieria["rutas"], [
+            {"ruta": "mac-local/opencode", "via": ["task"]},
+            {"ruta": "mini-native/native/ingenieria", "via": ["turn", "child", "task"]},
+            {"ruta": "mini-native/native/implementer", "via": ["turn", "child", "task"]}])
+        self.assertTrue(ingenieria["writesSource"])
+        self.assertEqual([set(p) for p in respuesta["perfiles"]][:1],
+                         [{"id", "purpose", "resultContracts", "rutas", "writesSource", "competencia"}])
+
+    def test_an_unreadable_profiles_file_is_an_error_and_not_a_traceback(self):
+        (self.checkout / "scripts" / "agent-work" / "contexto" / "perfiles.v1.json").write_text("{")
+        code, out, err = self.cli("perfiles")
+        self.assertEqual((code, out), (3, ""))
+        self.assertIn("perfiles.v1.json", err)
+
+    def test_a_profiles_file_without_a_list_is_an_error_and_not_a_traceback(self):
+        ruta = self.checkout / "scripts" / "agent-work" / "contexto" / "perfiles.v1.json"
+        ruta.write_text(json.dumps({"schema": "x", "profiles": None}) + "\n", encoding="utf-8")
+        code, out, err = self.cli("perfiles")
+        self.assertEqual(code, 3)
+        self.assertEqual(out, "")
+        self.assertNotIn("Traceback", err)
+        respuesta = json.loads(err)
+        self.assertFalse(respuesta["ok"])
+        self.assertIn("profiles", respuesta["error"])
+
+
 class Permitir(Mac):
     def permitir(self, *args):
         before = self.policy_path.read_bytes()

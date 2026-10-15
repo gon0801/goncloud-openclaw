@@ -508,6 +508,15 @@ class GitPhoto(unittest.TestCase):
             with self.assertRaisesRegex(OSError, "timed out"):
                 host._git(str(self.repo), "rev-parse", "HEAD")
 
+    def test_a_timed_out_git_dir_is_a_failed_photo_and_never_a_missing_repo(self):
+        # F1 de DeepSeek en #305: el primer comando de la foto (rev-parse --absolute-git-dir) quedaba
+        # fuera del try; su plazo vencido salía como OSError simple, el lanzador lo leía como "no es
+        # un repo" y lanzaba sin foto. Un plazo vencido nunca significa "no es un repo".
+        with mock.patch.object(host.subprocess, "run",
+                               side_effect=subprocess.TimeoutExpired(cmd="git", timeout=60)):
+            with self.assertRaises(host.PhotoFailed):
+                host.repo_photo(str(self.repo))
+
     def test_a_timed_out_git_status_kills_its_child_and_raises_oserror(self):
         # El mismo contrato que _git, plazo de pared incluido: un git status que no termina en su
         # plazo (un lock, un disco lento que gotea datos sin parar) no cuelga la pasada del host
@@ -535,6 +544,35 @@ class GitPhoto(unittest.TestCase):
         self.assertIsNotNone(spawned[0].poll(), "the timed-out git status child stayed alive")
         self.assertEqual(spawned[0].returncode, -signal.SIGKILL,
                          "the child died of a broken pipe or of old age, not of the kill")
+
+    def test_a_silent_git_status_dies_at_its_wall_deadline_and_raises_oserror(self):
+        # El caso que faltaba (bots de #305): un git callado, esperando un lock, sin escribir nada.
+        # Dos formas de callarse, y el mismo plazo de pared para las dos: una que nunca escribe y
+        # deja la tubería abierta (el select vence), y una que escribe, cierra su stdout y se queda
+        # viva (el wait vence). Las mutaciones `select.select([fd], [], [], None)` y `done.wait()`
+        # sin plazo cuelgan aquí en vez de salir verdes.
+        formas = {"callado": "#!/bin/sh\nexec sleep 3600\n",
+                  "calla-tras-escribir": "#!/bin/sh\nprintf '?? borrador.txt\\0'\nexec 1>&-\nexec sleep 3600\n"}
+        for nombre, guion in formas.items():
+            with self.subTest(nombre):
+                falso = self.root / f"bin-{nombre}"
+                falso.mkdir()
+                (falso / "git").write_text(guion)
+                (falso / "git").chmod(0o755)
+                with mock.patch.dict(os.environ, {"PATH": f"{falso}{os.pathsep}{os.environ['PATH']}"}):
+                    spawned = []
+                    real_popen = host.subprocess.Popen
+
+                    def registrar(*args, **kwargs):
+                        hijo = real_popen(*args, **kwargs)
+                        spawned.append(hijo)
+                        return hijo
+
+                    with mock.patch.object(host.subprocess, "Popen", side_effect=registrar):
+                        with self.assertRaisesRegex(OSError, "git status timed out in"):
+                            host._status_digest(str(self.repo), "status", "--porcelain=v1", "-z",
+                                                "--untracked-files=all", timeout=2)
+                self.assertIsNotNone(spawned[0].poll(), "the silent git status child stayed alive")
 
     def test_inherited_git_repository_variables_do_not_move_the_photo(self):
         other = self.root / "otro"
@@ -568,6 +606,18 @@ class GitPhoto(unittest.TestCase):
         after = host.repo_photo(str(self.repo))
         self.assertEqual(host.photo_changes(before, after), ["exclude"],
                          "an exclude rule that hides a planted file changed no field of the photo")
+
+    def test_a_field_the_previous_photo_does_not_have_is_not_compared(self):
+        # F4 de DeepSeek en #305: una foto previa grabada por un host anterior no trae `exclude`;
+        # compararlo contaba cualquier foto nueva como cambio de ese campo, con repo_after grabado.
+        vieja = host.repo_photo(str(self.repo))
+        del vieja["exclude"]
+        self.assertEqual(host.photo_changes(vieja, host.repo_photo(str(self.repo))), [])
+        exclude = self.repo / ".git" / "info" / "exclude"
+        exclude.parent.mkdir(parents=True, exist_ok=True)
+        exclude.write_text("nueva.py\n")
+        self.assertEqual(host.photo_changes(vieja, host.repo_photo(str(self.repo))), [],
+                         "a field absent from the previous photo counted as a change")
 
     def test_a_repo_without_commits_fails_closed_and_a_non_repo_does_not(self):
         unborn = self.root / "por-nacer"

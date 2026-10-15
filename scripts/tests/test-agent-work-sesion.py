@@ -448,6 +448,15 @@ class Launch(Slot):
         token = opencode_env(self.spec(b"agent-work.launch.v1\nmodel: deepseek/deepseek-v4-pro\n---\n"))
         self.assertEqual(json.loads(token["OPENCODE_CONFIG_CONTENT"])["enabled_providers"], ["deepseek"])
 
+    def test_only_a_run_with_a_package_disables_the_external_skills(self):
+        # Medición del 2026-10-15 (SUA-03-mediciones.md, nota del punto b): la variable deja fuera
+        # ~/.agents/skills y ~/.claude/skills de opencode 1.18.35, y con skills.paths del paquete
+        # quedan solo las del paquete. Un encargo sin perfil no la lleva: su entorno es el de siempre.
+        spec = self.spec()
+        self.assertNotIn("OPENCODE_DISABLE_EXTERNAL_SKILLS", opencode_env(spec))
+        con_paquete = replace(spec, config=sesion.run_config(spec.run, spec.model.model, writes=True))
+        self.assertEqual(opencode_env(con_paquete)["OPENCODE_DISABLE_EXTERNAL_SKILLS"], "1")
+
     def launched(self, script, **environment):
         return subprocess.run(["/bin/sh"], input=script, capture_output=True, text=True, cwd="/",
                               env={**os.environ, **environment})
@@ -1140,6 +1149,22 @@ class Decisions(Slot):
                      f"En {self.repo} cambió el status. El host no deshizo nada."})
         self.assertTrue((self.repo / "nuevo.py").exists(), "the host undid what the reviewer wrote")
 
+    def test_the_operator_phrase_names_the_exclude_rule_like_the_other_fields(self):
+        # F3 de DeepSeek en #305: el campo `exclude` de la foto salía crudo en la frase que el
+        # operador lee. Solo la regla cambia: una exclusión de un archivo que no existe no mueve
+        # al status ni a las refs ni al diff.
+        self.r.offer("task-1", b"revisa el saludo\n", self.revision, contract="review.v1")
+        self.launched()
+        exclude = self.repo / ".git" / "info" / "exclude"
+        exclude.parent.mkdir(parents=True, exist_ok=True)
+        exclude.write_text("sembrado-que-no-existe.py\n")
+        self.review_writes(self.run_dir().path / "hallazgos.md")
+        self.left(0)
+        self.one_pass()
+        self.assertEqual(self.r.incidents, [("task-1", "invalid-result", "reviewer-wrote-source")])
+        _, answer = self.estado()
+        self.assertIn(f"En {self.repo} cambió .git/info/exclude.", answer["explicacion"]["frase"])
+
     def test_a_refused_review_is_not_measured_again_on_every_pass(self):
         # El resultado de un revisor que cambió el repo nunca se registra: se queda en
         # awaiting_results, y volver a fotografiar el repo en cada pasada costaba seis comandos
@@ -1516,6 +1541,25 @@ class Decisions(Slot):
         build_clone(str(self.repo), sha, destino)
         self.assertFalse((destino / "dejado.txt").exists(), "a dirty clone was reused")
         self.assertEqual(self.git_out("-C", str(destino), "rev-parse", "HEAD"), sha)
+
+    def test_a_clone_ignores_inherited_git_repository_variables(self):
+        # F2 de DeepSeek en #305: los git del clon heredaban GIT_DIR y compañía, igual que los de
+        # la foto. Con GIT_DIR de la carga del lanzador, el clon salía de otro árbol.
+        from native_gateway import build_clone
+
+        otro = self.root / "otro-repo"
+        otro.mkdir()
+        subprocess.run(["git", "-C", str(otro), "init", "-q"], check=True, capture_output=True,
+                       env={k: v for k, v in os.environ.items() if not k.startswith("GIT_")})
+        subprocess.run(["git", "-C", str(otro), "-c", "user.name=t", "-c", "user.email=t@example.invalid",
+                        "commit", "-q", "--allow-empty", "-m", "otro"], check=True, capture_output=True,
+                       env={k: v for k, v in os.environ.items() if not k.startswith("GIT_")})
+        sha = self.git_out("-C", str(self.repo), "rev-parse", "HEAD")
+        destino = self.root / "clon-heredado"
+        with mock.patch.dict(os.environ, {"GIT_DIR": str(otro / ".git"), "GIT_WORK_TREE": str(otro)}):
+            build_clone(str(self.repo), sha, destino)
+        self.assertEqual(self.git_out("-C", str(destino), "rev-parse", "HEAD"), sha,
+                         "the clone followed the inherited GIT_DIR")
 
     @unittest.skipUnless(PSTACK.is_dir(), "pide pstack 0.9.84 instalado en esta Mac")
     def test_a_new_file_in_an_ignored_dir_that_already_existed_is_caught(self):

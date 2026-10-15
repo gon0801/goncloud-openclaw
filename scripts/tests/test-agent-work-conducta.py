@@ -207,6 +207,36 @@ class Conducta(unittest.TestCase):
         self.assertIn("contexto/", respuesta["error"])
         self.assertNotIn("razones", respuesta)
 
+    def test_a_playbook_path_that_only_spells_contexto_is_a_usage_error(self):
+        # Hallazgo de CodeRabbit en #305: la guarda miraba el texto y no el lugar, y aceptaba
+        # <raiz>/contexto/../feature.md. La ruta se resuelve antes de validarla, se exige un
+        # componente `contexto` en la ruta resuelta, el archivo se lee de esa misma ruta y la
+        # etiqueta se deriva desde ahí.
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            (tmp / "events.jsonl").write_text("\n".join(corrida()) + "\n")
+            (tmp / "resultado.md").write_text("Ran 4 tests in 0.01s\n")
+            (tmp / "contexto").mkdir()
+            (tmp / "feature.md").write_text(TEXTO)
+            engañoso = str(tmp / "contexto" / ".." / "feature.md")
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                code = conducta.main(
+                    [
+                        "--eventos",
+                        str(tmp / "events.jsonl"),
+                        "--playbook",
+                        str(engañoso),
+                        "--resultado",
+                        str(tmp / "resultado.md"),
+                    ]
+                )
+        self.assertEqual(code, 3)
+        respuesta = json.loads(out.getvalue())
+        self.assertFalse(respuesta["ok"])
+        self.assertIn("resuelta", respuesta["error"])
+        self.assertNotIn("razones", respuesta)
+
 
 if __name__ == "__main__":
     unittest.main()
