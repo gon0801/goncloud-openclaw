@@ -273,6 +273,15 @@ def cli_protocol(assignment: dict, *, run: bool = False, state_dir: Path | None 
     artifact_home = ("inside the directory that holds resultRef, never inside workspaceRef"
                      if run and not writes_source(assignment, state_dir=state_dir, operation=operation)
                      else "inside workspaceRef")
+    # La forma exacta según el contrato (C2): el modelo no depende solo de la prosa
+    # de main para armar el typedPayload que R valida estrictamente.
+    forma_de_carga = (
+        'exactly {"verdict": "approved", "evidenceRef": "<artifactRef>"} or {"verdict": '
+        '"changes", "findingsRef": "<artifactRef>"}, with no other field'
+        if assignment["resultContract"] == "review.v1"
+        else 'exactly {"evidenceRef": "<path, relative to workspaceRef, of the file that '
+        'proves the work>"}, with no other field'
+    )
     return {
         "steps": [
             "Before any other work, write the accept object as JSON to acceptRef, atomically: create the "
@@ -294,8 +303,8 @@ def cli_protocol(assignment: dict, *, run: bool = False, state_dir: Path | None 
                    **{field: assignment[field] for field in RESULT_BOUND},
                    "observedRevision": assignment["inputRevision"]},
         "fill": {
-            "typedPayload": f"the JSON object that the {assignment['resultContract']} contract and the "
-                            "brief ask for",
+            "typedPayload": f"the JSON object that the {assignment['resultContract']} contract asks for: "
+                            f"{forma_de_carga}",
             "artifactRef": f"the absolute path of the artifact file, {artifact_home}",
             "digest": "the lowercase hex SHA-256 of the artifact file's bytes",
         },
@@ -310,6 +319,26 @@ def under(path: str, root: str) -> Path:
     if not resolved.is_relative_to(Path(root).resolve(strict=True)) or not resolved.is_file():
         raise ValueError("reference outside authorized workspace")
     return resolved
+
+
+def typed_payload_valido(contrato: str, carga: object) -> bool:
+    """La forma que R exige al typedPayload (managed-task.json.ts:100-104), validada aquí
+    antes de grabar (C1): un resultado mal formado no se graba jamás, para que el pump lo
+    vuelva incidente invalid-result y main reciba el aviso en vez de quedarse esperando."""
+    if not isinstance(carga, dict):
+        return False
+
+    def texto(valor: object) -> bool:
+        return isinstance(valor, str) and valor.strip() != ""
+
+    if contrato == "ready.v1":
+        return set(carga) == {"evidenceRef"} and texto(carga.get("evidenceRef"))
+    if contrato == "review.v1":
+        if carga.get("verdict") == "approved":
+            return set(carga) == {"verdict", "evidenceRef"} and texto(carga.get("evidenceRef"))
+        if carga.get("verdict") == "changes":
+            return set(carga) == {"verdict", "findingsRef"} and texto(carga.get("findingsRef"))
+    return False
 
 
 class Host:
@@ -522,6 +551,8 @@ class Host:
             raise ValueError("producer capability mismatch")
         if result["observedRevision"] != assignment["inputRevision"]:
             raise ValueError("observed revision mismatch")
+        if not typed_payload_valido(assignment["resultContract"], result["typedPayload"]):
+            raise ValueError(f"typedPayload no cumple {assignment['resultContract']}")
         encoded = canonical(result).encode()
         if len(encoded) > 1024 * 1024:
             raise ValueError("result too large")
