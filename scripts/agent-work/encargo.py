@@ -373,6 +373,8 @@ def perfiles(checkout: Path) -> dict:
     pide vea qué especialidades existen, qué rutas las atienden y qué agentes siguen sin perfil
     (SUA-03, 4.4)."""
     documento = contexto.leer_json(Path(checkout) / CONTEXTO_DIR / "perfiles.v1.json")
+    if not isinstance(documento.get("profiles"), list):
+        raise ValueError("perfiles.v1.json no tiene una lista en 'profiles'")
     filas = []
     for perfil in documento["profiles"]:
         filas.append({
@@ -796,7 +798,16 @@ def _run_perfiles(args: argparse.Namespace, where: dict, now: float) -> int:
     try:
         respuesta = perfiles(checkout=where["checkout"])
     except (OSError, ValueError, KeyError) as error:
-        print(f"perfiles: no se pudo leer perfiles.v1.json del checkout: {error}", file=sys.stderr)
+        print(
+            json.dumps(
+                {
+                    "ok": False,
+                    "error": f"perfiles: no se pudo leer perfiles.v1.json del checkout: {error}",
+                },
+                ensure_ascii=False,
+            ),
+            file=sys.stderr,
+        )
         return 3
     print(json.dumps(respuesta, ensure_ascii=False))
     return 0
