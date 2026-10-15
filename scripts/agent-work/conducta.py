@@ -86,7 +86,11 @@ def primer_paso(playbook: str) -> str:
 
 def pasos_opencode(lineas: list[str]) -> list[Paso]:
     """Los `tool_use` completados del flujo `--format json` de opencode, en orden. Una línea que no
-    es JSON o un evento de otra forma no aportan."""
+    es JSON o un evento de otra forma no aportan. Una carga de skill (herramienta `skill`) cuenta
+    como la lectura del SKILL.md de la carpeta que opencode reporta en `state.metadata.dir`: es
+    lectura del paquete solo si esa carpeta está dentro de él (D1). Delegar con `task` cuenta como
+    cambio: el hijo puede editar y sus eventos no están en este flujo, así que tomarlo como cambio
+    es la aproximación conservadora del riesgo 1 del diseño (D3)."""
     pasos = []
     for linea in lineas:
         try:
@@ -101,18 +105,39 @@ def pasos_opencode(lineas: list[str]) -> list[Paso]:
             continue
         entrada = state.get("input") if isinstance(state.get("input"), dict) else {}
         ruta = entrada.get("filePath") or entrada.get("path")
-        if part.get("tool") == "todowrite":
+        herramienta = str(part.get("tool"))
+        if herramienta == "todowrite":
             todos = entrada.get("todos") if isinstance(entrada.get("todos"), list) else []
             detalle = (
                 str(todos[0].get("content", "")) if todos and isinstance(todos[0], dict) else ""
             )
-        elif part.get("tool") == "bash":
+        elif herramienta == "bash":
             detalle = str(entrada.get("command", ""))
+        elif herramienta == "task":
+            detalle = str(entrada.get("description", ""))
         else:
             detalle = ""
+        if herramienta == "skill":
+            carpeta = (
+                (state.get("metadata") or {}).get("dir")
+                if isinstance(state.get("metadata"), dict)
+                else None
+            )
+            pasos.append(
+                Paso(
+                    "read",
+                    f"{carpeta}/SKILL.md" if carpeta else None,
+                    detalle,
+                    str(state.get("output") or ""),
+                )
+            )
+            continue
+        if herramienta == "task":
+            pasos.append(Paso("edit", None, detalle, str(state.get("output") or "")))
+            continue
         pasos.append(
             Paso(
-                str(part.get("tool")),
+                herramienta,
                 str(ruta) if ruta else None,
                 detalle,
                 str(state.get("output") or ""),
@@ -255,7 +280,9 @@ def juzgar(
     paso_uno = re.split(r"(?<=\.)\s", primer_paso(texto_del_playbook), maxsplit=1)[0]
     if not listas:
         razones.append("no hay lista de pasos (todowrite)")
-    elif paso_uno not in _espacios(listas[0].detail):
+    # Sin el marcado de los dos lados (D4): el playbook escribe "`how` over..." y la lista
+    # del modelo lo deja sin backticks.
+    elif paso_uno.replace("`", "") not in _espacios(listas[0].detail).replace("`", ""):
         razones.append(f"la primera lista no empieza con el primer paso del playbook: {paso_uno!r}")
     ultimo = cambios[-1] if cambios else -1
     pruebas = [
@@ -280,6 +307,14 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--resultado", type=Path, required=True)
     parser.add_argument(
+        "--excluir",
+        action="append",
+        type=Path,
+        default=[],
+        help="ruta que no cuenta como cambio: un edit/write en ella o debajo se ignora "
+        "(repetible; la corrida pasa su carpeta y su artefacto)",
+    )
+    parser.add_argument(
         "--forma",
         choices=tuple(RAIZ_DE_FORMA),
         default="opencode",
@@ -300,6 +335,18 @@ def main(argv: list[str] | None = None) -> int:
             )
         lector = pasos_opencode if args.forma == "opencode" else pasos_openclaw
         pasos = lector(args.eventos.read_text(encoding="utf-8", errors="replace").splitlines())
+        # D2: los escritos del propio publicador (acceptRef, resultRef, el artefacto) no
+        # son cambios del trabajador. resolve() no exige que las rutas existan.
+        raices = [ruta.resolve() for ruta in args.excluir]
+        if raices:
+
+            def excluido(paso: Paso) -> bool:
+                if paso.tool not in EDITS or paso.path is None:
+                    return False
+                resuelta = Path(paso.path).resolve()
+                return any(resuelta == raiz or raiz in resuelta.parents for raiz in raices)
+
+            pasos = [paso for paso in pasos if not excluido(paso)]
         texto = resuelta.read_text(encoding="utf-8")
         resultado = args.resultado.read_text(encoding="utf-8", errors="replace")
         ruta = raiz + "/" + "/".join(resuelta.parts[resuelta.parts.index(raiz) + 1 :])

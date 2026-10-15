@@ -245,6 +245,92 @@ class Conducta(unittest.TestCase):
         self.assertIn("resuelta", respuesta["error"])
         self.assertNotIn("razones", respuesta)
 
+    def playbook_de_fixture(self, tmp, nombre="feature.md"):
+        """El playbook del fixture bajo un árbol con contexto/, como lo exige la guarda,
+        con el nombre que la corrida real leyó."""
+        libro = tmp / "contexto" / "skills" / "poteto-mode" / "playbooks" / nombre
+        libro.parent.mkdir(parents=True)
+        shutil.copy(FIXTURAS / "m16b-feature.md", libro)
+        return libro
+
+    def test_the_real_m16b_engineering_run_measures_green_with_its_exclusions(self):
+        # D1 a D4 sobre la corrida real del banco (M-16 corrida 2): la skill cargada con
+        # la herramienta skill cuenta como lectura del paquete, los escritos de la propia
+        # corrida y del artefacto no son cambios, delegar sí lo es, y el primer paso se
+        # compara sin backticks.
+        corrida = (
+            "/private/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T"
+            "/agent-work-banco-rd0b4swq/state/enc-1"
+        )
+        artefacto = (
+            "/private/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T"
+            "/agent-work-banco-rd0b4swq/dev/demo/RESULTADO.md"
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                codigo = conducta.main(
+                    [
+                        "--eventos",
+                        str(FIXTURAS / "m16b-ingenieria.jsonl"),
+                        "--playbook",
+                        str(self.playbook_de_fixture(tmp)),
+                        "--resultado",
+                        str(FIXTURAS / "m16b-ingenieria-RESULTADO.md"),
+                        "--excluir",
+                        corrida,
+                        "--excluir",
+                        artefacto,
+                    ]
+                )
+        self.assertEqual(codigo, 0, out.getvalue())
+        self.assertEqual(json.loads(out.getvalue()), {"ok": True, "razones": []})
+
+    def test_the_real_m16b_control_stays_red_for_the_missing_package_read(self):
+        # El control cargó poteto-mode desde ~/.agents/skills (el global): no cuenta.
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                codigo = conducta.main(
+                    [
+                        "--eventos",
+                        str(FIXTURAS / "m16b-control.jsonl"),
+                        "--playbook",
+                        str(self.playbook_de_fixture(tmp)),
+                        "--resultado",
+                        str(FIXTURAS / "m16b-ingenieria-RESULTADO.md"),
+                        "--excluir",
+                        "/private/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T"
+                        "/agent-work-banco-rd0b4swq/state/enc-1",
+                    ]
+                )
+        self.assertEqual(codigo, 1, out.getvalue())
+        self.assertEqual(
+            json.loads(out.getvalue())["razones"][0],
+            "falta la lectura de contexto/skills/poteto-mode/SKILL.md antes del primer cambio",
+        )
+
+    def test_delegating_counts_as_a_change_so_tests_must_come_after_it(self):
+        # D3: el arreglo lo hizo el hijo del task, y sus eventos no están en este flujo;
+        # el task del padre es el último cambio visible y las pruebas le sigan o no hay.
+        filas = [
+            herramienta("skill", name="poteto-mode", output="cargada"),
+            herramienta("read", filePath="/repo/contexto/skills/poteto-mode/SKILL.md"),
+            herramienta("read", filePath="/repo/contexto/skills/poteto-mode/playbooks/feature.md"),
+            herramienta(
+                "todowrite",
+                todos=[{"content": "how over the affected subsystem.", "status": "pending"}],
+            ),
+            herramienta("bash", command="python3 -m unittest -v", output="OK (1 test)"),
+            herramienta("task", description="arregla saluda()"),
+        ]
+        veredicto = juzgar(filas, resultado="OK (1 test)")
+        self.assertEqual(
+            veredicto, conducta.Veredicto(False, ("no corrió pruebas después del último cambio",))
+        )
+
 
 MODULO_NATIVO = ROOT / "scripts" / "agent-work" / "extraer-nativo.py"
 FIXTURAS = ROOT / "scripts" / "tests" / "fixtures" / "conducta"
