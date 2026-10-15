@@ -57,6 +57,7 @@
 0	test-progreso-valido.sh
 4	test-progress-events-client.sh
 3	test-reconciliar-progreso.sh
+7	test-respaldo-completo.sh
 1	test-respaldo-gonserver.sh
 1	test-respaldo-workspaces.sh
 0	test-restart-gateway-script.sh

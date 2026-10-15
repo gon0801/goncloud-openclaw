@@ -1,0 +1,182 @@
+#!/bin/bash
+# Respaldo completo diario de la Mac mini del gateway hacia gonserver, para poder
+# reinstalar en otra Mac (docs/runbooks/reinstalar-desde-respaldo.md).
+#
+#   openclaw-backup-AAAAMMDD.tar.gz  `openclaw backup create --verify`: ~/.openclaw entero.
+#   openclaw-extras-AAAAMMDD.tar.gz  lo que vive fuera de ~/.openclaw y una reinstalación
+#                                    necesita (lista en EXTRAS).
+#
+# Sube los dos a clawbackup@gonserver, cuyo command= forzado es
+# `recibe-respaldo openclaw` (scripts/gonserver/): el nombre va como comando remoto, los
+# datos por stdin, y el servidor contesta el sha256 que guardó. Cada subida tiene 3
+# intentos con tope de tiempo, alternando WireGuard y Tailscale. Guarda los 2 más nuevos
+# de cada uno en la Mac. Una corrida que falla avisa por Telegram; una que sale bien, no.
+#
+# Corre con el bash 3.2 de macOS. Todo lo de afuera se cambia por entorno para probarlo
+# sin red (scripts/tests/test-respaldo-completo.sh).
+set -uo pipefail
+umask 077
+
+RC_DIR="${RC_DIR:-$HOME/respaldo-completo}"   # fuera de ~/.openclaw: openclaw se niega a escribir dentro
+RC_LOG="${RC_LOG:-$HOME/Library/Logs/goncloud/respaldo-completo.log}"
+OPENCLAW_BIN="${OPENCLAW_BIN:-$HOME/.openclaw/bin/openclaw}"
+RC_SERVIDORES="${RC_SERVIDORES:-10.13.13.1 100.127.167.103}"   # WireGuard, luego Tailscale
+RC_USUARIO="${RC_USUARIO:-clawbackup}"
+RC_LLAVE="${RC_LLAVE:-$HOME/.ssh/claw_goncloud}"
+RC_SSH="${RC_SSH:-ssh}"
+RC_INTENTOS="${RC_INTENTOS:-3}"
+RC_ESPERA="${RC_ESPERA:-60}"              # segundos entre intentos de subida
+RC_TOPE="${RC_TOPE:-1800}"                # segundos por intento de subida (3.9 GB ~ 8 min)
+RC_TOPE_CREAR="${RC_TOPE_CREAR:-1800}"    # segundos para `backup create` (medido: 143 s)
+RC_GUARDAR="${RC_GUARDAR:-2}"             # archivos de cada tipo que se quedan en la Mac
+RC_TELEGRAM="${RC_TELEGRAM:-6470689715}"
+RC_FECHA="${RC_FECHA:-$(date +%Y%m%d)}"
+
+# Rutas relativas a $HOME; un patrón sin coincidencias se anota y se sigue.
+EXTRAS="Library/LaunchAgents/ai.openclaw.*.plist Library/LaunchAgents/ai.goncloud.*.plist
+goncloud-autoupdate .claude .claude.json .ssh .zshrc .openclaw-state .local/bin"
+
+mkdir -p "$(dirname "$RC_LOG")" "$RC_DIR"
+exec >>"$RC_LOG" 2>&1
+
+log() { printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*"; }
+FALLAS=""
+falla() { FALLAS="${FALLAS:+$FALLAS; }$*"; log "FALLA: $*"; }
+con_tope() { /usr/bin/perl -e 'alarm shift; exec @ARGV or exit 127' "$@"; }
+sha256() { shasum -a 256 "$1" | cut -d' ' -f1; }
+
+avisar() {
+  local texto="El respaldo completo de la Mac mini a gonserver falló: $1. Revisa $RC_LOG."
+  if [ -n "${RC_AVISO_CMD:-}" ]; then
+    "$RC_AVISO_CMD" "$texto" && log "aviso enviado" && return 0
+  elif con_tope 120 "$OPENCLAW_BIN" message send --channel telegram -t "$RC_TELEGRAM" \
+      -m "$texto" --json >/dev/null 2>&1; then
+    log "aviso enviado por Telegram"; return 0
+  elif /usr/bin/osascript -e 'display notification "El respaldo completo falló. Ver ~/Library/Logs/goncloud/respaldo-completo.log" with title "Respaldo completo"' >/dev/null 2>&1; then
+    log "aviso local (Telegram no contestó)"; return 0
+  fi
+  log "no se pudo avisar"
+}
+# El aviso sale una vez, al terminar, con todas las causas. El lock de otra corrida
+# viva (3) no es una falla del respaldo.
+al_salir() {
+  local rc=$?
+  rm -rf "${TMP:-}" "${LOCK_PROPIO:-}"
+  case "$rc" in 0|3) ;; *) avisar "${FALLAS:-salida inesperada (rc=$rc)}" ;; esac
+}
+trap al_salir EXIT
+
+LOCK="$RC_DIR/.lock"
+# Identidad de un proceso = PID + hora de inicio: tras un reinicio el PID de una
+# corrida muerta puede tenerlo otro proceso vivo, y eso no es dueño del lock.
+identidad() { printf '%s %s' "$1" "$(ps -o lstart= -p "$1" 2>/dev/null | tr -s ' ')"; }
+if ! mkdir "$LOCK" 2>/dev/null; then
+  dueno="$(cat "$LOCK/dueno" 2>/dev/null)"
+  pid="${dueno%% *}"
+  if [ -n "$pid" ] && [ "$(identidad "$pid")" = "$dueno" ]; then
+    log "ABORTO: otra corrida (pid $pid) tiene el lock $LOCK"; exit 3
+  fi
+  log "lock huérfano (${dueno:-sin dueño}); se recupera"
+  rm -rf "$LOCK"
+  mkdir "$LOCK" 2>/dev/null || { log "ABORTO: no se pudo tomar el lock $LOCK"; exit 3; }
+fi
+identidad $$ > "$LOCK/dueno"
+LOCK_PROPIO="$LOCK"
+TMP="$(mktemp -d "$RC_DIR/.tmp.XXXXXX")"
+log "inicio $RC_FECHA"
+
+# $1 archivo local. Lo sube con su nombre y compara el sha256 que contesta el servidor.
+subir() {
+  local archivo="$1" nombre local_sha remoto rc intento=1 host causa
+  nombre="$(basename "$archivo")"; local_sha="$(sha256 "$archivo")"
+  while :; do
+    host="$(echo "$RC_SERVIDORES" | awk -v i="$intento" '{ print $((i - 1) % NF + 1) }')"
+    remoto="$(con_tope "$RC_TOPE" "$RC_SSH" -i "$RC_LLAVE" -o IdentitiesOnly=yes -o BatchMode=yes \
+      -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20 -o ServerAliveInterval=15 \
+      -o ServerAliveCountMax=4 "$RC_USUARIO@$host" "$nombre" < "$archivo" 2> "$TMP/ssh.err")"
+    rc=$?
+    if [ "$rc" -eq 0 ] && [ "$remoto" = "$local_sha" ]; then
+      log "$nombre: subido a $host ($(du -h "$archivo" | cut -f1), sha256 $local_sha)"; return 0
+    elif [ "$rc" -eq 0 ]; then
+      causa="el sha256 no coincide (servidor: ${remoto:-vacío})"
+    else
+      causa="$(tr '\n' ' ' < "$TMP/ssh.err" | sed 's/ *$//' | cut -c1-160)"
+      [ -n "$causa" ] || causa="sin respuesta en ${RC_TOPE}s"
+    fi
+    if [ "$intento" -ge "$RC_INTENTOS" ]; then
+      falla "$nombre no se subió tras $intento intento(s): $causa"; return 1
+    fi
+    log "$nombre: intento $intento a $host falló ($causa); otro en ${RC_ESPERA}s"
+    intento=$((intento + 1)); sleep "$RC_ESPERA"
+  done
+}
+
+# 1. ~/.openclaw con el respaldo nativo, verificado.
+crear_backup() {
+  local destino="$RC_DIR/openclaw-backup-$RC_FECHA.tar.gz" sal="$TMP/crear"
+  mkdir -p "$sal"
+  if ! con_tope "$RC_TOPE_CREAR" "$OPENCLAW_BIN" backup create --output "$sal" --verify --json \
+      > "$TMP/crear.json" 2> "$TMP/crear.err"; then
+    falla "openclaw backup create falló: $(tail -3 "$TMP/crear.err" | tr '\n' ' ' | cut -c1-200)"
+    return 1
+  fi
+  if ! grep -Eq '"verified"[[:space:]]*:[[:space:]]*true' "$TMP/crear.json"; then
+    falla "openclaw backup create no verificó el archivo"; return 1
+  fi
+  set -- "$sal"/*.tar.gz
+  if [ "$#" -ne 1 ] || [ ! -f "$1" ]; then
+    falla "openclaw backup create no dejó un solo .tar.gz en $sal"; return 1
+  fi
+  mv -f "$1" "$destino"
+  log "backup creado: $destino ($(du -h "$destino" | cut -f1))"
+  subir "$destino"
+}
+
+# 2. Lo de fuera de ~/.openclaw, con rutas absolutas sin la / inicial: se restaura a un
+# directorio aparte y se copia de ahí (ver el runbook). La nota RESPALDO-EXTRAS.txt dice
+# qué faltó.
+listar_extras() { # $1 nota, $2 lista
+  local patron ruta yo
+  case "$0" in /*) yo="$0" ;; *) yo="$PWD/$0" ;; esac
+  printf 'Extras de %s, %s. Rutas relativas a /.\n' "$(hostname)" "$RC_FECHA" > "$1"
+  printf '%s\n' "$1" "$yo" > "$2"
+  for patron in $EXTRAS; do
+    # shellcheck disable=SC2086  # el patrón se expande a propósito
+    set -- "$HOME"/$patron
+    if [ -e "$1" ] || [ -L "$1" ]; then
+      for ruta in "$@"; do find "$ruta"; done
+    else
+      printf 'omitido (no existe): ~/%s\n' "$patron" >&3
+    fi
+  done 3>> "$1" >> "$2"
+}
+crear_extras() {
+  local destino="$RC_DIR/openclaw-extras-$RC_FECHA.tar.gz" nota="$RC_DIR/RESPALDO-EXTRAS.txt"
+  local lista="$TMP/extras.lista" intento
+  # Un archivo de ~/.claude que desaparece entre la lista y tar hace fallar a tar; con
+  # la lista rehecha el segundo intento pasa. Dos fallas seguidas son una falla real.
+  for intento in 1 2; do
+    listar_extras "$nota" "$lista"
+    sed 's|^/||' "$lista" > "$lista.rel"
+    if tar -czf "$TMP/extras.tar.gz" --no-recursion -C / -T "$lista.rel" 2> "$TMP/tar.err"; then
+      grep '^omitido' "$nota" | while IFS= read -r l; do log "extras: $l"; done
+      mv -f "$TMP/extras.tar.gz" "$destino"
+      log "extras creados: $destino ($(du -h "$destino" | cut -f1), $(wc -l < "$lista" | tr -d ' ') rutas)"
+      subir "$destino"; return
+    fi
+    log "extras: tar falló en el intento $intento: $(tr '\n' ' ' < "$TMP/tar.err" | cut -c1-200)"
+  done
+  falla "no se pudo armar los extras: $(tr '\n' ' ' < "$TMP/tar.err" | cut -c1-200)"
+}
+
+# Un fallo de uno no detiene al otro: el que sí sale se sube.
+crear_backup
+crear_extras
+
+for tipo in openclaw-backup openclaw-extras; do
+  ls -1 "$RC_DIR/$tipo"-*.tar.gz 2>/dev/null | sort -r | tail -n +"$((RC_GUARDAR + 1))" \
+    | while IFS= read -r viejo; do rm -f "$viejo"; log "borrado local: $(basename "$viejo")"; done
+done
+
+[ -z "$FALLAS" ] || { log "terminado con fallas"; exit 1; }
+log "terminado sin fallas"

@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Respaldo completo diario de la Mac mini a gonserver (scripts/mac/respaldo-completo.sh).
+  Plantilla: __HOME__ y __NODE_BIN__ se llenan al instalar. `openclaw` es un script de
+  node (#!/usr/bin/env node), así que el PATH de launchd necesita la carpeta de node.
+  Install, en la Mini como gon:
+    NODE_BIN="$(dirname "$(ls -d ~/.openclaw/tools/node-v*/bin/node | tail -1)")"
+    mkdir -p ~/bin ~/Library/Logs/goncloud &&
+    cp scripts/mac/respaldo-completo.sh ~/bin/ &&
+    sed -e "s|__HOME__|$HOME|g" -e "s|__NODE_BIN__|$NODE_BIN|g" \
+      scripts/mac/ai.goncloud.respaldo-completo.plist > ~/Library/LaunchAgents/ai.goncloud.respaldo-completo.plist &&
+    launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/ai.goncloud.respaldo-completo.plist
+  Correr ya (sin esperar a las 03:30):
+    launchctl kickstart gui/$(id -u)/ai.goncloud.respaldo-completo
+  Remove:
+    launchctl bootout gui/$(id -u)/ai.goncloud.respaldo-completo
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>ai.goncloud.respaldo-completo</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>__HOME__/bin/respaldo-completo.sh</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>HOME</key>
+    <string>__HOME__</string>
+    <key>PATH</key>
+    <string>__NODE_BIN__:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+  <!-- Una vez al día, hora de la Mac. Si la Mac dormía, launchd la corre al despertar. -->
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Hour</key>
+    <integer>3</integer>
+    <key>Minute</key>
+    <integer>30</integer>
+  </dict>
+  <key>RunAtLoad</key>
+  <false/>
+  <key>ProcessType</key>
+  <string>Background</string>
+  <key>StandardOutPath</key>
+  <string>__HOME__/Library/Logs/goncloud/respaldo-completo.log</string>
+  <key>StandardErrorPath</key>
+  <string>__HOME__/Library/Logs/goncloud/respaldo-completo.log</string>
+</dict>
+</plist>
