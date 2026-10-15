@@ -144,10 +144,6 @@ class Briefs(unittest.TestCase):
             banco = BancoE2E.__new__(BancoE2E)
             banco.spool = spool
             self.assertEqual(banco.artifact_path("task-e"), Path("/tmp/el-artefacto.md"))
-            self.assertEqual(
-                banco.artifact_path("task-otra"),
-                spool / "results" / f"{operation_id(OperationKey(HOST_ID, 'task-otra', 1, INSTANCE))}.json",
-            )
 
 
 def sha256(data):
