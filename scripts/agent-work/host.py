@@ -551,8 +551,6 @@ class Host:
             raise ValueError("producer capability mismatch")
         if result["observedRevision"] != assignment["inputRevision"]:
             raise ValueError("observed revision mismatch")
-        if not typed_payload_valido(assignment["resultContract"], result["typedPayload"]):
-            raise ValueError(f"typedPayload no cumple {assignment['resultContract']}")
         encoded = canonical(result).encode()
         if len(encoded) > 1024 * 1024:
             raise ValueError("result too large")
@@ -588,6 +586,11 @@ class Host:
                 raise ValueError("artifact digest mismatch")
             self._write_snapshot(snapshot, raw)
             self._snapshot_bytes(snapshot, result["digest"])
+        # Después de la revisión del repo del revisor (ReviewWroteSource manda, es el
+        # episodio más específico) y justo antes de grabar (C1): un typedPayload que no
+        # cumple su contrato no se graba jamás.
+        if not typed_payload_valido(assignment["resultContract"], result["typedPayload"]):
+            raise ValueError(f"typedPayload no cumple {assignment['resultContract']}")
         self.spool.record(op_id, result_id, result, self.state_dir / "results" / f"{op_id}.json")
         return ResultReceipt(result_id)
 
