@@ -14,3 +14,5 @@ Entorno como `opencode_env` (PWD, TMPDIR, OPENCODE_DISABLE_AUTOUPDATE, AGENT_WOR
 | 2b | lo mismo con `agent.poteto-agent.model = kimi-code-plan-cn/kimi-for-coding` | `agent=poteto-agent modelID=kimi-for-coding`, `task` completado | Sí |
 
 Para el diseño de SUA-03: (a), (c) y (d) se pueden usar en `opencode_env`. En (b) los nombres de las skills del paquete tienen que ser únicos frente a `~/.agents/skills` y `~/.claude/skills` (prefijo propio), porque el global gana. (e) la conducta del hijo se lee del log de stderr, no del flujo JSON. Sin el override de (c) cada hijo `poteto-agent` falla con un modelo que no sea de zai.
+
+Nota de G3-r2: por el punto (b), `coverage.json` deja `contextGenerations` vacío: la generación 1 queda SIN certificar para encargos (solo corre con `--canario`). La generación 2, con nombres propios de skills, la construye G4 y la certifica M-16.
