@@ -68,6 +68,14 @@ done
 for f in brief.py contexto.py contracts.py flota.py host.py modelos.py native_gateway.py progress_bridge.py resources.py routing.py sesion.py spool.py cutover.py; do
   cmp -s "scripts/agent-work/$f" "$HOME/bin/agent-work/$f" || fail "agent-work/$f falta o difiere"
 done
+# La carpeta de datos del paquete (SUA-03): cada archivo, entera, competencia incluida.
+for f in $(cd scripts/agent-work/contexto && find . -type f | sed 's|^\./||' | sort); do
+  cmp -s "scripts/agent-work/contexto/$f" "$HOME/bin/agent-work/contexto/$f" || fail "agent-work/contexto/$f falta o difiere"
+done
+[ -f "$HOME/bin/agent-work/contexto/competencia/ingenieria/positiva.json" ] || fail "agent-work/contexto/competencia incompleta"
+# El host instalado lee los datos de su carpeta: las adaptaciones que el manifiesto fija.
+(cd / && python3 -I -c "import sys; sys.path.insert(0, sys.argv[1]); import contexto; adaptaciones = contexto.leer_adaptaciones(); assert set(adaptaciones) == {\"opencode-run\", \"openclaw\"}, adaptaciones" "$HOME/bin/agent-work") >/dev/null 2>&1 \
+  || fail "agent-work/contexto.py instalado no lee contexto/ instalado"
 # routing.py importa brief.py: cada modulo instalado tiene que importar solo con lo instalado.
 for f in "$HOME"/bin/agent-work/*.py; do
   m="$(basename "$f" .py)"
