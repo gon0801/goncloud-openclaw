@@ -349,6 +349,8 @@ def guardar_caso(raiz: Path, destino: Path) -> Path:
                 fuera.add(nombre)
         return fuera
 
+    if destino.exists():
+        shutil.rmtree(destino)
     shutil.copytree(raiz, destino, ignore=ignora, dirs_exist_ok=True)
     return destino
 
