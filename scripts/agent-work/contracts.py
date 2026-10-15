@@ -62,6 +62,11 @@ class RunDir:
         """Where the session keeps helper scripts and temporary files: its TMPDIR."""
         return self.path / "tmp"
 
+    @property
+    def repo(self) -> Path:
+        """The disposable clone where a reviewer works (SUA-03, 4.8), built and deleted by the host."""
+        return self.path / "repo"
+
     @staticmethod
     def for_operation(spool: Path, operation: str) -> "RunDir":
         if not OPERATION_ID.fullmatch(operation):
