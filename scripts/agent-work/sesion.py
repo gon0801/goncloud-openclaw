@@ -152,31 +152,31 @@ class Route:
     """Lo que se certifica una vez: host, CLI, forma de lanzamiento y versiones medidas del CLI, y las
     generaciones del paquete de poteto certificadas para encargos (SUA-03, 4.5)."""
     host_id: str
-    adapter_id: Literal["opencode"]
+    adapter_id: str
     form: Literal["run-per-task"]
     status: str
     certified_cli_versions: frozenset[str]
     certified_context_generations: frozenset[str] = frozenset()
 
     @staticmethod
-    def load(coverage: object, host_id: str) -> "Route":
+    def load(coverage: object, host_id: str, adapter_id: str = "opencode") -> "Route":
         """De coverage.json, sin lanzar con ninguna forma de archivo. La ruta existe solo si
-        hostAdapterRoute declara para ese host una entrada `opencode` de forma `run-per-task`: recién
-        entonces vale el estado de hostAdapterCoverage. Lo que falta o está mal escrito es una ruta ausente,
-        sin versiones."""
+        hostAdapterRoute declara para ese host una entrada de ese adaptador de forma `run-per-task`:
+        recién entonces vale el estado de hostAdapterCoverage. Lo que falta o está mal escrito es
+        una ruta ausente, sin versiones."""
         def at(*keys: str) -> object:
             value = coverage
             for key in keys:
                 value = value.get(key) if isinstance(value, dict) else None
             return value
-        entry, status = at("hostAdapterRoute", host_id, "opencode"), at("hostAdapterCoverage", host_id, "opencode")
+        entry, status = at("hostAdapterRoute", host_id, adapter_id), at("hostAdapterCoverage", host_id, adapter_id)
         if not isinstance(entry, dict) or entry.get("form") != ROUTE_FORM or not isinstance(status, str):
-            return Route(host_id, "opencode", ROUTE_FORM, "absent", frozenset())
+            return Route(host_id, adapter_id, ROUTE_FORM, "absent", frozenset())
         measured = entry.get("certifiedCliVersions")
         versions = (key for key in measured if isinstance(key, str)) if isinstance(measured, dict) else ()
         contexts = entry.get("contextGenerations")
         generations = (key for key in contexts if isinstance(key, str)) if isinstance(contexts, dict) else ()
-        return Route(host_id, "opencode", ROUTE_FORM, status, frozenset(versions), frozenset(generations))
+        return Route(host_id, adapter_id, ROUTE_FORM, status, frozenset(versions), frozenset(generations))
 
     def open_for(self, cli_version: str, generation: int | None = None, *, canary: bool
                  ) -> "None | RouteNotCertified | GenerationNotCertified":
@@ -221,6 +221,11 @@ class LaunchSpec:
     """El OPENCODE_CONFIG_CONTENT que el lanzador va a pasar. None: el de toda la vida."""
     package: Package | None = None
     """El paquete que este plan leyó: el paso de lanzamiento copia de su fuente y relee su digest."""
+    adapter_id: str = "opencode"
+    """El adaptador que lanza esta corrida (SUA-04, 4.7): opencode o claude."""
+    herramientas: tuple[str, ...] = ()
+    """Las herramientas del perfil para el adaptador que pregunta por ellas (claude:
+    --allowed-tools). opencode las lleva en su configuración y no mira esta lista."""
 
 
 def session_name(operation: str) -> str:
@@ -300,7 +305,11 @@ def plan_launch(assignment: object, brief: bytes, *, policy: ProviderPolicy, cat
             perfil = contexto.perfil(package.profiles, header.profile)
         except KeyError:
             return PerfilRechazado("perfil-desconocido", f"ningún perfil se llama {header.profile}")
-        admitted = contexto.admite(perfil, {"host": route.host_id, "executor": route.adapter_id, "agentId": None},
+        # El adaptador claude no es una ruta nueva del perfil (4.7 solo suma
+        # requiredTools.claude al paquete): su admisión se juzga por la ruta CLI
+        # del host, que en el perfil se llama opencode.
+        executor = "opencode" if route.adapter_id == "claude" else route.adapter_id
+        admitted = contexto.admite(perfil, {"host": route.host_id, "executor": executor, "agentId": None},
                                    assignment.get("resultContract") if isinstance(assignment, dict) else None,
                                    ahora=now, canario=canary)
         if admitted.causa is not None:
@@ -310,7 +319,22 @@ def plan_launch(assignment: object, brief: bytes, *, policy: ProviderPolicy, cat
     if not isinstance(model, PermittedModel):
         return model
     config: dict | None = None
-    if perfil is not None:
+    herramientas: tuple[str, ...] = ()
+    if route.adapter_id == "claude":
+        # claude no lee la configuración de opencode: sus herramientas van en
+        # --allowed-tools y su encierro es el sandbox (M-23). Sin perfil, solo lee.
+        herramientas = (
+            tuple(perfil["requiredTools"].get("claude", ())) if perfil is not None else ("Read",)
+        )
+        if perfil is not None and not perfil["writesSource"] and (
+            "Edit" in herramientas or "Write" in herramientas
+        ):
+            return PerfilRechazado(
+                "revisor-con-escritura",
+                f"el perfil {perfil['id']} no escribe fuente y sus herramientas de claude "
+                "incluyen Edit o Write",
+            )
+    elif perfil is not None:
         # Las dos comprobaciones miran la configuración que este plan va a pasar, con el modelo ya admitido.
         config = run_config(run, model.model, writes=perfil["writesSource"])
         negada = _admits_tools(perfil, config)
@@ -328,7 +352,8 @@ def plan_launch(assignment: object, brief: bytes, *, policy: ProviderPolicy, cat
         # El revisor trabaja en un clon desechable dentro de la corrida (4.8), que arma el paso de
         # lanzamiento: plan_launch se queda puro y solo señala la carpeta.
         workspace = Workspace(run.repo)
-    return LaunchSpec(model, workspace, run, record, session_name(operation), perfil, config, package)
+    return LaunchSpec(model, workspace, run, record, session_name(operation), perfil, config, package,
+                      route.adapter_id, herramientas)
 
 
 SCRATCH_RULE = (" Keep every helper script and scratch file inside the directory that holds acceptRef, and touch "
@@ -384,13 +409,151 @@ def opencode_env(spec: LaunchSpec) -> dict[str, str]:
     return env
 
 
+CLAUDE_SANDBOX_SETTINGS = '{"sandbox":{"enabled":true,"autoAllowBashIfSandboxed":true}}'
+"""El encierro de Bash de claude (M-23): con el sandbox, Bash escribe en el cwd y en las
+carpetas de --add-dir, y en cualquier otro lado recibe `operation not permitted` del
+sistema operativo. Es el equivalente de `external_directory: deny` de opencode."""
+
+
+def claude_argv(spec: LaunchSpec, claude_bin: Path, *, task_id: str) -> tuple[str, ...]:
+    """El argv de claude por su CLI (SUA-04, 4.7; medido en M-21/M-23).
+
+    El modelo de la cabecera es `anthropic/<id>` y `--model` recibe el id sin el
+    prefijo del proveedor: su --help acepta un alias (opus, sonnet) o el nombre
+    completo. dontAsk con --permission-prompts none niega y sigue (M-21, punto 3);
+    --allowed-tools lleva las herramientas del perfil y --add-dir la carpeta de la
+    corrida, la única fuera del cwd donde el sandbox deja escribir (M-23)."""
+    if task_id.startswith("-"):
+        raise ValueError(f"un taskId no empieza con guion: {task_id!r}")
+    return (
+        str(claude_bin),
+        "-p",
+        delivery_line(str(spec.run.assignment)) + SCRATCH_RULE,
+        "--model",
+        spec.model.model.name,
+        "--output-format",
+        "stream-json",
+        "--verbose",
+        "--permission-mode",
+        "dontAsk",
+        "--permission-prompts",
+        "none",
+        "--setting-sources",
+        "project",
+        "--no-session-persistence",
+        "--allowed-tools",
+        ",".join(spec.herramientas),
+        "--add-dir",
+        str(spec.run.path),
+        "--settings",
+        CLAUDE_SANDBOX_SETTINGS,
+    )
+
+
+def claude_env(spec: LaunchSpec) -> "dict[str, str | None]":
+    """El entorno de claude. Sin ANTHROPIC_API_KEY (4.7): la suscripción entra por la
+    sesión de David (M-21), y una llave en el entorno la taparía; el None es la marca
+    de `unset` en el script de lanzamiento. La carpeta la fija el `cd` del lanzador
+    (M-21, punto 2: claude usa el cwd del proceso, no PWD); PWD va igual al workspace
+    para que ningún hijo lea el del host."""
+    return {
+        "PWD": str(spec.workspace.root),
+        "TMPDIR": str(spec.run.scratch),
+        "AGENT_WORK_MANAGED": "1",
+        "ANTHROPIC_API_KEY": None,
+    }
+
+
+def claude_events(record: Path) -> "RunEvents | None":
+    """Lo que claude dejó en su stream-json (M-21, punto 4): el cwd y el modelo de
+    system/init, cada tool_use, y el result con modelUsage y permission_denials.
+    None si el archivo no se puede leer, como read_events."""
+    files = SessionRecord(record)
+    first_at, error, opened = None, None, None
+    denied, calls, evaluations, tail = [], [], [], deque(maxlen=TAIL_LINES)
+    used: list[str] = []
+    try:
+        with files.events.open(encoding="utf-8", errors="replace") as flow:
+            for line in flow:
+                tail.append(line.rstrip("\n"))
+                try:
+                    event = json.loads(line)
+                except ValueError:
+                    continue
+                if not isinstance(event, dict):
+                    continue
+                stamp = event.get("timestamp")
+                if first_at is None and isinstance(stamp, str):
+                    try:
+                        first_at = datetime.fromisoformat(stamp.replace("Z", "+00:00")).timestamp()
+                    except ValueError:
+                        pass
+                if event.get("type") == "system" and event.get("subtype") == "init":
+                    opened = event.get("cwd") if isinstance(event.get("cwd"), str) else opened
+                    if isinstance(event.get("model"), str):
+                        used.append(event["model"])
+                message = event.get("message") if isinstance(event.get("message"), dict) else {}
+                if event.get("type") == "assistant" and isinstance(message.get("model"), str):
+                    modelo = message["model"]
+                    if modelo not in used:
+                        used.append(modelo)
+                    agente = "build" if event.get("parent_tool_use_id") is None else "task"
+                    call = ModelCall(agente, f"anthropic/{modelo}", False)
+                    if call not in calls:
+                        calls.append(call)
+                    for bloque in message.get("content") or ():
+                        if isinstance(bloque, dict) and bloque.get("type") == "tool_use":
+                            evaluations.append(f"{bloque.get('name')}:allow")
+                if event.get("type") == "result":
+                    for negado in event.get("permission_denials") or ():
+                        if not isinstance(negado, dict):
+                            continue
+                        herramienta = str(negado.get("tool_name") or "")
+                        entrada = negado.get("tool_input")
+                        patron = (
+                            str(entrada.get("file_path"))
+                            if isinstance(entrada, dict) and entrada.get("file_path")
+                            else json.dumps(entrada, ensure_ascii=False, sort_keys=True)
+                            if entrada is not None
+                            else ""
+                        )
+                        denied.append(PermissionDenied(herramienta, patron))
+                        evaluations.append(f"{herramienta}:deny")
+                    if not calls:
+                        for modelo in (event.get("modelUsage") or {}):
+                            calls.append(ModelCall("build", f"anthropic/{modelo}", False))
+                            if modelo not in used:
+                                used.append(modelo)
+                    if event.get("is_error") or event.get("subtype") != "success":
+                        error = str(event.get("result") or event.get("subtype") or "claude salió con error")
+    except OSError:
+        return None
+    return RunEvents(first_at, tuple(dict.fromkeys(denied)), error, opened,
+                     ("anthropic",) if used else (), tuple(tail), (), tuple(calls),
+                     tuple(dict.fromkeys(evaluations)))
+
+
+def claude_model_in_use(events: "RunEvents | None", requested: "str | None") -> "tuple[str | None, str | None]":
+    """El modelo que claude corrió, de su stream. `--model` recibe un alias o un nombre
+    y el alias se resuelve solo (M-21), así que no hay igualdad que comprobar como con
+    el `-m` de opencode: el usado es el que modelUsage y los mensajes nombran."""
+    if events is None:
+        return None, "no se pueden leer los eventos de claude"
+    used = list(dict.fromkeys(call.model for call in events.calls if call.agent == "build" and not call.small))
+    if not used:
+        return None, "claude no registró ninguna llamada"
+    if requested is None:
+        return None, f"claude usó {', '.join(used)} y no se sabe qué se pidió"
+    return used[0], None
+
+
 EXIT_NO_SCRATCH = 96
 EXIT_NO_WORKSPACE = 97
 EXIT_OUTSIDE_GROUP = 98
 """Códigos con que launch.sh sale antes de llegar a opencode."""
 
 
-def launch_script(spec: LaunchSpec, argv: tuple[str, ...], env: dict[str, str], gid: int) -> str:
+def launch_script(spec: LaunchSpec, argv: tuple[str, ...], env: "dict[str, str | None]", gid: int) -> str:
     """Lo que lee el shell de newgrp. El entorno se fija aquí, justo antes del exec, y no con `tmux -e`: ni
     tmux ni ese shell pueden dejar otro PWD. newgrp corre el shell aunque no logre cambiar de grupo, así
     que la primera línea lo comprueba: un proceso fuera del grupo quedaría fuera de la frontera."""
@@ -399,7 +562,8 @@ def launch_script(spec: LaunchSpec, argv: tuple[str, ...], env: dict[str, str], 
         f'[ "$(/usr/bin/id -rg)" = {gid} ] || exit {EXIT_OUTSIDE_GROUP}',
         f"cd -- {shlex.quote(str(spec.workspace.root))} || exit {EXIT_NO_WORKSPACE}",
         f"/bin/mkdir -p -m 700 -- {shlex.quote(str(spec.run.scratch))} || exit {EXIT_NO_SCRATCH}",
-        *(f"export {name}={shlex.quote(value)}" for name, value in env.items()),
+        *((f"export {name}={shlex.quote(value)}" if value is not None else f"unset {name}")
+          for name, value in env.items()),
         f"exec {' '.join(map(shlex.quote, argv))} </dev/null >>{shlex.quote(str(record.events))} "
         f"2>>{shlex.quote(str(record.stderr))}",
     ]) + "\n"
@@ -566,6 +730,82 @@ def model_in_use(events: RunEvents | None, requested: str | None) -> tuple[str |
     if other:
         return None, f"opencode usó {', '.join(other)} y se pidió {requested}"
     return requested, None
+
+
+class Adaptador:
+    """Un CLI que el host lanza por encargo (SUA-04, 4.7): su id, su argv, su entorno,
+    la carpeta de la corrida y cómo se leen sus eventos. opencode es la primera
+    implementación y su comportamiento no cambia; claude es la segunda."""
+
+    id: str = ""
+
+    def argv(self, spec: LaunchSpec, bin_path: Path, *, task_id: str) -> tuple[str, ...]:
+        raise NotImplementedError
+
+    def env(self, spec: LaunchSpec) -> "dict[str, str | None]":
+        raise NotImplementedError
+
+    def carpeta(self, spec: LaunchSpec) -> Path:
+        """La carpeta de trabajo de la corrida: el lanzador hace cd a ella y no se
+        fía de PWD (M-21, punto 2, al revés que opencode)."""
+        return spec.workspace.root
+
+    def leer_eventos(self, record: Path) -> "RunEvents | None":
+        raise NotImplementedError
+
+    def directorio_sesion(self, record: Path) -> "str | None":
+        eventos = self.leer_eventos(record)
+        return eventos.session_directory if eventos else None
+
+    def modelo_en_uso(self, events: "RunEvents | None", requested: "str | None"):
+        raise NotImplementedError
+
+
+class AdaptadorOpencode(Adaptador):
+    id = "opencode"
+
+    def argv(self, spec, bin_path, *, task_id):
+        return opencode_argv(spec, bin_path, task_id=task_id)
+
+    def env(self, spec):
+        return opencode_env(spec)
+
+    def leer_eventos(self, record):
+        return read_events(record)
+
+    def directorio_sesion(self, record):
+        return session_directory(record)
+
+    def modelo_en_uso(self, events, requested):
+        return model_in_use(events, requested)
+
+
+class AdaptadorClaude(Adaptador):
+    id = "claude"
+
+    def argv(self, spec, bin_path, *, task_id):
+        return claude_argv(spec, bin_path, task_id=task_id)
+
+    def env(self, spec):
+        return claude_env(spec)
+
+    def leer_eventos(self, record):
+        return claude_events(record)
+
+    def modelo_en_uso(self, events, requested):
+        return claude_model_in_use(events, requested)
+
+
+ADAPTADORES: "dict[str, Adaptador]" = {a.id: a for a in (AdaptadorOpencode(), AdaptadorClaude())}
+"""Los adaptadores que este host sabe lanzar, por id de ruta (coverage.json)."""
+
+
+def adaptador(adapter_id: str) -> Adaptador:
+    """El adaptador de ese id, o ValueError: una ruta que el host no implementa no se lanza."""
+    try:
+        return ADAPTADORES[adapter_id]
+    except KeyError:
+        raise ValueError(f"el host no implementa el adaptador {adapter_id!r}") from None
 
 
 @dataclass(frozen=True)

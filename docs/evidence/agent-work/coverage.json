@@ -15,11 +15,12 @@
     {"kind": "cli-managed-task", "owner": "host agent-work (opencode por encargo)", "certified": true, "contextGenerations": [1, 2], "evidence": "docs/evidence/sistema-agentes-unificado/SUA-03-mediciones.md (M-16, banco y generación 2)"},
     {"kind": "cli-child", "owner": "opencode task/bash dentro de la corrida del host", "certified": true, "contextGenerations": [1, 2], "evidence": "docs/evidence/sistema-agentes-unificado/SUA-03-mediciones.md (M-16, banco y generación 2)"}
   ],
-  "cliAdapters": ["opencode"],
+  "cliAdapters": ["opencode", "claude"],
   "hosts": [{"id": "mac-local", "platform": "macOS", "status": "certified"}, {"id": "windows-remote", "platform": "Windows", "status": "disabled-unverified"}],
   "hostAdapterCoverage": {
     "mac-local": {
-      "opencode": "certified"
+      "opencode": "certified",
+      "claude": "sandbox-tested-uncertified"
     },
     "windows-remote": {
       "opencode": "disabled-host-unverified"
@@ -40,6 +41,21 @@
           "rule": "external_directory con \"*\": \"deny\" y <corrida>/**: \"allow\", en ese orden",
           "evidence": "docs/evidence/agent-work/B22-canarios.md (M7 y \"Límite medido\")",
           "limitation": "La regla cubre las herramientas de archivo de opencode (read, write, edit, glob) y las rutas que opencode reconoce en un comando. No confina el shell: una redirección o un script escriben donde la cuenta del operador pueda. No existe un confinamiento del proceso (followups.md, fila B22-S7)."
+        }
+      },
+      "claude": {
+        "form": "run-per-task",
+        "certifiedCliVersions": {"2.1.301": "M-21 y M-23 (artifacts/SUA04-G7/RESULTADO.md): medido, sin certificar; se certifica con el banco de G7, que corre el coordinador"},
+        "contextGenerations": {"2": "sin certificar para claude: el banco de G7 lo mide el coordinador"},
+        "closureProof": {
+          "boundary": "procesos del uid del operador con rgid del grupo agent-work-enc1, la misma frontera del slot",
+          "evidence": "la del slot (B22-fase0.md, M4); la ruta claude comparte el backend de grupo",
+          "limitation": "La misma del slot: escapa quien llame a un binario setuid que cambia de grupo o quien le pida el trabajo a launchd."
+        },
+        "directoryGuard": {
+          "rule": "sandbox de claude (M-23): Bash escribe en el cwd y en las carpetas de --add-dir (la carpeta de la corrida); dontAsk niega las herramientas fuera de --allowed-tools",
+          "evidence": "M-23 (artifacts/SUA04-G7/RESULTADO.md y p4.jsonl/p5.jsonl)",
+          "limitation": "Medido solo con Bash y Write en carpetas locales (M-21/M-23); el hijo (Task) de una corrida y el límite del plan Max en una corrida larga se miden en el banco de G7."
         }
       }
     }

@@ -13,6 +13,7 @@ include = [
     "scripts/agent-work/agentes.py",
     "scripts/tests/test-agent-work-lineas.py",
     "scripts/tests/test-agent-work-agentes.py",
+    "scripts/tests/test-agent-work-claude.py",
     "scripts/agent-work/publicar-contexto.py",
     "scripts/agent-work/extraer-nativo.py",
     "scripts/tests/test-agent-work-contexto.py",

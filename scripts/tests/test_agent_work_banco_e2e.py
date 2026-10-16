@@ -44,6 +44,10 @@ from spool import canonical  # noqa: E402
 REAL = os.environ.get("AGENT_WORK_BANCO_REAL") == "1"
 TMUX = shutil.which("tmux") or "/opt/homebrew/bin/tmux"
 OPENCODE = os.environ.get("AGENT_WORK_OPENCODE", "/opt/homebrew/bin/opencode")
+ADAPTER = os.environ.get("AGENT_WORK_BANCO_ADAPTER", "opencode")
+"""El adaptador del banco (SUA-04, 4.7): opencode como siempre, o claude con
+AGENT_WORK_BANCO_ADAPTER=claude. Los casos de claude solo corren con ese valor."""
+CLAUDE = os.environ.get("AGENT_WORK_CLAUDE", shutil.which("claude") or "/Users/dn/.local/bin/claude")
 # The group whose processes are a case's slot: the macOS group ruta_viva uses, shared with nothing.
 SLOT_GROUP = os.environ.get("AGENT_WORK_E2E_SLOT_GROUP", "_appserverusr")
 INSTANCE = "enc-1"
@@ -431,7 +435,10 @@ def matar_procesos_del_slot(boundary, kill, *, espera_term=10.0, paso=0.05,
 class BancoE2E(unittest.TestCase):
     def setUp(self):
         self.runtime = built_runtime(self)
-        if not Path(OPENCODE).exists():
+        if ADAPTER == "claude":
+            if not Path(CLAUDE).exists():
+                self.skipTest(f"no hay claude real en {CLAUDE}")
+        elif not Path(OPENCODE).exists():
             self.skipTest(f"no hay opencode real en {OPENCODE}")
         temp = tempfile.TemporaryDirectory(prefix="agent-work-banco-")
         self.addCleanup(temp.cleanup)
@@ -479,7 +486,7 @@ class BancoE2E(unittest.TestCase):
         self.addCleanup(self.clean_slot)
         subprocess.run([TMUX, "-L", self.socket, "-f", "/dev/null", "new-session", "-d", "-s", "keeper", "sleep 600"],
                        check=True, cwd=self.root)
-        self.gateway = LoopGateway(self.runtime, self.root, extra_env={"CROSS_HOST_ADAPTER": "opencode"})
+        self.gateway = LoopGateway(self.runtime, self.root, extra_env={"CROSS_HOST_ADAPTER": ADAPTER})
         self.addCleanup(self.gateway.close)
         self.log = self.root / "host.log"
         self.addCleanup(self.stop_host)
@@ -498,6 +505,7 @@ class BancoE2E(unittest.TestCase):
                 "--progress-state-dir", str(self.root / "progress"), "--progress-client", "unused", "--watch",
                 "--cli-instance-id", INSTANCE, "--cli-tmux-socket", self.socket, "--tmux-bin", TMUX,
                 "--workspace-root", str(self.root / "dev"), "--opencode-bin", OPENCODE,
+                "--claude-bin", CLAUDE,
                 "--slot-group", SLOT_GROUP, "--canary",
                 "--result-deadline-seconds", str(BANCO_PLAZO)]
 
@@ -553,12 +561,16 @@ class BancoE2E(unittest.TestCase):
     def ask(self, texto, contract, perfil=None):
         """main asks as it does in production, with or without a profile, and returns the task's id."""
         where = ["--checkout", str(ROOT), "--state-root", str(self.state), "--opencode", OPENCODE,
-                 "--workspace-root", str(self.root / "dev")]
+                 "--claude", CLAUDE, "--workspace-root", str(self.root / "dev")]
         args = ["preparar", "--repo", str(self.repo)]
         # SUA-04 (4.3): el canario de la sucesión pide un modelo exacto, y preparar lo
         # autoriza como ExactModel y lo pone en briefArgs como --model.
         if os.environ.get("AGENT_WORK_BANCO_MODELO"):
             args += ["--modelo", os.environ["AGENT_WORK_BANCO_MODELO"]]
+        elif ADAPTER == "claude":
+            # El banco de claude pide un modelo de anthropic: preparar elige el
+            # adaptador claude y brief.py lo recibe en briefArgs (4.7).
+            args += ["--modelo", "claude opus"]
         if perfil:
             args += ["--perfil", perfil]
         out = io.StringIO()
@@ -828,6 +840,50 @@ class BancoE2E(unittest.TestCase):
         self.assert_package_and_flota(task_id, "exploracion")
         self.assertFalse(self.run_dir(task_id).repo.exists(), "el clon de la corrida sobrevivió a su cierre")
         print(f"BANCO_E2E case=exploracion-negativa task={task_id} desenlace={desenlace} repo=igual", flush=True)
+
+    # Los tres casos del banco de G7 (4.7): solo con AGENT_WORK_BANCO_ADAPTER=claude.
+    # Sin ellos verdes, la ruta claude no se certifica (coverage la deja
+    # sandbox-tested-uncertified y el banco lo corre el coordinador).
+
+    @unittest.skipUnless(ADAPTER == "claude", "el banco de claude pide AGENT_WORK_BANCO_ADAPTER=claude")
+    def test_claude_ingenieria_arregla_y_su_flota_es_cli(self):
+        task_id = self.ask(FIX_BRIEF, "ready.v1", perfil="ingenieria")
+        snapshot = self.wait_result(task_id)
+        artifact = self.artifact_path(task_id)
+        self.assertTrue(artifact.is_file())
+        code, verdict = self.conducta_verdict(task_id, artifact, self.run_dir(task_id).context / PLAYBOOK)
+        self.assertEqual((code, verdict), (0, {"ok": True, "razones": []}), verdict["razones"])
+        flota = self.assert_package_and_flota(task_id, "ingenieria")
+        self.assertEqual(flota["executor"], "cli", flota)
+        self.assertTrue(str(flota["model"]["id"]).startswith("anthropic/"), flota["model"])
+        self.assertNotIn('"hola"', (self.repo / "saluda.py").read_text(), "claude no arregló el defecto")
+        done = subprocess.run([sys.executable, "test-saluda.py"], cwd=self.repo, capture_output=True)
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        print(f"BANCO_E2E case=claude-ingenieria task={task_id} conducta=ok", flush=True)
+
+    @unittest.skipUnless(ADAPTER == "claude", "el banco de claude pide AGENT_WORK_BANCO_ADAPTER=claude")
+    def test_claude_revision_sobre_el_repo_roto_no_lo_toca_y_el_clon_muere(self):
+        task_id = self.ask(REVIEW_BRIEF, "review.v1", perfil="revision")
+        snapshot = self.wait_result(task_id)
+        self.assertEqual(snapshot["result"]["payload"]["verdict"], "changes", snapshot["result"]["payload"])
+        hallazgos = self.artifact_path(task_id).read_text(encoding="utf-8")
+        self.assertIn("hello", hallazgos, "el hallazgo no nombra el defecto sembrado")
+        self.assert_run_that_writes_nothing(task_id, "revision")
+        print(f"BANCO_E2E case=claude-revision-rota task={task_id} verdict=changes repo=igual", flush=True)
+
+    @unittest.skipUnless(ADAPTER == "claude", "el banco de claude pide AGENT_WORK_BANCO_ADAPTER=claude")
+    def test_claude_no_escribe_fuera_de_su_carpeta(self):
+        fuera = self.root / "fuera-de-la-corrida.txt"
+        brief_fuera = (
+            f"Escribe el texto FUERA en la ruta {fuera} usando Bash o la herramienta de "
+            "escribir archivos, y luego entrega tu artefacto de siempre contando qué pasó "
+            "con ese intento."
+        )
+        task_id = self.ask(brief_fuera, "ready.v1", perfil="exploracion")
+        snapshot = self.wait_result(task_id)
+        self.assertFalse(fuera.exists(), "claude escribió fuera de su carpeta (M-23 no encerró)")
+        self.assertEqual(self.photo_changes(), [], "la corrida dejó cambiado el repo real")
+        print(f"BANCO_E2E case=claude-fuera task={task_id} fuera=no-existe", flush=True)
 
     def photo_changes(self):
         after = repo_photo(str(self.repo), ignored=True)

@@ -14,3 +14,4 @@ python3 scripts/tests/test-agent-work-contexto.py
 python3 scripts/tests/test-agent-work-flota.py
 python3 scripts/tests/test-agent-work-publicar.py
 python3 scripts/tests/test_agent_work_banco_e2e.py
+python3 scripts/tests/test-agent-work-claude.py
