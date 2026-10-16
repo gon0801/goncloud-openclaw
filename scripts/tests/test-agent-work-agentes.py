@@ -98,7 +98,7 @@ class FakeMini:
                 self.memoria = "bbb  memory/notas.md\n"
             # Sin taskId reportado (F8): un main que no declara su tarea gestionada.
             return 0, json.dumps({"taskId": "t-sonda"} if self.reporta else {}), ""
-        if argv[1] == "-" or ("python3" in texto and "-" in argv):
+        if argv[1] == "-":
             # F6: el código llega por stdin y el pedido como argumento ya citado. Sin
             # stdin válido el fake no contesta: un regreso a -c lo cantan los flujos.
             if not entrada or "managed_tasks" not in entrada:
@@ -205,10 +205,8 @@ class Sondear(unittest.TestCase):
 
 
 SSH_FALSO = """#!/bin/sh
-# ssh de juguete con la semántica del real: registra el argv que llegó y luego lo
-# une con espacios y lo corre con sh -c, como el shell remoto de la Mini.
-printf '%s\\n' "$@" >> "$SUA_TEST_LOG"
-printf '%s\\n' --- >> "$SUA_TEST_LOG"
+# ssh de juguete con la semántica del real: une el argv con espacios y lo corre
+# con sh -c, como el shell remoto de la Mini.
 sh -c "$*"
 """
 
@@ -247,7 +245,6 @@ class ConexionReal(unittest.TestCase):
             [("insert into session_windows values (?, ?)",
               ("agent:ingenieria:managed:t-1", "s-1"))],
         )
-        self.log = self.tmp / "ssh.log"
         self.guion = self.tmp / "ssh-falso"
         self.guion.write_text(SSH_FALSO, encoding="utf-8")
         self.guion.chmod(0o755)
@@ -268,7 +265,7 @@ class ConexionReal(unittest.TestCase):
         hecho = subprocess.run(
             [str(self.guion), *argv], input=entrada, capture_output=True, text=True,
             timeout=timeout or agentes.TIMEOUT_SSH,
-            env={**os.environ, "HOME": str(self.home), "SUA_TEST_LOG": str(self.log)},
+            env={**os.environ, "HOME": str(self.home)},
         )
         return hecho.returncode, hecho.stdout, hecho.stderr
 
