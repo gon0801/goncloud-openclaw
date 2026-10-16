@@ -106,6 +106,8 @@ class FakeMini:
         self.en_texto = en_texto
         self.reporta = reporta
         self.tarea_id = "87b98ddf-12b4-466f-94f1-632a6c688ff5" if en_texto else "t-sonda"
+        self.artefacto_ruta = "/w/ingenieria/631c9409-7488-44ca-9c87-5d4ce810c4d2.txt"
+        self.artefacto_falta = False
         self.llamadas = []
         self.memoria = "aaa  memory/notas.md\n"
         self.turno_corrido = False
@@ -145,6 +147,10 @@ class FakeMini:
                     "",
                 )
             return 0, json.dumps({"taskId": "t-sonda"} if self.reporta else {}), ""
+        if "LEER_ARTEFACTO" in texto:
+            if self.artefacto_falta:
+                return 1, "", "No such file or directory"
+            return 0, "SONDA-7\n" if self.con_marcador else "otro texto\n", ""
         if argv[1] == "-":
             # F6: el código llega por stdin y el pedido como argumento ya citado. Sin
             # stdin válido el fake no contesta: un regreso a -c lo cantan los flujos.
@@ -158,7 +164,14 @@ class FakeMini:
                         "kind": "agent",
                         "agentId": "ingenieria",
                         "estado": "registered" if self.registrada else "result-recorded",
-                        "resultado": "SONDA-7" if self.con_marcador else "otro texto",
+                        "resultado": json.dumps(
+                            {
+                                "kind": "produced",
+                                "artifactRef": self.artefacto_ruta,
+                                "digest": "sha256:x",
+                                "observedRevision": {},
+                            }
+                        ),
                     }
                 ]
             if self.turno_corrido and self.concurrente:
@@ -266,6 +279,30 @@ class Sondear(unittest.TestCase):
         self.assertTrue(fila["causa"].startswith("la tarea llegó (87b98ddf-"))
         self.assertTrue(fila["causa"].endswith("pero el agente no reportó resultado"))
         self.assertEqual(fila["taskId"], "87b98ddf-12b4-466f-94f1-632a6c688ff5")
+
+    def test_el_artefacto_se_borra_y_el_ajeno_no(self):
+        fake = FakeMini()
+        fila = sondear_con(fake)
+        self.assertTrue(fila["ok"], fila)
+        self.assertIn(
+            fake.artefacto_ruta, [a for argv, _ in fake.llamadas for a in argv if "rm" in argv]
+        )
+        rms = [" ".join(argv) for argv, _ in fake.llamadas if argv and argv[0] == "rm"]
+        self.assertTrue(any(fake.artefacto_ruta in r for r in rms), rms)
+        # Uno ajeno: fuera del workspace no se borra aunque traiga uuid.
+        fake2 = FakeMini()
+        fake2.artefacto_ruta = "/etc/631c9409-7488-44ca-9c87-5d4ce810c4d2.txt"
+        fila2 = sondear_con(fake2)
+        self.assertTrue(fila2["ok"], fila2)
+        rms2 = [" ".join(argv) for argv, _ in fake2.llamadas if argv and argv[0] == "rm"]
+        self.assertFalse(any(fake2.artefacto_ruta in r for r in rms2), rms2)
+
+    def test_el_artefacto_que_no_se_puede_leer_lo_dice(self):
+        fake = FakeMini()
+        fake.artefacto_falta = True
+        fila = sondear_con(fake)
+        self.assertFalse(fila["ok"])
+        self.assertIn("no se pudo leer", fila["causa"])
 
     def test_main_que_usa_sessions_spawn(self):
         fila = sondear_con(FakeMini(tarea=False, spawn=True))

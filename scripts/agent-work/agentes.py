@@ -188,6 +188,22 @@ print(json.dumps({"tareas": tareas, "entregas": entregas, "sesionesHijas": hijas
 """
 
 
+AYUDANTE_LECTURA = """
+# LEER_ARTEFACTO: solo lectura, la ruta entra por stdin.
+import json, sys
+print(open(json.load(sys.stdin)["ruta"], encoding="utf-8").read(), end="")
+"""
+
+
+def _leer_artefacto(correr, ruta: str) -> str:
+    """El contenido del artefacto que el result nombra, por ssh y en solo lectura (B1):
+    el marcador va en el archivo, no en result_json, que trae la ruta."""
+    rc, out, err = correr(["python3", "-c", AYUDANTE_LECTURA], entrada=json.dumps({"ruta": ruta}))
+    if rc != 0:
+        raise ValueError(err.strip() or "sin salida")
+    return out
+
+
 def _foto_memoria(correr, workspace: str) -> str:
     orden = (
         f"cd {shlex.quote(workspace)} && find memory -type f -print0 | sort -z | "
@@ -293,12 +309,14 @@ def sondear(
         "taskId": None,
         "estado": None,
         "marcador": False,
+        "artefacto": None,
         "entregas": None,
         "memoriaIgual": None,
         "causa": None,
     }
     hijas: list = []
     turno_cortado = False
+    vivos: dict = {}
     try:
         vivos = {a["id"]: a for a in lista_viva(mini, correr)}
         if agent_id not in vivos:
@@ -373,15 +391,7 @@ def sondear(
             if reportada:
                 tarea = next((t for t in nuevas if t["taskId"] == reportada), None)
             else:
-                tarea = next(
-                    (
-                        t
-                        for t in nuevas
-                        if t["estado"] == "result-recorded"
-                        and marcador in (t.get("resultado") or "")
-                    ),
-                    None,
-                )
+                tarea = next((t for t in nuevas if t["estado"] == "result-recorded"), None)
             if tarea is not None:
                 fila["taskId"], fila["estado"] = tarea["taskId"], tarea["estado"]
                 # La hija de la tarea reconocida por su marcador también es de la sonda
@@ -394,7 +404,25 @@ def sondear(
                     if reportado_id and reportado_id in k
                 ] or hijas
                 if tarea["estado"] == "result-recorded":
-                    fila["marcador"] = marcador in (tarea.get("resultado") or "")
+                    # El marcador se busca en el contenido del artefacto, no en
+                    # result_json, que trae su ruta (B1 de G4b-r2, lo que mostró M-18b).
+                    try:
+                        resultado = json.loads(tarea.get("resultado") or "")
+                    except ValueError:
+                        resultado = {}
+                    fila["artefacto"] = (
+                        resultado.get("artifactRef") if isinstance(resultado, dict) else None
+                    )
+                    if not fila["artefacto"]:
+                        fila["causa"] = "el resultado no trae artifactRef"
+                    else:
+                        try:
+                            contenido = _leer_artefacto(correr, fila["artefacto"])
+                            fila["marcador"] = marcador in contenido
+                        except ValueError as error:
+                            fila["causa"] = (
+                                f"el artefacto {fila['artefacto']} no se pudo leer: {error}"
+                            )
                     break
             if reloj() - inicio >= tope:
                 if not nuevas and estado.get("spawn"):
@@ -425,7 +453,7 @@ def sondear(
         fila["memoriaIgual"] = antes == despues
         if fila["causa"] is None:
             if not fila["marcador"]:
-                fila["causa"] = "el resultado no trae el marcador"
+                fila["causa"] = f"el artefacto {fila.get('artefacto')} no trae el marcador"
             elif fila["entregas"]:
                 fila["causa"] = "hubo entregas hacia David"
             elif not fila["memoriaIgual"]:
@@ -434,6 +462,13 @@ def sondear(
         return fila
     finally:
         correr(["rm", "-f", mensaje_remoto])
+        # El artefacto de la sonda se borra, y solo ese (M1): dentro del workspace del
+        # agente y con un uuid en el nombre, que es como el protocolo manda nombrarlo.
+        artefacto = fila.get("artefacto")
+        if artefacto:
+            workspace = (vivos.get(agent_id) or {}).get("workspace", "")
+            if artefacto.startswith(workspace + "/") and UUID_EN_TEXTO.search(Path(artefacto).name):
+                correr(["rm", "-f", artefacto])
         # Solo lo suyo (F1): la sesión de main de la sonda y la hija de su tarea. Con el
         # turno cortado, la sesión de main se conserva (F5).
         if not turno_cortado:
