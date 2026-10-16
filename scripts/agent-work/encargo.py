@@ -609,6 +609,11 @@ def fuentes(checkout: Path, state_root: Path, *, aviso: bool = False, now: float
         respuesta["aviso"] = _quema_el_aviso(sorted(vencen), state_root, now,
                                               enviar_aviso=enviar_aviso, policy=policy,
                                               openclaw_bin=openclaw_bin)
+        # Un intento que no salió es un fallo (CodeRabbit en #322): diario no termina en 0.
+        # Los avisos apagados no son un intento: es la corrida a mano.
+        causa = respuesta["aviso"].get("causa")
+        if causa and not causa.startswith("avisos apagados"):
+            respuesta["ok"] = False
     return respuesta
 
 

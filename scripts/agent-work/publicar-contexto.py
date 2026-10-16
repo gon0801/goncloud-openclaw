@@ -138,6 +138,25 @@ def trecho_del_bloque(actual: bytes) -> tuple[int, int] | None:
     return desde, hasta
 
 
+def _fuera_del_bloque(contenido: bytes) -> bytes:
+    """Lo que el dueño escribe en un AGENTS.md: todo menos el bloque administrado, sin los
+    saltos del final (el publicador agrega uno al poner el primer bloque)."""
+    trecho = trecho_del_bloque(contenido)
+    if trecho is not None:
+        contenido = contenido[: trecho[0]] + contenido[trecho[1] :]
+    return contenido.rstrip(b"\n")
+
+
+def _fuera_igual_al_respaldo(actual: bytes, respaldo: Path) -> bool:
+    """Si lo de fuera del bloque sigue como en la foto de justo antes de la escritura
+    cortada. Sin foto no hubo escritura del publicador que completar."""
+    try:
+        foto = leer_bytes(respaldo)
+        return _fuera_del_bloque(foto) == _fuera_del_bloque(actual)
+    except (OSError, BloqueRoto):
+        return False
+
+
 def estado_vacio() -> dict:
     return {
         "schema": ESTADO_SCHEMA,
@@ -626,6 +645,19 @@ def aplicar_en_la_mini(publicacion: Path, home: Path, agentes_json: Path | None)
             conflictos += 1
             continue
         if contenido == actual:
+            rezagado = estado["bloques"].get(identificador) not in (
+                None,
+                sha256hex(bloques[identificador]),
+            )
+            if rezagado and not _fuera_igual_al_respaldo(
+                actual, suya / gen / "workspaces" / f"{identificador}.AGENTS.md"
+            ):
+                # CodeRabbit en #322: lo que está fuera del bloque cambió desde la foto que
+                # el apply cortado guardó. Es del dueño: certificarlo haría que una reversa
+                # lo borrara al restaurar esa foto.
+                salida_agentes[identificador] = "conflicto: cambió después de publicar"
+                conflictos += 1
+                continue
             salida_agentes[identificador] = "igual"
             # "igual" no refresca el digest: el del estado es el de la última escritura
             # del publicador, y es el que la reversa valida (4.3 CAS).

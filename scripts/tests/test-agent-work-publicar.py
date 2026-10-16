@@ -355,6 +355,27 @@ class PublicadorNativo(unittest.TestCase):
             )
         self.assertEqual(self.estado_del_home()["generacion"], 1)
 
+    def test_crash_y_edicion_del_dueno_fuera_del_bloque_no_se_certifica(self):
+        # CodeRabbit en #322 (datos): tras un apply cortado, el dueño agrega una línea fuera
+        # del bloque y vuelve a correr --leer y --aplicar. Esa línea no es del publicador:
+        # certificarla haría que una reversa posterior la borrara al restaurar el respaldo.
+        self.armar()
+        self.publicar("leer")
+        self.publicar("aplicar")
+        self.armar_generacion(2, cambios={"skills/poteto-mode/SKILL.md": "poteto v2\n"})
+        self.publicar("leer")
+        codigo, _ = self.aplicar_con_crash_antes_del_estado()
+        self.assertEqual(codigo, 3)
+        editado = self.ids[0]
+        ruta = self.home / "workspaces" / editado / "AGENTS.md"
+        ruta.write_bytes(b"linea del duenyo\n" + ruta.read_bytes())
+        self.publicar("leer")
+        codigo, aplicar = self.publicar("aplicar")
+        self.assertEqual(aplicar["agentes"][editado], "conflicto: cambió después de publicar")
+        self.assertIn(b"linea del duenyo", ruta.read_bytes())
+        self.publicar("revertir")
+        self.assertIn(b"linea del duenyo", ruta.read_bytes())
+
     def test_un_cierre_sigue_cerrado_tras_la_reversa(self):
         # I19 (diseño 4.10): la política de proveedores vive fuera del paquete. Ni la
         # publicación la lleva ni aplicar o revertir la escriben en el home, así que una
