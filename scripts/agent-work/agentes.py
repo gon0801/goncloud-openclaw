@@ -411,7 +411,8 @@ def sondear(
         if rc != 0:
             fila["causa"] = f"el turno a main falló: {err.strip()}"
             return fila
-        reportada = _task_id_en_texto(out) or _task_id_reportado(out)
+        # F7 de #320: el taskId estructurado manda; el del texto es solo el respaldo.
+        reportada = _task_id_reportado(out) or _task_id_en_texto(out)
         inicio = reloj()
         estado = _estado_remoto(
             correr, sesion_main, agent_id, marcador, sesiones_previas, reportada
@@ -542,7 +543,9 @@ def sondear(
         # turno cortado, la sesión de main se conserva (F5).
         if not turno_cortado:
             correr([OPENCLAW, "sessions", "delete", sesion_main, "--yes"])
-        for hija in hijas:
+        # F7 de #320: la hija se borra solo si su tarea es la de la sonda de verdad, con el
+        # marcador leído en su artefacto; un uuid ajeno no borra la sesión de otra tarea.
+        for hija in hijas if artefacto_marcado else []:
             correr([OPENCLAW, "sessions", "delete", hija, "--yes"])
 
 

@@ -314,6 +314,10 @@ class Sondear(unittest.TestCase):
         self.assertTrue(fila["causa"].startswith("la tarea llegó (87b98ddf-"))
         self.assertTrue(fila["causa"].endswith("pero el agente no reportó resultado"))
         self.assertEqual(fila["taskId"], "87b98ddf-12b4-466f-94f1-632a6c688ff5")
+        # F7 de #320: sin el marcador leído en su artefacto, la tarea no es de la sonda con
+        # certeza, y su sesión hija no se borra.
+        borradas = [" ".join(argv) for argv in fake.corridas("sessions delete")]
+        self.assertFalse(any("87b98ddf" in b and "ingenieria" in b for b in borradas), borradas)
 
     def test_el_artefacto_se_borra_y_el_ajeno_no(self):
         fake = FakeMini()
