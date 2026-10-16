@@ -26,6 +26,7 @@ import contexto
 import flota
 from host import (ACCEPT_DEADLINE_SECONDS, RESULT_DEADLINE_SECONDS, GIT_REPO_VARS, DeliveryDeferred, Host,
                   PhotoFailed, repo_photo, writes_source)
+from modelos import claude_por_omision
 from modelos import (POLICY_FILE, CatalogStore, CatalogUnavailable, ContextoIncompleto, ExactModel, ModelNotListed,
                      PerfilRechazado, ProviderNotConfigured, ProviderPolicy, authorize, catalogo_claude, explicar)
 from progress_bridge import transfer_host_projection, transfer_projection
@@ -575,8 +576,7 @@ class RunHost:
         self.checkout = Path(checkout)
         self.state_root = Path(state_root)
         self.opencode_bin = Path(opencode_bin)
-        self.claude_bin = Path(claude_bin) if claude_bin else Path(
-            os.environ.get("AGENT_WORK_CLAUDE") or shutil.which("claude") or "claude")
+        self.claude_bin = Path(claude_bin) if claude_bin else claude_por_omision()
         self._version_claude = None
         self._version_claude_en = 0.0
         self._claim_rechazado_en: dict = {}
