@@ -7,7 +7,7 @@
  * no contra el runtime real de OpenClaw; el SDK se stubbea igual que en el resto de tests.
  */
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, symlinkSync } from "node:fs";
+import { existsSync, mkdirSync, symlinkSync, rmSync, readlinkSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { after, before, describe, it } from "node:test";
@@ -22,10 +22,11 @@ before(() => {
   if (!existsSync(openclawRoot)) throw new Error(`openclaw install missing at ${openclawRoot}`);
   mkdirSync(nm, { recursive: true });
   try {
-    if (!existsSync(link)) symlinkSync(openclawRoot, link);
+    if (readlinkSync(link) !== openclawRoot) rmSync(link, { force: true });
   } catch {
-    // link may already exist from a prior run
+    // missing or not a symlink: nothing to repair
   }
+  if (!existsSync(link)) symlinkSync(openclawRoot, link);
 });
 
   // El enlace persiste a proposito: node --test corre estos archivos en procesos

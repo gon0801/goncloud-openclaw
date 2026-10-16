@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, symlinkSync, existsSync, rmSync, readFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, symlinkSync, existsSync, rmSync, readFileSync, readlinkSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
@@ -174,10 +174,11 @@ describe("plugin smoke import", () => {
     }
     mkdirSync(nm, { recursive: true });
     try {
-      if (!existsSync(link)) symlinkSync(openclawRoot, link);
+      if (readlinkSync(link) !== openclawRoot) rmSync(link, { force: true });
     } catch {
-      // link may already exist from a prior run
+      // missing or not a symlink: nothing to repair
     }
+    if (!existsSync(link)) symlinkSync(openclawRoot, link);
   });
 
   // El enlace persiste a proposito: otros archivos de prueba (adversary-confinamiento,
