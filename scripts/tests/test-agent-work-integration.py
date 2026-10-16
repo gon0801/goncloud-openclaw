@@ -139,7 +139,7 @@ class ProjectionTransferTest(unittest.TestCase):
         self.assertEqual([path.name for path in queued], [self.pending["eventId"] + ".json"])
         event = json.loads(queued[0].read_text())
         self.assertEqual(event["id"], self.pending["eventId"])
-        self.assertEqual(event["verdict"], "approved")
+        self.assertEqual(event["verdict"], "aprobado")
         self.assertEqual(event["sha"], self.pending["result"]["sha"])
         self.assertEqual(receipt["eventId"], self.pending["eventId"])
         self.assertEqual(receipt["contentHash"], self.pending["result"]["contentHash"])
@@ -316,13 +316,14 @@ else:
         event = self.state_dir / "runs" / "run-1" / "queue" / (receipt["eventId"] + ".json")
         self.assertEqual(json.loads(event.read_text())["kind"], "round.ready")
 
-    def test_contract_verdicts_reach_the_queue_in_the_contract_terms(self):
+    def test_contract_verdicts_reach_the_queue_in_the_board_terms(self):
         # SUA-05 (4.2): la proyección viaja con el veredicto del contrato (approved/changes)
-        # o con el español de una entrega vieja (aprobado/cambios); lo que se acepta son las
-        # cuatro formas y lo que llega al queue es siempre la del contrato.
+        # o con el español de una entrega vieja (aprobado/cambios); se aceptan las cuatro
+        # formas y al queue llega la que el tablero valida, aprobado/cambios
+        # (tablero-runbook/progress-event.ts; DeepSeek F1 en #328).
         for ronda, (entrada, al_queue) in enumerate(
-                (("approved", "approved"), ("changes", "changes"),
-                 ("aprobado", "approved"), ("cambios", "changes")), start=1):
+                (("approved", "aprobado"), ("changes", "cambios"),
+                 ("aprobado", "aprobado"), ("cambios", "cambios")), start=1):
             with self.subTest(verdict=entrada):
                 self.pending["destination"]["ronda"] = ronda
                 self.pending["result"]["verdict"] = entrada
@@ -337,21 +338,24 @@ else:
 
                 with mock.patch("progress_bridge.subprocess.run", side_effect=record_command):
                     receipt = self.transfer(lambda value: value)
-                self.assertEqual(emitted[0][emitted[0].index("--verdict") + 1], al_queue)
+                # El bridge manda la forma del contrato; el queue la traduce a la del tablero.
+                contrato = {"approved": "approved", "aprobado": "approved",
+                            "changes": "changes", "cambios": "changes"}[entrada]
+                self.assertEqual(emitted[0][emitted[0].index("--verdict") + 1], contrato)
                 event = json.loads((self.state_dir / "runs" / "run-1" / "queue" /
                                     (receipt["eventId"] + ".json")).read_text())
                 self.assertEqual(event["verdict"], al_queue)
 
     def test_host_projection_accepts_the_contract_verdict_of_a_new_projection(self):
         # SUA-05 (4.2): una proyección nueva ya trae el veredicto del contrato; el snapshot
-        # del host sigue siendo la autoridad de la forma y el queue recibe "approved".
+        # del host sigue siendo la autoridad de la forma y el queue recibe "aprobado", la forma del tablero.
         restarted, key, _ = self.reported_host()
         self.pending["result"]["verdict"] = "approved"
         self.pending["projectionDigest"] = projection_digest(self.pending)
         receipt = self.transfer_from_host(restarted, key, lambda value: value)
         event = json.loads((self.state_dir / "runs" / "run-1" / "queue" /
                             (receipt["eventId"] + ".json")).read_text())
-        self.assertEqual(event["verdict"], "approved")
+        self.assertEqual(event["verdict"], "aprobado")
 
     def test_gateway_projection_drain_publishes_once_and_acknowledges(self):
         pending = self.pending.copy()

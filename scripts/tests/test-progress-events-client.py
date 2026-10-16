@@ -5,6 +5,7 @@ import hashlib
 import importlib.util
 import json
 import os
+import re
 from pathlib import Path
 import subprocess
 import sys
@@ -13,6 +14,7 @@ import unittest
 from unittest import mock
 
 
+ROOT = Path(__file__).resolve().parents[2]
 CLI = Path(__file__).resolve().parents[1] / "mac" / "progress-events.py"
 SHA = "a" * 40
 
@@ -139,17 +141,24 @@ else:
         evidence = json.loads((base / "evidence" / (identifier + ".json")).read_text())
         event = json.loads((base / "queue" / (identifier + ".json")).read_text())
         self.assertEqual(evidence["sha"], SHA)
-        self.assertEqual(event["verdict"], "approved")
+        self.assertEqual(event["verdict"], "aprobado")
         self.assertEqual(event["evidence"]["ref"], "evidence/" + identifier + ".json")
 
-    def test_verdict_is_saved_in_the_contract_terms(self):
-        # SUA-05 (4.2): el queue acepta las cuatro formas y guarda siempre la del contrato,
-        # para que una proyección vieja en vuelo no grabe español nuevo.
+    def test_verdict_is_saved_in_the_board_terms(self):
+        # SUA-05 (4.2) y DeepSeek F1 en #328: el queue acepta las dos formas (la del contrato
+        # review.v1 que manda progress_bridge y la vieja) y guarda la que el tablero valida
+        # (tablero-runbook/progress-event.ts), que es la del registro de siempre.
+        permitidos = set(re.findall(
+            r'raw\.verdict !== "(\w+)"',
+            (ROOT / "tablero-runbook" / "progress-event.ts").read_text(encoding="utf-8")))
+        self.assertEqual(permitidos, {"aprobado", "cambios"})
+        textos = {}
         for ronda, (argumento, guardado) in enumerate(
-                (("approved", "approved"), ("changes", "changes"),
-                 ("aprobado", "approved"), ("cambios", "changes")), start=1):
+                (("approved", "aprobado"), ("changes", "cambios"),
+                 ("aprobado", "aprobado"), ("cambios", "cambios")), start=1):
             with self.subTest(verdict=argumento):
-                self.input.write_text("VEREDICTO " + argumento + " " + SHA + "\n")
+                textos[ronda] = "VEREDICTO " + argumento + " " + SHA + "\n"
+                self.input.write_text(textos[ronda])
                 result = self.cli("record-verdict", "--corrida", "run-1", "--carril", "B3",
                                   "--intento", "try-1", "--ronda", str(ronda), "--sha", SHA,
                                   "--verdict", argumento, "--evidence-file", str(self.input))
@@ -158,7 +167,17 @@ else:
                 event = json.loads((base / "queue" / (identifier + ".json")).read_text())
                 evidence = json.loads((base / "evidence" / (identifier + ".json")).read_text())
                 self.assertEqual(event["verdict"], guardado)
+                self.assertIn(event["verdict"], permitidos)
                 self.assertEqual(evidence["verdict"], guardado)
+        # DeepSeek F2 en #328: reintentar el mismo comando sobre un registro viejo en español
+        # devuelve el recibo, no "ID existente con contenido distinto".
+        self.input.write_text(textos[3])
+        self.cli("record-verdict", "--corrida", "run-1", "--carril", "B3", "--intento", "try-1",
+                 "--ronda", "3", "--sha", SHA, "--verdict", "approved",
+                 "--evidence-file", str(self.input))
+        self.cli("record-verdict", "--corrida", "run-1", "--carril", "B3", "--intento", "try-1",
+                 "--ronda", "3", "--sha", SHA, "--verdict", "aprobado",
+                 "--evidence-file", str(self.input))
 
     def test_invalid_identifiers_do_not_escape_state_dir(self):
         self.ready("--carril", "../B3", ok=False)

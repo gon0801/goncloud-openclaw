@@ -162,7 +162,10 @@ def record(args):
     kind = "round.ready" if args.action == "record-ready" else "round.verdict"
     verdict = None
     if kind == "round.verdict":
-        verdict = {"aprobado": "approved", "cambios": "changes"}.get(args.verdict, args.verdict)
+        # El tablero (tablero-runbook/progress-event.ts) valida aprobado/cambios: la forma del
+        # contrato review.v1 que manda progress_bridge se traduce aquí, en la frontera, y el
+        # registro de siempre no cambia (DeepSeek F1 y F2 en #328).
+        verdict = {"approved": "aprobado", "changes": "cambios"}.get(args.verdict, args.verdict)
     identifier = check(args.event_id or event_id(kind, corrida, carril, intento, args.ronda), ID_RE, "ID")
     raw = Path(args.evidence_file).read_bytes()
     if len(raw) > 1_000_000:
