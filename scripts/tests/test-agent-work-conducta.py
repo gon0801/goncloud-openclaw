@@ -881,8 +881,8 @@ TEXTO_LARGO = (
     "1. `how` over the affected subsystem.\n2. `architect`.\n"
 )
 SALIDA_CON_COLA = (
-    SALIDA + '{\n  "decision": "ready.v1",\n  "typedPayload": {},\n'
-    '  "artifactRef": "RESULTADO.md",\n  "digest": "x"\n}\n'
+    SALIDA + '{\n  "schema": "agent-work.accept.v1",\n  "decision": "ready.v1",\n'
+    '  "typedPayload": {},\n  "artifactRef": "RESULTADO.md",\n  "digest": "x"\n}\n'
 )
 
 
@@ -1115,11 +1115,16 @@ class ConductaClaude(unittest.TestCase):
 
     def test_el_contenido_que_llega_despues_del_primer_cambio_no_cuenta(self):
         tarde = juzgar_con_contenido(corrida_con_contenido(con_contenido=False, tarde=True))
+        # Con la lectura tarde, la lista temprana también deja de ser elegible
+        # (K2 y K3): lo mismo que pasa con una lectura por ruta después del
+        # primer cambio.
         self.assertEqual(
             tarde.razones,
             (
                 SIN_POTETO,
                 f"falta la lectura de {PLAYBOOK} antes del primer cambio",
+                "la primera lista no empieza con el primer paso del playbook: "
+                "'`how` over the affected subsystem.'",
             ),
         )
 

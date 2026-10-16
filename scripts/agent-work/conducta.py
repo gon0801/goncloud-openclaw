@@ -363,6 +363,20 @@ def _primeras_frases_numeradas(texto: str) -> dict[int, str]:
     return frases
 
 
+def _trozo_distintivo(texto: str) -> str:
+    """El trozo distintivo de un texto del paquete (B5a de G7-r6): su primera línea
+    de al menos 40 caracteres fuera del encabezado YAML, con los espacios colapsados.
+    Una sola línea y no tres unidas porque el tool_result que suele cargarla (el Read
+    del archivo tool-results de claude) trae cada línea con su número delante y solo
+    el contenido de la línea queda contiguo. Vacío si no hay ninguna."""
+    lineas = texto.splitlines()
+    if lineas and lineas[0].strip() == "---":
+        cierre = next((i for i, linea in enumerate(lineas[1:], 1) if linea.strip() == "---"), None)
+        if cierre is not None:
+            lineas = lineas[cierre + 1 :]
+    return _espacios(next((linea for linea in lineas if len(linea.strip()) >= 40), ""))
+
+
 def juzgar(
     pasos: list[Paso],
     *,
@@ -370,18 +384,46 @@ def juzgar(
     texto_del_playbook: str,
     resultado: str,
     prefijo: str = "contexto/",
+    forma: str = "opencode",
+    textos_de_lectura: dict[str, str] | None = None,
 ) -> Veredicto:
     """La conducta de una corrida contra las cuatro condiciones. `playbook` es la ruta del
     playbook dentro del paquete, etiquetada como la exige la forma (`contexto/skills/...`
-    en opencode, `skills/...` en openclaw); `prefijo` es el de las lecturas que cuentan."""
+    en opencode, `skills/...` en openclaw); `prefijo` es el de las lecturas que cuentan.
+    `textos_de_lectura` (solo forma claude) mapea sufijos del paquete al texto de la copia
+    de la corrida y activa la lectura por contenido (B5a) y la cita de cualquier línea de
+    la salida de pruebas (B5b): en el banco real claude leyó el paquete con un cat cuya
+    salida se persistió y se releó con Read del archivo tool-results, y su última llamada
+    que corre pruebas también armó el result.json en el mismo Bash."""
     poteto = prefijo + POTETO
     libro = prefijo + playbook.removeprefix("contexto/")
+    trozos = (
+        {prefijo + sufijo: _trozo_distintivo(texto) for sufijo, texto in textos_de_lectura.items()}
+        if forma == "claude" and textos_de_lectura
+        else {}
+    )
+
+    def _lectura(sufijo: str) -> int | None:
+        """La posición donde P quedó leída: un Read de su ruta, o el primer paso cuyo
+        tool_result trae su trozo distintivo (B5a de G7-r6). None si no hubo."""
+        trozo = trozos.get(sufijo, "")
+        return next(
+            (
+                i
+                for i, paso in enumerate(pasos)
+                if _lee(paso, sufijo) or (trozo and trozo in _espacios(paso.output))
+            ),
+            None,
+        )
+
     razones = []
     cambios = [i for i, paso in enumerate(pasos) if paso.tool in EDITS]
     primero = cambios[0] if cambios else len(pasos)
-    if not any(_lee(paso, poteto) for paso in pasos[:primero]):
+    lectura_poteto = _lectura(poteto)
+    if lectura_poteto is None or lectura_poteto >= primero:
         razones.append(f"falta la lectura de {poteto} antes del primer cambio")
-    if not any(_lee(paso, libro) for paso in pasos[:primero]):
+    lectura_libro = _lectura(libro)
+    if lectura_libro is None or lectura_libro >= primero:
         razones.append(f"falta la lectura de {libro} antes del primer cambio")
     listas = [paso for paso in pasos if paso.tool == "todowrite"]
     # La primera frase del paso: un paso de playbook puede ser un párrafo; un elemento de lista no.
@@ -393,7 +435,6 @@ def juzgar(
         # playbook (la del protocolo, anterior a esa lectura, no es la del
         # playbook), y en ella el primer elemento del playbook tiene que ser el
         # paso 1; lo que no es del playbook puede ir antes.
-        lectura_libro = next((i for i, paso in enumerate(pasos) if _lee(paso, libro)), None)
         elegidas = [
             paso
             for i, paso in enumerate(pasos)
@@ -448,7 +489,12 @@ def juzgar(
         salida = [
             linea.strip() for linea in pruebas[-1].output.splitlines() if len(linea.strip()) > 1
         ]
-        if not any(linea in resultado for linea in salida[-CITADAS:]):
+        # B5b de G7-r6: en la forma claude alcanza con cualquier línea de la
+        # salida (el resumen del corredor de pruebas suele quedar antes de la
+        # cola que la llamada dedicó al result.json); en las otras formas, solo
+        # las últimas CITADAS certifican generaciones ya publicadas.
+        citables = salida if forma == "claude" else salida[-CITADAS:]
+        if not any(linea in resultado for linea in citables):
             razones.append("el resultado no cita la salida de las últimas pruebas")
     return Veredicto(not razones, tuple(razones))
 
@@ -521,12 +567,29 @@ def main(argv: list[str] | None = None) -> int:
         texto = resuelta.read_text(encoding="utf-8")
         resultado = args.resultado.read_text(encoding="utf-8", errors="replace")
         ruta = raiz + "/" + "/".join(resuelta.parts[resuelta.parts.index(raiz) + 1 :])
+        # B5a de G7-r6: los textos de la copia del paquete de la corrida, para que
+        # la forma claude juzgue también la lectura por contenido. La skill es la
+        # hermana del playbook (skills/poteto-mode/); si la corrida no la trae,
+        # su trozo queda vacío y esa lectura vuelve a ser solo por ruta.
+        textos_de_lectura = None
+        if args.forma == "claude":
+            textos_de_lectura = {POTETO: ""}
+            if resuelta.parents[1].name == "poteto-mode":
+                try:
+                    textos_de_lectura[POTETO] = (resuelta.parents[1] / "SKILL.md").read_text(
+                        encoding="utf-8"
+                    )
+                except OSError:
+                    pass
+            textos_de_lectura[ruta.removeprefix(raiz + "/")] = texto
         veredicto = juzgar(
             pasos,
             playbook=ruta,
             texto_del_playbook=texto,
             resultado=resultado,
             prefijo=PREFIJO_DE_FORMA[args.forma],
+            forma=args.forma,
+            textos_de_lectura=textos_de_lectura,
         )
     except (OSError, ValueError) as error:
         print(json.dumps({"ok": False, "error": str(error)}, ensure_ascii=False))
