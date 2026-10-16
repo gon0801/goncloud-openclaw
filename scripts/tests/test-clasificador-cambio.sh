@@ -20,6 +20,11 @@
 #      aunque la ruta case con la allowlist: --name-status no muestra modos y
 #      un symlink nuevo en arbol de docs se ve igual que un .md. La politica
 #      nombra explicitamente symlinks en el carril completo.
+#   8. La lista en datos scripts/ci-rutas-control.txt extiende los archivos de
+#      control: las rutas que un checker de la bateria lee como entrada (hoy
+#      docs/evidence/corpus-rendiciones.tsv) clasifican completo aunque case
+#      la allowlist, y la lista misma es de control (la llave no abre su
+#      propia puerta). SUA-05 4.6.
 #
 # Uso: bash scripts/tests/test-clasificador-cambio.sh
 set -u
@@ -358,6 +363,26 @@ for caso in scripts/clasificar-cambio.sh .github/workflows/quality.yml; do
   veredicto_es "$nombre" completo "$d" "$d/scripts/ci-fast-allowlist.txt" \
     "$(git -C "$d" rev-parse HEAD~1)" "$(git -C "$d" rev-parse HEAD)"
 done
+
+# (8) el corpus de rendiciones es entrada del checker verify-corpus: tocar SOLO
+# el corpus clasifica completo con la allowlist REAL (que casa
+# docs/evidence/**/*.tsv): cambiar el dato tiene que disparar el checker que
+# lo lee, y la allowlist no puede expresar esa excepcion.
+d=$T/corpus-rendiciones; sembrar "$d"
+printf 'row_id\tfinding_idx\n1\t3\n' > "$d/docs/evidence/corpus-rendiciones.tsv"
+commit_todo "$d"
+veredicto_es corpus-rendiciones completo "$d" "$ALLOWLIST_REAL" "$(git -C "$d" rev-parse HEAD~1)" "$(git -C "$d" rev-parse HEAD)"
+
+# (8) la lista en datos es archivo de control: mismo montaje adversarial que
+# los casos control-* de arriba (allowlist '**' en la BASE), tocando SOLO la
+# lista. Sin la regla, este cambio saldria fast.
+d=$T/control-scripts-ci-rutas-control-txt; sembrar "$d"
+printf '**\n' > "$d/scripts/ci-fast-allowlist.txt"
+commit_todo "$d"                       # la llave permisiva entra a la BASE
+printf 'docs/evidence/corpus-rendiciones.tsv\n' > "$d/scripts/ci-rutas-control.txt"
+commit_todo "$d"
+veredicto_es control-scripts-ci-rutas-control-txt completo "$d" "$d/scripts/ci-fast-allowlist.txt" \
+  "$(git -C "$d" rev-parse HEAD~1)" "$(git -C "$d" rev-parse HEAD)"
 
 if [ "$fails" -gt 0 ]; then
   echo "ROJO: $fails caso(s) del clasificador en fallo"

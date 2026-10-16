@@ -488,6 +488,11 @@ jobs:
           inv=$(mktemp)
           {
             for t in scripts/tests/*.sh; do
+              # Mismo filtro que scripts/run-checks.sh: test-ci-coverage-contract.sh
+              # corre en el job ci-contract, no en los shards. Si los dos filtros
+              # divergen, valida-union-shards.sh rebota ruidosamente (la union deja
+              # de ser el inventario).
+              case $t in scripts/tests/test-ci-coverage-contract.sh) continue ;; esac
               if [ -e "$t" ]; then printf '%s\n' "${t##*/}"; fi
             done
             for t in scripts/tests/*.mjs; do

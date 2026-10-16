@@ -12,10 +12,11 @@
 # (scripts/valida-union-shards.sh, llamada por el workflow y por aca) contra
 # sandboxes con un runner de juguete que REGISTRA invocaciones, pruebas corridas
 # y exit codes; no hay ningun grep de nombres de job acreditando cobertura: los
-# casos 1-13 ejecutan el validador de union, y solo el caso (w) — cableado del
-# workflow, no acreditacion — mira el YAML.
+# casos 1-15 ejecutan el validador de union, el caso (14) consulta el reparto
+# real del runner y solo el caso (w) — cableado del workflow, no acreditacion —
+# mira el YAML.
 #
-# Los 13 casos:
+# Los 15 casos:
 #   (1)  el caso valido ejecuta la bateria logica completa y el validador sale 0
 #   (2)  cada shard se invoca exactamente una vez y ninguna entrada corre dos veces
 #   (3)  la union de los resumenes contiene TODO el inventario esperado
@@ -30,10 +31,15 @@
 #   (11) resumenes vacios (cero pruebas) -> rechazo
 #   (12) un artifact esperado sin su resumen.txt -> rechazo
 #   (13) una prueba no inventariada en la union -> rechazo
+#   (14) el reparto del runner REAL excluye test-ci-coverage-contract.sh: corre
+#        una vez por PR en el job ci-contract; en el glob correria dos veces
+#   (15) una prueba nueva del glob que NINGUN resumen corrio -> rechazo (un PR
+#        que agrega la prueba con el runner sin verla no da verde)
 #   (w)  el workflow llama al MISMO validador que este test ejecuta, desde un job
 #        propio ci-contract SIN condicion de omision, la concurrencia cancela
-#        por PR y separa por SHA en push, y el gate baja los cinco
-#        artifacts y audita la union solo cuando la bateria corrio.
+#        por PR y separa por SHA en push, el gate baja los cinco
+#        artifacts y audita la union solo cuando la bateria corrio, y su
+#        inventario replica el filtro del runner sobre test-ci-coverage-contract.sh.
 #
 # El arbol de juguete es el MISMO contrato del que usa
 # scripts/tests/test-runner-shards.sh (mismos fixtures en
@@ -364,6 +370,49 @@ grep -q 'test-intruso.sh' <<<"$SALIDA_VALIDADOR" || fail "(13) el rechazo no nom
 $SALIDA_VALIDADOR"
 echo "ok (13): intruso fuera del inventario -> rechazo"
 
+echo "(14) el reparto del runner REAL excluye test-ci-coverage-contract.sh"
+# Este contrato corre una vez por PR en el job ci-contract (sin condicion de
+# omision, caso (w)); si ademas entrara al glob de los shards, correria dos
+# veces por PR. El reparto se imprime del checkout real sin correr nada, asi
+# que la asercion es sobre la bateria de verdad, no sobre el arbol de juguete.
+REPARTO_REAL=$(env -u SAIKIT_SHARD bash scripts/run-checks.sh --reparto) \
+  || fail "(14) --reparto salio distinto de 0"
+if printf '%s\n' "$REPARTO_REAL" | grep -q 'test-ci-coverage-contract\.sh'; then
+  fail "(14) el reparto incluye test-ci-coverage-contract.sh: en el glob correria dos veces por PR (un shard y ci-contract):
+$REPARTO_REAL"
+fi
+echo "ok (14): ninguna entrada del reparto es test-ci-coverage-contract.sh"
+
+echo "(15) una prueba nueva del glob que NINGUN resumen corrio es rechazada"
+# El mundo real de un PR que agrega una prueba con el runner sin verla: el
+# inventario del gate sale del glob del checkout y la trae, los resumenes
+# publicados no. La direccion es la inversa del caso (13): aqui FALTA una
+# entrada del inventario en la union.
+rm -rf "$T/nueva"; cp -R "$T/ok" "$T/nueva"
+cp scripts/tests/fixtures/runner-shards/nucleo.sh "$R/scripts/tests/test-recien-llegada.sh"
+INV_NUEVO="$T/inventario-nueva.txt"
+{
+  for t in "$R"/scripts/tests/*.sh; do
+    [ -e "$t" ] || continue
+    printf '%s\n' "${t##*/}"
+  done
+  for t in "$R"/scripts/tests/*.mjs; do
+    [ -e "$t" ] || continue
+    printf '%s\n' "${t##*/}"
+  done
+  printf '%s\n' sintaxis-summa-gate bateria-summa-gate sintaxis-tablero-runbook bateria-tablero-runbook verify-corpus
+} | LC_ALL=C sort >"$INV_NUEVO"
+rm -f "$R/scripts/tests/test-recien-llegada.sh"
+rc15=0
+SALIDA_VALIDADOR=$(bash "$VALIDADOR" "$T/nueva" "$INV_NUEVO" 2>&1) || rc15=$?
+[ "$rc15" -ne 0 ] || fail "(15) el validador acepto un inventario con una prueba que NINGUN shard corrio:
+$SALIDA_VALIDADOR"
+grep -q 'NINGUN shard' <<<"$SALIDA_VALIDADOR" || fail "(15) el rechazo no fue por entradas del inventario sin correr (razon equivocada):
+$SALIDA_VALIDADOR"
+grep -q 'test-recien-llegada.sh' <<<"$SALIDA_VALIDADOR" || fail "(15) el rechazo no nombra la prueba nueva:
+$SALIDA_VALIDADOR"
+echo "ok (15): prueba nueva del glob sin resumen -> rechazo nombrandola"
+
 # --- (w) cableado del workflow: mismo validador, job propio, gate que audita.
 # Este caso SI mira el YAML (es cableado, no acreditacion de cobertura), con la
 # misma tecnica de anclaje por seccion de test-summa-gate-quality-entrypoints.sh:
@@ -429,6 +478,13 @@ printf '%s\n' "$GL" | grep -qF 'scripts/tests/*.sh' \
 $GL"
 printf '%s\n' "$GL" | grep -qF 'scripts/tests/*.mjs' \
   || fail "(w) el gate no inventaria las pruebas Node del checkout:
+$GL"
+# El inventario del gate replica el MISMO filtro del runner sobre
+# test-ci-coverage-contract.sh (caso 14): si los dos filtros divergen,
+# valida-union-shards.sh rebota ruidosamente porque la union deja de ser el
+# inventario.
+printf '%s\n' "$GL" | grep -qF 'scripts/tests/test-ci-coverage-contract.sh' \
+  || fail "(w) el inventario del gate no replica el filtro del runner (test-ci-coverage-contract.sh fuera de los shards):
 $GL"
 # En fast, la omision de shards sigue autorizada SOLO por clasificacion fast
 # (lo mide test-summa-gate-quality-entrypoints); aca se fija que la auditoria

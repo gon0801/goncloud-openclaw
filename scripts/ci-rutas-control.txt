@@ -1,0 +1,23 @@
+# Rutas que un checker de la bateria lee como entrada de datos (SUA-05, 4.6).
+#
+# Politica: un cambio que toca una de estas rutas clasifica carril COMPLETO
+# aunque case con la allowlist fast. La razon es de cobertura, no de
+# desconfianza: cada entrada de aqui es DATO de un checker de la bateria (hoy
+# el corpus de rendiciones que verifica summa-gate/verify-corpus.mjs), y un
+# cambio del dato tiene que disparar el checker que lo lee. La allowlist no
+# puede expresar la excepcion: su regla docs/evidence/**/*.tsv casa
+# exactamente con el corpus.
+#
+# Formato (lo consume scripts/clasificar-cambio.sh, igual que la allowlist):
+#   - una ruta o patron por linea; '#' inicia comentario; las lineas vacias
+#     no cuentan;
+#   - el patron casa contra la ruta relativa completa del archivo cambiado;
+#   - '*' casa cualquier cosa que NO cruce '/'; '**/' casa cualquier
+#     profundidad de directorios, INCLUIDA cero.
+#
+# Esta lista es un archivo de CONTROL: cualquier cambio que la toque (igual
+# que scripts/ci-fast-allowlist.txt, scripts/clasificar-cambio.sh o
+# .github/workflows/quality.yml) clasifica completo por regla, sin consultar
+# lista alguna -- la llave no abre su propia puerta en el mismo cambio que la
+# reescribe.
+docs/evidence/corpus-rendiciones.tsv
