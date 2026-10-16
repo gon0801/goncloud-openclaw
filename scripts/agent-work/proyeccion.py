@@ -725,7 +725,7 @@ def main(argv: list[str] | None = None) -> int:
             _cargar_notados(args.notados),
             host_gateway=args.host_gateway,
         )
-    except (ValueError, RuntimeError, OSError) as error:
+    except (ValueError, RuntimeError, OSError, subprocess.TimeoutExpired) as error:
         print(f"proyeccion: {error}", file=sys.stderr)
         return 2
     print(json.dumps(resultado, ensure_ascii=False, indent=2))
