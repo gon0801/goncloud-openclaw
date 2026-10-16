@@ -193,6 +193,20 @@ class AgentsRouting(unittest.TestCase):
                 self.assertIn("SUA-03-mediciones.md", rutas[kind]["evidence"])
         self.assertNotIn("user-adopted-session", rutas)
 
+    def test_every_route_names_who_keeps_its_model_up_to_date(self):
+        # SUA-04 G8 (4.3 y 4.4): la ruta por CLI la sucede encargo.py sucesion y las nativas
+        # claw_autoupdate de goncloud-hermes, cada una con su evidencia medida.
+        for ruta in self.coverage["routes"]:
+            with self.subTest(ruta=ruta["kind"]):
+                sucesion = ruta["modelSuccession"]
+                dueno = "encargo.py sucesion" if ruta["kind"].startswith("cli-") else "claw_autoupdate.py"
+                self.assertIn(dueno, sucesion["owner"])
+                evidencia = sucesion["evidence"].split(" (")[0]
+                self.assertTrue((ROOT / evidencia).is_file(), evidencia)
+        nativa = {ruta["kind"]: ruta for ruta in self.coverage["routes"]}["native-managed-agent"]
+        self.assertIn("M-18d", nativa["evidence"])
+        self.assertFalse(nativa["certified"])
+
     def test_every_repo_path_the_inventory_names_as_its_source_exists(self):
         named = re.findall(r"\b(?:agents|scripts|docs)/[\w./-]*\w", self.coverage["source"])
         self.assertIn("agents/main/agent/workshop-skills/agent-dispatch/SKILL.md", named)
