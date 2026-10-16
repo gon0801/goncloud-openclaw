@@ -7,6 +7,7 @@ defecto, así que su veredicto es exactamente un hallazgo con su regla y su ruta
 
 from __future__ import annotations
 
+import os
 import re
 import sys
 import unittest
@@ -26,6 +27,7 @@ from sistema_agentes.contrato import (  # noqa: E402
 
 FIXTURES = ROOT / "scripts/tests/fixtures/sistema-agentes"
 PLAN = ROOT / "docs/superpowers/plans/2026-10-05-sistema-agentes-unificado.md"
+POLITICA_DE_CALIDAD = ROOT / "docs/evidence/agent-work/politica-calidad.json"
 FUERA_DE_CASOS = {
     "casos.json",
     "manifiesto-ensayos.json",
@@ -226,6 +228,15 @@ class Plan(unittest.TestCase):
             [Hallazgo("schema", "schema", "literal no admitido: 'sistema-agentes.autoridad.v1'")],
         )
 
+    def test_una_version_de_calidad_fuera_de_la_tabla_es_desconocida(self):
+        meta = cargar_json(FIXTURES / "planes/validos/pedido-chico.json")
+        meta["qualityPolicy"]["version"] = "otra-cualidad.v9"
+        (hallazgo,) = validar_plan(meta)
+        self.assertEqual(
+            (hallazgo.regla, hallazgo.ruta), ("quality-policy-unknown", "qualityPolicy.version")
+        )
+        self.assertIn("otra-cualidad.v9", hallazgo.detalle)
+
     def test_un_documento_torcido_se_rechaza_sin_reventar(self):
         resultado = cargar_json(FIXTURES / "resultados/review-approved.json")
         flota = cargar_json(FIXTURES / "flota/modelo-exacto.json")
@@ -246,6 +257,70 @@ class Plan(unittest.TestCase):
         for nombre, documento, esperado in torcidos:
             with self.subTest(caso=nombre):
                 self.assertEqual(reglas_y_rutas(validar(documento)), esperado)
+
+
+class PoliticaDeCalidad(unittest.TestCase):
+    """`politica-calidad.json` es la tabla versionada que consulta el contrato (SUA-05, 4.1)."""
+
+    maxDiff = None
+
+    def setUp(self):
+        self.politica = cargar_json(POLITICA_DE_CALIDAD)
+        self.activa = self.politica["versiones"][self.politica["activa"]]
+
+    def test_el_esquema_es_el_de_la_politica_de_calidad(self):
+        self.assertEqual(self.politica["schema"], "agent-work.calidad.v1")
+
+    def test_la_activa_es_una_de_las_versiones(self):
+        self.assertIn(self.politica["activa"], self.politica["versiones"])
+
+    def test_la_version_activa_trae_su_decision_con_by_on_ref_y_quote(self):
+        self.assertEqual(set(self.activa["decision"]), {"by", "on", "ref", "quote"})
+
+    def test_la_decision_de_la_activa_no_es_la_de_otra_version(self):
+        par_de_la_activa = (self.activa["decision"]["on"], self.activa["decision"]["quote"])
+        otras = {
+            (version["decision"]["on"], version["decision"]["quote"])
+            for nombre, version in self.politica["versiones"].items()
+            if nombre != self.politica["activa"]
+        }
+        self.assertNotIn(par_de_la_activa, otras)
+
+    def test_la_version_activa_lleva_el_tope_de_la_regla_4(self):
+        self.assertEqual(self.activa["roundsPerImplementer"], 5)
+        self.assertEqual(self.activa["relays"], 1)
+        self.assertIs(self.activa["segundoModelo"], False)
+
+
+@unittest.skipUnless(
+    os.environ.get("AGENT_WORK_RUNTIME_SOURCE"), "pide AGENT_WORK_RUNTIME_SOURCE con R"
+)
+class PoliticaDeCalidadEnR(unittest.TestCase):
+    """La tabla `ROOT_QUALITY_POLICIES` de R y `politica-calidad.json` dicen lo mismo."""
+
+    maxDiff = None
+
+    def test_las_versiones_y_sus_numeros_son_los_de_r(self):
+        decidir = (
+            Path(os.environ["AGENT_WORK_RUNTIME_SOURCE"])
+            / "src/agents/tasks/managed-root.decide.ts"
+        ).read_text(encoding="utf-8")
+        bloque = re.search(r"ROOT_QUALITY_POLICIES[^{]*\{(.*?)\n\};", decidir, re.DOTALL)
+        self.assertIsNotNone(
+            bloque, "no se encontró ROOT_QUALITY_POLICIES en managed-root.decide.ts"
+        )
+        entradas = re.findall(
+            r'version:\s*"([^"]+)",\s*roundsPerImplementer:\s*(\d+),\s*relays:\s*(\d+)',
+            bloque.group(1),
+        )
+        self.assertTrue(entradas, "la tabla de R no expuso ninguna entrada")
+        en_r = {version: (int(rondas), int(relevos)) for version, rondas, relevos in entradas}
+        politica = cargar_json(POLITICA_DE_CALIDAD)
+        en_g = {
+            version: (datos["roundsPerImplementer"], datos["relays"])
+            for version, datos in politica["versiones"].items()
+        }
+        self.assertEqual(en_r, en_g)
 
 
 class Autoridad(unittest.TestCase):
