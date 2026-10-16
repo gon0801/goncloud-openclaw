@@ -901,13 +901,15 @@ class Sucesion(Mac):
         (self.bin / "listing").write_text(LISTING + "zai-coding-plan/glm-5.4-flash\n")
 
         def banco(env, cwd):
-            return 0, "test_x ... BANCO_E2E case=ingenieria task=t-1 conducta=ok\n\nOK\n"
+            return 0, "test_x ... BANCO_E2E case=ingenieria desenlace=verde causa=ninguna\n\nOK\n"
         answer = self.plan(aplicar=True, correr_banco=banco, runtime_source="/r")
         self.assertEqual((answer["accion"], answer["promovido"]), ("promovido", "zai-coding-plan/glm-5.4-flash"))
         entry = self.leer()["lines"]["zai-coding-plan/glm-{}-flash"]
         self.assertEqual((entry["actual"], entry["anterior"], entry["estado"]),
                          ("zai-coding-plan/glm-5.4-flash", "zai-coding-plan/glm-5.3-flash", "promovido"))
         self.assertIn("zai-coding-plan/glm-5.4-flash reemplazó a zai-coding-plan/glm-5.3-flash", answer["aviso"])
+        # F4: el aviso de la promoción queda pendiente hasta que G5 lo consuma.
+        self.assertIn("aviso pendiente de G5", answer["aviso"] + answer.get("avisoPendiente", ""))
         # G2 lo lee: un sucesion.json escrito por G3 pasa succession_actual y preparar lo usa.
         self.beat()
         self.assertEqual(self.preparar()["modelo"], "zai-coding-plan/glm-5.4-flash")
@@ -917,7 +919,8 @@ class Sucesion(Mac):
         return self.plan(aplicar=True, correr_banco=lambda env, cwd: salida, runtime_source="/r")
 
     def test_aplicar_rojo_rechaza_con_huella_y_la_huella_bloquea(self):
-        answer = self.correr_aplicar((1, "test_x ... FAIL\nBANCO_E2E case=ingenieria task=t-1 conducta=roja\nFAILED (failures=1)\n"))
+        answer = self.correr_aplicar((1, "test_x ... FAIL\nBANCO_E2E case=ingenieria desenlace=rojo "
+                                     "causa=conducta\nFAILED (failures=1)\n"))
         entry = self.leer()["lines"]["zai-coding-plan/glm-{}-flash"]
         self.assertEqual((answer["accion"], entry["estado"], entry["intentos"]),
                          ("rechazado", "rechazado", 1))
@@ -959,6 +962,25 @@ class Sucesion(Mac):
                                   runtime_source="/r")
         self.assertEqual((answer["accion"], llamado), ("host-ocupado", []))
 
+    def test_sin_latido_vivo_mira_igual_el_spool(self):
+        # F6: un host sin latido vivo dejó su spool con una operación abierta; el canario no
+        # corre aunque el latido ya no dé señales.
+        (self.bin / "listing").write_text(LISTING + "zai-coding-plan/glm-5.4-flash\n")
+        viejo = time.time() - encargo.BEAT_ALIVE_SECONDS - 60
+        self.beat(beatAt=viejo, startedAt=viejo - 3600)
+        (self.state / "enc-1").mkdir(exist_ok=True)
+        with contextlib.closing(sqlite3.connect(self.state / "enc-1" / "host.sqlite")) as db, db:
+            db.execute("CREATE TABLE operations (status TEXT NOT NULL)")
+            db.execute("INSERT INTO operations VALUES ('running')")
+        llamado = []
+        answer = encargo.sucesion(state_root=self.state, checkout=self.checkout,
+                                  opencode_bin=self.bin / "opencode", now=time.time(), aplicar=True,
+                                  correr_banco=lambda env, cwd: llamado.append(1)
+                                  or (0, "test_x ... BANCO_E2E case=ingenieria desenlace=verde "
+                                         "causa=ninguna\n\nOK\n"),
+                                  runtime_source="/r")
+        self.assertEqual((answer["accion"], llamado), ("host-ocupado", []))
+
     def test_revertir_vuelve_a_anterior_y_no_se_libera_a_los_7_dias(self):
         (self.bin / "listing").write_text(LISTING + "zai-coding-plan/glm-5.4-flash\n")
         doc = {"schema": "agent-work.succession.v1", "lines": {"zai-coding-plan/glm-{}-flash": {
@@ -975,6 +997,54 @@ class Sucesion(Mac):
         self.escribir(doc)
         self.assertEqual(self.plan()["lineas"][0]["causa"], "revertido por el operador")
 
+    def test_revertir_sin_catalogo_no_guarda_huella_vieja(self):
+        # F5: sin catálogo no hay huella nueva; escribir con la vieja dejaría bloqueado al
+        # catálogo de otro día, y como si fuera una decisión del operador.
+        (self.bin / "listing").write_text(LISTING + "zai-coding-plan/glm-5.4-flash\n")
+        doc = {"schema": "agent-work.succession.v1", "lines": {"zai-coding-plan/glm-{}-flash": {
+            "actual": "zai-coding-plan/glm-5.4-flash", "anterior": "zai-coding-plan/glm-5.3-flash",
+            "candidato": None, "estado": "promovido", "causa": None, "intentos": 0,
+            "ultimo": 1_800_000_000.0, "huellaDelCatalogo": "x", "evidencia": None}}}
+        self.escribir(doc)
+        (self.bin / "opencode").write_text("#!/bin/sh\nexit 64\n")
+        (self.bin / "opencode").chmod(0o755)
+        (self.state / "catalogo.json").unlink(missing_ok=True)
+        answer = self.plan(revertir="zai-coding-plan/glm-{}-flash")
+        self.assertIs(answer["ok"], False)
+        self.assertTrue(answer["causa"])
+        self.assertEqual(self.leer(), doc)
+
+    def test_revertir_lee_dentro_del_candado(self):
+        # F7: el anterior cambia bajo el candado; quien leyó antes de tomarlo revierte a un
+        # anterior viejo y pisa el archivo con esa foto.
+        (self.bin / "listing").write_text(LISTING + "zai-coding-plan/glm-5.4-flash\n")
+        linea = "zai-coding-plan/glm-{}-flash"
+        doc = {"schema": "agent-work.succession.v1", "lines": {linea: {
+            "actual": "zai-coding-plan/glm-5.4-flash", "anterior": "zai-coding-plan/glm-5.3-flash",
+            "candidato": None, "estado": "promovido", "causa": None, "intentos": 0,
+            "ultimo": 1_800_000_000.0, "huellaDelCatalogo": "x", "evidencia": None}}}
+        self.escribir(doc)
+        resultado = {}
+
+        def revertir():
+            resultado["answer"] = self.plan(revertir=linea)
+
+        with encargo._policy_lock(self.state / "sucesion.json"):
+            hilo = threading.Thread(target=revertir)
+            hilo.start()
+            time.sleep(0.3)
+            self.assertTrue(hilo.is_alive(), "el revertir no esperó el candado antes de leer")
+            bajo_el_candado = copy.deepcopy(doc)
+            bajo_el_candado["lines"][linea]["anterior"] = "zai-coding-plan/glm-5.2-flash"
+            self.escribir(bajo_el_candado)
+        hilo.join(5)
+        self.assertFalse(hilo.is_alive())
+        answer = resultado["answer"]
+        self.assertEqual((answer["accion"], answer["actual"]),
+                         ("revertido", "zai-coding-plan/glm-5.2-flash"))
+        entry = self.leer()["lines"][linea]
+        self.assertEqual(entry["actual"], "zai-coding-plan/glm-5.2-flash")
+
     def test_el_host_ocupado_no_corre_nada(self):
         (self.bin / "listing").write_text(LISTING + "zai-coding-plan/glm-5.4-flash\n")
         self.beat(slot="running", taskId="t-1", model="zai-coding-plan/glm-5.3", since=time.time())
@@ -985,6 +1055,25 @@ class Sucesion(Mac):
                                   runtime_source="/r")
         self.assertEqual((answer["accion"], llamado), ("host-ocupado", []))
         self.assertFalse((self.state / "sucesion.json").exists())
+
+    def test_el_cli_aplicar_corre_con_el_banco_inyectado(self):
+        # F8: el CLI de sucesion corre el banco que AGENT_WORK_SUCESION_BANCO inyecta, no el real.
+        (self.bin / "listing").write_text(LISTING + "zai-coding-plan/glm-5.4-flash\n")
+        marcador = self.root / "marcador-del-banco"
+        banco = self.root / "banco-falso.sh"
+        banco.write_text("#!/bin/sh\n"
+                         f"touch {marcador}\n"
+                         "printf 'BANCO_E2E case=ingenieria desenlace=verde causa=ninguna\\n'\n"
+                         "printf 'OK\\n'\n")
+        banco.chmod(0o755)
+        with mock.patch.dict(os.environ, {"AGENT_WORK_SUCESION_BANCO": str(banco)}):
+            code, out, err = self.cli("sucesion", "--aplicar")
+        answer = json.loads(out)
+        self.assertEqual((code, err), (0, ""))
+        self.assertEqual(answer["accion"], "promovido")
+        self.assertTrue(marcador.exists(), "el banco inyectado no corrió")
+        entry = self.leer()["lines"]["zai-coding-plan/glm-{}-flash"]
+        self.assertEqual((entry["actual"], entry["estado"]), ("zai-coding-plan/glm-5.4-flash", "promovido"))
 
 
 class Cerrar(Mac):
