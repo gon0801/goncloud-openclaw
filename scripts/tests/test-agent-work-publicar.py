@@ -277,6 +277,76 @@ class PublicadorNativo(unittest.TestCase):
         self.assertEqual(len(lineas), 1, resultado.stdout)
         return resultado.returncode, json.loads(lineas[0])
 
+    def test_un_agente_retirado_sale_del_estado_y_la_reversa_lo_devuelve(self):
+        # SUA-04 (4.5): la publicación ya no exige bloque para un agente que no está; lo que
+        # faltaba es que el estado lo olvide, con su respaldo, y que revertir lo devuelva.
+        self.armar()
+        self.publicar("leer")
+        codigo, _ = self.publicar("aplicar")
+        self.assertEqual(codigo, 0)
+        sin_pers = self.tmp / "agents-sin-pers.json"
+        sin_pers.write_text(
+            json.dumps([a for a in self.agentes if a["id"] != "pers"]) + "\n", encoding="utf-8"
+        )
+        # La publicación de la generación 2 ya no trae el bloque de pers: se armó sin él,
+        # como la arma la mitad Mac cuando la lista viva ya no lo trae.
+        self.agentes = [a for a in self.agentes if a["id"] != "pers"]
+        self.armar_generacion(2)
+        self.publicar("leer", agentes_json=sin_pers)
+        codigo, salida = self.publicar("aplicar", agentes_json=sin_pers)
+        self.assertEqual((codigo, salida["agentes"]["pers"]), (0, "retirado"))
+        estado = self.estado_del_home()
+        self.assertNotIn("pers", estado["bloques"])
+        self.assertNotIn("pers", estado["workspaces"])
+        respaldo = (
+            self.home / ".openclaw" / "sua-contexto" / "2" / "agentes-retirados" / "pers.json"
+        )
+        self.assertTrue(respaldo.exists())
+        codigo, salida = self.publicar("revertir", agentes_json=sin_pers)
+        self.assertEqual((codigo, salida["agentes"]["pers"]), (0, "revertido"))
+        estado = self.estado_del_home()
+        self.assertIn("pers", estado["bloques"])
+        self.assertIn("pers", estado["workspaces"])
+        self.assertFalse(respaldo.exists())
+
+    def test_un_agente_que_vuelve_aplica_sin_conflicto(self):
+        # F2: el retiro olvida el digest, pero el bloque queda en el AGENTS.md. Si el
+        # agente vuelve con el mismo workspace, aplicar lo reconoce por el respaldo del
+        # retiro y sale "igual", no "conflicto: el bloque fue editado".
+        self.armar()
+        self.publicar("leer")
+        self.publicar("aplicar")
+        sin_pers = self.tmp / "agents-sin-pers.json"
+        sin_pers.write_text(
+            json.dumps([a for a in self.agentes if a["id"] != "pers"]) + "\n", encoding="utf-8"
+        )
+        self.agentes = [a for a in self.agentes if a["id"] != "pers"]
+        self.armar_generacion(2)
+        self.publicar("leer", agentes_json=sin_pers)
+        codigo, salida = self.publicar("aplicar", agentes_json=sin_pers)
+        self.assertEqual((codigo, salida["agentes"]["pers"]), (0, "retirado"))
+        # F9: además del respaldo que esta generación acaba de escribir, uno de un
+        # ciclo de retiro anterior; la vuelta debe borrarlos todos.
+        viejo = self.home / ".openclaw" / "sua-contexto" / "1" / "agentes-retirados" / "pers.json"
+        viejo.parent.mkdir(parents=True, exist_ok=True)
+        viejo.write_text(
+            json.dumps({"bloques": "viejo", "workspaces": "viejo"}) + "\n", encoding="utf-8"
+        )
+        self.agentes = [a for a in self.agentes] + [
+            a for a in json.loads(self.agents_json.read_text()) if a["id"] == "pers"
+        ]
+        self.armar_generacion(3)
+        self.publicar("leer")
+        codigo, salida = self.publicar("aplicar")
+        # Sin conflicto: "igual" si el bloque no cambió de generación, "publicado" si sí.
+        self.assertEqual((codigo, salida["conflictos"]), (0, 0))
+        self.assertIn(salida["agentes"]["pers"], ("igual", "publicado"))
+        self.assertIn("pers", self.estado_del_home()["bloques"])
+        sobrantes = sorted(
+            (self.home / ".openclaw" / "sua-contexto").glob("*/agentes-retirados/pers.json")
+        )
+        self.assertEqual(sobrantes, [], "quedaron respaldos de retiro viejos de pers")
+
     def revertir_con_copia_que_falla(self):
         """La reversa en proceso con la copia rota a medias (C6 de SUA03-G5c): el
         fallo se inyecta en copytree y no depende de permisos, así que también

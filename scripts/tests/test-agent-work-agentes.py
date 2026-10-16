@@ -1,0 +1,416 @@
+#!/usr/bin/env python3
+"""SUA-04 (4.5): descubrir agentes contra una lista viva de fixture y sondear con una Mini falsa."""
+
+import json
+import os
+import sqlite3
+import subprocess
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / "scripts" / "agent-work"))
+import agentes  # noqa: E402
+
+PERFILES = {
+    "schema": "agent-work.perfiles.v1",
+    "profiles": [
+        {
+            "id": "ingenieria",
+            "routes": [
+                {"host": "mini-native", "executor": "native", "agentId": "ingenieria"},
+                {"host": "mini-native", "executor": "native", "agentId": "fantasma"},
+            ],
+        },
+        {
+            "id": "revision",
+            "routes": [{"host": "mini-native", "executor": "native", "agentId": "reviewer"}],
+        },
+    ],
+    "agents": [{"agentId": "pers", "status": "sin-perfil"}],
+}
+
+
+def filas(agentes_json):
+    return agentes.descubrir(PERFILES, agentes_json, requesters=("main",))
+
+
+class Descubrir(unittest.TestCase):
+    def test_estados(self):
+        viva = [
+            {"id": "main"},
+            {"id": "ingenieria"},
+            {"id": "reviewer"},
+            {"id": "pers"},
+            {"id": "nuevo"},
+        ]
+        por_id = {fila.get("agentId"): fila for fila in filas(viva)}
+        self.assertEqual(por_id["ingenieria"]["estado"], "con-perfil")
+        self.assertEqual(por_id["pers"]["estado"], "sin-perfil")
+        self.assertEqual(por_id["nuevo"]["estado"], "alta-sin-registrar")
+        # Un solicitante no es trabajador ni alta.
+        self.assertNotIn("main", por_id)
+        incompletos = [f for f in filas(viva) if f["estado"] == "perfil-incompleto"]
+        self.assertEqual(
+            [(f["perfil"], f["agentId"]) for f in incompletos], [("ingenieria", "fantasma")]
+        )
+
+    def test_un_solicitante_que_tambien_es_trabajador_se_clasifica(self):
+        # B1: requesters trae también a trabajadores (ingenieria, reviewer...). El salto de
+        # solicitante vale solo para quien no tiene perfil ni está en agents (hoy main).
+        viva = [{"id": "main"}, {"id": "ingenieria"}]
+        filas = agentes.descubrir(PERFILES, viva, requesters=("main", "ingenieria", "reviewer"))
+        por_id = {f["agentId"]: f for f in filas if "perfil" not in f}
+        self.assertEqual(por_id["ingenieria"]["estado"], "con-perfil")
+        self.assertEqual(por_id["reviewer"]["estado"], "retirado")
+        self.assertNotIn("main", por_id)
+
+    def test_retirado(self):
+        viva = [{"id": "main"}, {"id": "ingenieria"}]
+        # La fila del agente (sin "perfil") dice retirado; la de su perfil dice perfil-incompleto.
+        por_id = {fila["agentId"]: fila for fila in filas(viva) if "perfil" not in fila}
+        self.assertEqual(por_id["reviewer"]["estado"], "retirado")
+        self.assertEqual(por_id["pers"]["estado"], "retirado")
+        self.assertIn(
+            ("revision", "reviewer"),
+            [
+                (f["perfil"], f["agentId"])
+                for f in filas(viva)
+                if f["estado"] == "perfil-incompleto"
+            ],
+        )
+
+
+class FakeMini:
+    """Un ssh y un openclaw falsos: la tarea aparece cuando el turno a main corre."""
+
+    def __init__(
+        self,
+        *,
+        tarea=True,
+        registrada=False,
+        marcador=True,
+        entregas=0,
+        memoria_cambia=False,
+        spawn=False,
+        concurrente=False,
+        turno_cortado=False,
+        reporta=True,
+    ):
+        self.tarea, self.registrada, self.con_marcador = tarea, registrada, marcador
+        self.entregas, self.memoria_cambia, self.spawn = entregas, memoria_cambia, spawn
+        self.concurrente, self.turno_cortado = concurrente, turno_cortado
+        self.reporta = reporta
+        self.llamadas = []
+        self.memoria = "aaa  memory/notas.md\n"
+        self.turno_corrido = False
+
+    def __call__(self, argv, entrada=None, timeout=None):
+        self.llamadas.append((argv, entrada))
+        texto = " ".join(argv)
+        if "agents list" in texto:
+            return (
+                0,
+                json.dumps(
+                    [
+                        {"id": "main", "workspace": "/w/main"},
+                        {"id": "ingenieria", "workspace": "/w/ingenieria"},
+                    ]
+                ),
+                "",
+            )
+        if "find memory" in texto:
+            return 0, self.memoria, ""
+        if "cat >" in texto:
+            return 0, "", ""
+        if "agent --agent main" in texto:
+            if self.turno_cortado:
+                return 1, "", "ssh no contestó en 900s"
+            self.turno_corrido = True
+            if self.memoria_cambia:
+                self.memoria = "bbb  memory/notas.md\n"
+            # Sin taskId reportado (F8): un main que no declara su tarea gestionada.
+            return 0, json.dumps({"taskId": "t-sonda"} if self.reporta else {}), ""
+        if argv[1] == "-":
+            # F6: el código llega por stdin y el pedido como argumento ya citado. Sin
+            # stdin válido el fake no contesta: un regreso a -c lo cantan los flujos.
+            if not entrada or "managed_tasks" not in entrada:
+                raise AssertionError("el ayudante debe llegar por stdin")
+            tareas = []
+            if self.turno_corrido and self.tarea:
+                tareas = [
+                    {
+                        "taskId": "t-sonda",
+                        "kind": "agent",
+                        "agentId": "ingenieria",
+                        "estado": "registered" if self.registrada else "result-recorded",
+                        "resultado": "SONDA-7" if self.con_marcador else "otro texto",
+                    }
+                ]
+            if self.turno_corrido and self.concurrente:
+                tareas.append(
+                    {
+                        "taskId": "t-real",
+                        "kind": "agent",
+                        "agentId": "ingenieria",
+                        "estado": "result-recorded",
+                        "resultado": "trabajo real de otro",
+                    }
+                )
+            pedido = json.loads(argv[2].strip("'"))  # el pedido viaja citado como argumento (F6)
+            sesiones = ["agent:ingenieria:managed:ajena"]
+            if self.turno_corrido:
+                sesiones.append("agent:ingenieria:managed:t-sonda")
+            # Fiel al ayudante real: las hijas se filtran con el taskId que el pedido
+            # trae; sin él, la lista de hijas vuelve vacía y solo queda sesionesAgente.
+            reportada = pedido.get("tareaReportada")
+            return (
+                0,
+                json.dumps(
+                    {
+                        "tareas": tareas,
+                        "entregas": self.entregas if self.turno_corrido else 0,
+                        "sesionesHijas": [s for s in sesiones if reportada and reportada in s],
+                        "sesionesAgente": sesiones,
+                        "spawn": self.spawn,
+                    }
+                ),
+                "",
+            )
+        return 0, "", ""
+
+    def corridas(self, pedazo):
+        return [argv for argv, _ in self.llamadas if pedazo in " ".join(argv)]
+
+
+def sondear_con(fake, tope=0.0):
+    reloj = {"t": 0.0}
+
+    def dormir(_):
+        reloj["t"] += 10.0
+
+    return agentes.sondear(
+        "ingenieria",
+        mini="u@h",
+        correr=fake,
+        perfiles=PERFILES,
+        marca="7",
+        dormir=dormir,
+        reloj=lambda: reloj["t"],
+        tope=tope,
+    )
+
+
+class Sondear(unittest.TestCase):
+    def test_camino_feliz_y_limpieza(self):
+        fake = FakeMini()
+        fila = sondear_con(fake)
+        self.assertEqual(
+            (
+                fila["ok"],
+                fila["taskId"],
+                fila["estado"],
+                fila["marcador"],
+                fila["entregas"],
+                fila["memoriaIgual"],
+            ),
+            (True, "t-sonda", "result-recorded", True, 0, True),
+        )
+        # Siempre limpia: el mensaje en /tmp y las dos sesiones.
+        self.assertTrue(
+            any("rm" in argv and any("sua04-sonda" in a for a in argv) for argv, _ in fake.llamadas)
+        )
+        borradas = [" ".join(argv) for argv in fake.corridas("sessions delete")]
+        self.assertTrue(any("agent:main:sua04-sonda-ingenieria-7" in b for b in borradas))
+        self.assertTrue(any("agent:ingenieria:managed:t-sonda" in b for b in borradas))
+
+    def test_no_borra_sesiones_ajenas_ni_toma_la_tarea_concurrente(self):
+        # F1: la sonda solo toca lo suyo: ni la sesión gestionada ajena ni la tarea real
+        # concurrente al mismo agente.
+        fake = FakeMini(concurrente=True)
+        fila = sondear_con(fake)
+        self.assertEqual((fila["ok"], fila["taskId"]), (True, "t-sonda"))
+        borradas = [" ".join(argv) for argv in fake.corridas("sessions delete")]
+        self.assertFalse(any("managed:ajena" in b for b in borradas), borradas)
+        self.assertTrue(any("managed:t-sonda" in b for b in borradas), borradas)
+
+    def test_turno_cortado_conserva_la_sesion_de_main(self):
+        fake = FakeMini(turno_cortado=True)
+        fila = sondear_con(fake)
+        self.assertEqual(
+            fila["causa"], "turno cortado, sesión conservada: agent:main:sua04-sonda-ingenieria-7"
+        )
+        borradas = [" ".join(argv) for argv in fake.corridas("sessions delete")]
+        self.assertFalse(any("agent:main:sua04-sonda" in b for b in borradas), borradas)
+        self.assertTrue(any("rm" in argv for argv, _ in fake.llamadas))
+
+    def test_main_que_usa_sessions_spawn(self):
+        fila = sondear_con(FakeMini(tarea=False, spawn=True))
+        self.assertEqual(
+            (fila["ok"], fila["causa"]),
+            (False, "main usó sessions_spawn en vez de la tarea gestionada"),
+        )
+
+    def test_tarea_que_no_llega(self):
+        fila = sondear_con(FakeMini(registrada=True))
+        self.assertEqual(
+            (fila["ok"], fila["causa"]), (False, "la tarea no llegó a result-recorded en el tope")
+        )
+
+    def test_una_entrega_hacia_david_falla(self):
+        fila = sondear_con(FakeMini(entregas=1))
+        self.assertEqual(
+            (fila["ok"], fila["entregas"], fila["causa"]), (False, 1, "hubo entregas hacia David")
+        )
+
+    def test_memoria_cambiada_falla(self):
+        fila = sondear_con(FakeMini(memoria_cambia=True))
+        self.assertEqual(
+            (fila["ok"], fila["memoriaIgual"], fila["causa"]),
+            (False, False, "memory/ cambió durante la sonda"),
+        )
+
+    def test_la_hija_se_borra_cuando_main_no_reporta_task_id(self):
+        # F8: la tarea se reconoció por su resultado, no por lo que main reportó;
+        # la sesión hija de ESA tarea también es de la sonda y debe irse.
+        fake = FakeMini(reporta=False)
+        fila = sondear_con(fake)
+        self.assertEqual((fila["ok"], fila["taskId"]), (True, "t-sonda"))
+        borradas = [" ".join(argv) for argv in fake.corridas("sessions delete")]
+        self.assertTrue(any("agent:ingenieria:managed:t-sonda" in b for b in borradas), borradas)
+        self.assertFalse(any("managed:ajena" in b for b in borradas), borradas)
+
+
+SSH_FALSO = """#!/bin/sh
+# ssh de juguete con la semántica del real: une el argv con espacios y lo corre
+# con sh -c, como el shell remoto de la Mini.
+sh -c "$*"
+"""
+
+
+class ConexionReal(unittest.TestCase):
+    """La lectura y la foto contra un HOME de juguete y un ssh local que replica al
+    real (F6): el ssh une el argv con espacios y el shell remoto lo vuelve a partir,
+    así que estas pruebas reproducen el machaqueo sin salir de la Mac.
+    """
+
+    def setUp(self):
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        self.tmp = Path(temp.name)
+        self.home = self.tmp / "home"
+        self.ws = self.home / "w" / "ingenieria"
+        (self.ws / "memory").mkdir(parents=True)
+        (self.ws / "memory" / "notas.md").write_text("nota de ingeniería\n", encoding="utf-8")
+        self.crear_base(
+            self.home / ".openclaw" / "state" / "openclaw.sqlite",
+            [
+                "create table managed_tasks (task_id text, assignment_json text,"
+                " result_json text, created_at int)"
+            ],
+            [
+                (
+                    "insert into managed_tasks values (?, ?, ?, ?)",
+                    (
+                        "t-1",
+                        json.dumps({"target": {"kind": "agent", "agentId": "ingenieria"}}),
+                        json.dumps("SONDA-7"),
+                        1,
+                    ),
+                )
+            ],
+        )
+        self.base_main = (
+            self.home / ".openclaw" / "agents" / "main" / "agent" / "openclaw-agent.sqlite"
+        )
+        self.crear_base(
+            self.base_main,
+            ["create table conversation_deliveries (id int, source_session_key text)"],
+        )
+        self.crear_base(
+            self.home / ".openclaw" / "agents" / "ingenieria" / "agent" / "openclaw-agent.sqlite",
+            [
+                "create table conversation_deliveries (id int, source_session_key text)",
+                "create table session_windows (session_key text, session_id text)",
+                "create table transcript_events (session_id text, seq int, event_json text)",
+            ],
+            [
+                (
+                    "insert into session_windows values (?, ?)",
+                    ("agent:ingenieria:managed:t-1", "s-1"),
+                )
+            ],
+        )
+        self.guion = self.tmp / "ssh-falso"
+        self.guion.write_text(SSH_FALSO, encoding="utf-8")
+        self.guion.chmod(0o755)
+
+    def crear_base(self, ruta, ordenes=(), filas=()):
+        ruta.parent.mkdir(parents=True, exist_ok=True)
+        db = sqlite3.connect(ruta)
+        try:
+            for orden in ordenes:
+                db.execute(orden)
+            for orden, fila in filas:
+                db.execute(orden, fila)
+            db.commit()
+        finally:
+            db.close()
+
+    def correr(self, argv, entrada=None, timeout=None):
+        hecho = subprocess.run(
+            [str(self.guion), *argv],
+            input=entrada,
+            capture_output=True,
+            text=True,
+            timeout=timeout or agentes.TIMEOUT_SSH,
+            env={**os.environ, "HOME": str(self.home)},
+        )
+        return hecho.returncode, hecho.stdout, hecho.stderr
+
+    def test_la_lectura_y_la_foto_sobreviven_a_un_ssh_de_verdad(self):
+        estado = agentes._estado_remoto(
+            self.correr, "agent:main:sua04-sonda-ingenieria-7", "ingenieria", "SONDA-7"
+        )
+        tarea = estado["tareas"][0]
+        self.assertEqual(
+            (tarea["taskId"], tarea["kind"], tarea["agentId"], tarea["estado"]),
+            ("t-1", "agent", "ingenieria", "result-recorded"),
+        )
+        self.assertIn("SONDA-7", tarea["resultado"])
+        foto = [agentes._foto_memoria(self.correr, str(self.ws)) for _ in range(2)]
+        self.assertEqual(foto[0], foto[1])
+        self.assertIn("memory/notas.md", foto[0])
+
+    def test_las_entregas_se_leen_de_la_base_de_cada_agente(self):
+        # F7: la entrega vive en la base del agente main, no en la base de estado.
+        db = sqlite3.connect(self.base_main)
+        try:
+            db.execute(
+                "insert into conversation_deliveries values (?, ?)",
+                (1, "agent:main:sua04-sonda-ingenieria-7"),
+            )
+            db.commit()
+        finally:
+            db.close()
+        estado = agentes._estado_remoto(
+            self.correr, "agent:main:sua04-sonda-ingenieria-7", "ingenieria", "SONDA-7"
+        )
+        self.assertEqual(estado["entregas"], 1)
+
+    def test_sin_tabla_de_entregas_falla_con_causa(self):
+        # F7: sin la tabla de entregas, fallar con su causa; un 0 en silencio es un
+        # "sin entregas hacia David" falso.
+        self.base_main.unlink()
+        self.crear_base(self.base_main)
+        with self.assertRaises(ValueError) as atrapado:
+            agentes._estado_remoto(
+                self.correr, "agent:main:sua04-sonda-ingenieria-7", "ingenieria", "SONDA-7"
+            )
+        self.assertIn("conversation_deliveries", str(atrapado.exception))
+
+
+if __name__ == "__main__":
+    unittest.main()

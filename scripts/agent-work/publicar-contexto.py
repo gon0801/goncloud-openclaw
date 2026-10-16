@@ -576,9 +576,19 @@ def aplicar_en_la_mini(publicacion: Path, home: Path, agentes_json: Path | None)
             salida_agentes[identificador] = "conflicto: el bloque fue editado"
             conflictos += 1
             continue
+        # La vuelta de un retirado (F2): el digest que el estado olvidó vive en el
+        # respaldo del retiro, y vale como el publicado, como en la reversa.
+        respaldos_retiro = sorted(suya.glob(f"*/agentes-retirados/{identificador}.json"))
+        respaldo_retiro = (
+            respaldos_retiro[-1]
+            if respaldos_retiro
+            else suya / gen / "agentes-retirados" / f"{identificador}.json"
+        )
+        datos_retiro = leer_json(respaldo_retiro) if respaldo_retiro.exists() else {}
+        esperado_bloque = estado["bloques"].get(identificador) or datos_retiro.get("bloques")
         if trecho is not None:
             desde, hasta = trecho
-            if sha256hex(actual[desde:hasta]) != estado["bloques"].get(identificador):
+            if sha256hex(actual[desde:hasta]) != esperado_bloque:
                 salida_agentes[identificador] = "conflicto: el bloque fue editado"
                 conflictos += 1
                 continue
@@ -589,6 +599,7 @@ def aplicar_en_la_mini(publicacion: Path, home: Path, agentes_json: Path | None)
             contenido = actual + salto + bloques[identificador] + final
         if (
             estado["workspaces"].get(identificador) != digest
+            and datos_retiro.get("workspaces") != digest
             and lectura.get("agents", {}).get(identificador) != digest
         ):
             salida_agentes[identificador] = "conflicto: cambió después de --leer"
@@ -599,6 +610,10 @@ def aplicar_en_la_mini(publicacion: Path, home: Path, agentes_json: Path | None)
             # "igual" no refresca el digest: el del estado es el de la última escritura
             # del publicador, y es el que la reversa valida (4.3 CAS).
             nuevos_bloques[identificador] = sha256hex(bloques[identificador])
+            # La vuelta limpia TODOS los respaldos de retiro (F9): uno viejo que
+            # sobreviva mentiría un retiro que ya no existe.
+            for viejo in {*respaldos_retiro, respaldo_retiro}:
+                viejo.unlink(missing_ok=True)
             continue
         respaldo = suya / gen / "workspaces" / f"{identificador}.AGENTS.md"
         respaldo.parent.mkdir(parents=True, exist_ok=True)
@@ -613,12 +628,43 @@ def aplicar_en_la_mini(publicacion: Path, home: Path, agentes_json: Path | None)
         salida_agentes[identificador] = "publicado"
         nuevos_workspaces[identificador] = releido
         nuevos_bloques[identificador] = sha256hex(bloques[identificador])
+        for viejo in {*respaldos_retiro, respaldo_retiro}:
+            viejo.unlink(missing_ok=True)
+
+    vivos = {agente["id"] for agente in agentes}
+    traidos = (
+        {p.stem for p in (publicacion / "bloques").glob("*.md")}
+        if (publicacion / "bloques").is_dir()
+        else set()
+    )
+    for identificador in sorted(
+        (set(estado["bloques"]) | set(estado["workspaces"])) - vivos - traidos
+    ):
+        # El retiro (SUA-04, 4.5): un agente que ya no está en la lista viva sale del estado
+        # con su respaldo, como una skill que sale del manifiesto. Su bloque en disco no se
+        # toca: el workspace ya no es de este publicador. La reversa lo devuelve al estado.
+        respaldo = suya / gen / "agentes-retirados" / f"{identificador}.json"
+        respaldo.parent.mkdir(parents=True, exist_ok=True)
+        escribir_atomico(
+            respaldo,
+            canonico(
+                {
+                    "bloques": estado["bloques"].get(identificador),
+                    "workspaces": estado["workspaces"].get(identificador),
+                }
+            )
+            + b"\n",
+        )
+        nuevos_bloques.pop(identificador, None)
+        nuevos_workspaces.pop(identificador, None)
+        salida_agentes[identificador] = "retirado"
 
     cambios = (
         conflictos > 0
         or "publicado" in salida_skills.values()
         or "quitado" in salida_skills.values()
         or ("publicado" in salida_agentes.values())
+        or ("retirado" in salida_agentes.values())
     )
     # El estado anterior de la generación es el estado tal como estaba antes de esta
     # --aplicar: se reescribe cuando la generación publicada es otra, y se queda como
@@ -762,6 +808,21 @@ def revertir_en_la_mini(home: Path, agentes_json: Path | None) -> int:
             nuevo["workspaces"][identificador] = estado["workspaces"][identificador]
         else:
             nuevo["workspaces"].pop(identificador, None)
+
+    retirados_dir = suya / gen / "agentes-retirados"
+    if retirados_dir.is_dir():
+        for respaldo in sorted(retirados_dir.glob("*.json")):
+            identificador = respaldo.name[: -len(".json")]
+            if identificador in rutas:
+                continue
+            # El agente retirado por esta generación vuelve al estado (SUA-04, 4.5).
+            datos = leer_json(respaldo)
+            if datos.get("bloques") is not None:
+                nuevo["bloques"][identificador] = datos["bloques"]
+            if datos.get("workspaces") is not None:
+                nuevo["workspaces"][identificador] = datos["workspaces"]
+            salida_agentes[identificador] = "revertido"
+            respaldo.unlink()
 
     if conflictos:
         # Reversa parcial: el estado sigue en la generación revertida, con lo publicado
