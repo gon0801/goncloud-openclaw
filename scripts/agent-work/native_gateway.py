@@ -9,6 +9,7 @@ import os
 import re
 import shutil
 import signal
+import socket
 import sqlite3
 import subprocess
 import sys
@@ -1197,6 +1198,8 @@ def main(argv=None):
     parser.add_argument("--raices-dir",
                         default=str(Path.home() / ".local/state/agent-work-host/raices"),
                         help="where proyeccion.pasar writes the raices projections (the watch loop)")
+    parser.add_argument("--raices-host-gateway", default=socket.gethostname(),
+                        help="the gateway host named on agent and unassigned rows (proyeccion's --host-gateway)")
     parser.add_argument("--claim-once", action="store_true")
     parser.add_argument("--cli-instance-id")
     parser.add_argument("--cli-tmux-socket")
@@ -1285,7 +1288,7 @@ def main(argv=None):
                 progress_client=args.progress_client, stop_event=stop,
                 cli_claim=cli_claim, cli_watch=cli_watch, cli_release=cli_release, cli_cancel=cli_cancel,
                 cli_retry=cli_retry, cli_beat=cli_beat,
-                raices_publisher=RaicesPublisher(args.raices_dir),
+                raices_publisher=RaicesPublisher(args.raices_dir, host_gateway=args.raices_host_gateway),
             )
         finally:
             signal.signal(signal.SIGTERM, old_term)

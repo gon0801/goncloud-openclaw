@@ -10,6 +10,7 @@ import fcntl
 import json
 import os
 import re
+import socket
 import subprocess
 import sys
 import tempfile
@@ -280,6 +281,64 @@ class ExcepcionNuevaYReaviso(Pasada):
         self.assertEqual(checkpoint["notados"]["exc-00-raiz"], "2026-10-16T13:00:00Z")
         self.assertEqual(checkpoint["notados"]["exc-02"], "2026-10-16T12:00:00Z")
         self.assertNotIn("exc-03", checkpoint["notados"])
+
+
+class ConsolidadoSoloConPendientes(Pasada):
+    def test_la_raiz_sin_pendientes_no_entra_ni_cuenta(self):
+        derivar_real = proyeccion.derivar
+
+        def derivar_hecha(snapshot, *args, **kwargs):
+            hecha = derivar_real(snapshot, *args, **kwargs)
+            if snapshot["meta"]["rootId"] == "root-sin-criterios":
+                for fila in hecha["units"]:
+                    fila["state"] = "accepted"
+            return hecha
+
+        avisos = AvisarDoble()
+        snapshots = {
+            "root-estados": fixture("raiz-estados"),
+            "root-sin-criterios": fixture("raiz-sin-criterios"),
+        }
+        with mock.patch.object(proyeccion, "derivar", derivar_hecha):
+            self.correr(snapshots, avisar_fn=avisos)
+        self.assertEqual(len(avisos.textos), 1)
+        texto = avisos.textos[0]
+        self.assertTrue(texto.startswith("📊 *Raíces con pendientes* (1)"), texto)
+        self.assertIn("root-estados", texto)
+        self.assertNotIn("root-sin-criterios", texto)
+
+
+class ExcepcionMalformada(Pasada):
+    def test_se_salta_sola_y_las_demas_se_avisan(self):
+        rota = fixture("excepciones")
+        rota["meta"]["rootId"] = "root-rota"
+        for excepcion in rota["exceptions"]:
+            excepcion["rootId"] = "root-rota"
+            excepcion["exceptionId"] = "rota-" + excepcion["exceptionId"]
+        rota["exceptions"][1]["raisedAt"] = "ayer"
+        rota["exceptions"][0]["options"] = [{"optionId": 7}]
+        avisos = AvisarDoble()
+        snapshots = {"root-excepciones": fixture("excepciones"), "root-rota": rota}
+        self.correr(snapshots, avisar_fn=avisos)
+        excepciones = avisos.textos[0]
+        self.assertTrue(excepciones.startswith("⚠️ *Excepciones sin respuesta* ("), excepciones)
+        self.assertIn("(exc-01)", excepciones)
+        self.assertNotIn("rota-exc-01", excepciones)
+        self.assertNotIn("rota-exc-00-raiz", excepciones)
+        errores = self.resultado["errores"]
+        self.assertTrue(
+            any(e.startswith("raíz root-rota: excepción rota-exc-01: raisedAt") for e in errores),
+            errores,
+        )
+        self.assertIn(
+            "raíz root-rota: excepción rota-exc-00-raiz: "
+            "una opción no trae optionId y text de texto",
+            errores,
+        )
+        notados = self.checkpoint()["notados"]
+        self.assertIn("exc-01", notados)
+        self.assertNotIn("rota-exc-01", notados)
+        self.assertNotIn("rota-exc-00-raiz", notados)
 
 
 class DosPasadasALaVez(Pasada):
@@ -652,6 +711,19 @@ class RaicesPublisherDelHost(unittest.TestCase):
         )
         self.assertEqual(publisher.publish(ClienteGateway()), (0, ["raices: disco ido"]))
 
+    def test_un_gateway_colgado_sale_como_error_y_no_tumba_el_bucle(self):
+        def colgado(*_args, **kwargs):
+            raise subprocess.TimeoutExpired(cmd="openclaw", timeout=kwargs.get("timeout"))
+
+        publisher = native_gateway.RaicesPublisher(
+            str(self.tmp / "raices"), clock=RelojFalso(100.0), host_gateway="mini"
+        )
+        with mock.patch.object(proyeccion.subprocess, "run", colgado):
+            escritas, errores = publisher.publish(ClienteGateway())
+        self.assertEqual(escritas, 0)
+        self.assertEqual(len(errores), 1, errores)
+        self.assertIn("gateway sin respuesta en 60 s para managedTasks.root.list", errores[0])
+
     def test_los_errores_del_resultado_salen_prefijados(self):
         publisher = native_gateway.RaicesPublisher(
             str(self.tmp),
@@ -748,8 +820,41 @@ class WatchConRaices(unittest.TestCase):
                 ]
             )
         self.assertEqual(codigo, 0)
-        clase.assert_called_once_with("/data/raices")
+        clase.assert_called_once_with("/data/raices", host_gateway=socket.gethostname())
         self.assertIs(bombeo.call_args.kwargs["raices_publisher"], clase.return_value)
+
+    def test_watch_pasa_el_host_del_gateway_que_se_le_nombra(self):
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        tmp = str(temp.name)
+        with (
+            mock.patch.object(native_gateway, "watch_pump"),
+            mock.patch.object(native_gateway, "RaicesPublisher") as clase,
+        ):
+            native_gateway.main(
+                [
+                    "--openclaw-bin",
+                    "/bin/openclaw-falso",
+                    "--host-id",
+                    "host-uno",
+                    "--expect-url",
+                    "https://gateway",
+                    "--host-state-dir",
+                    tmp,
+                    "--evidence-root",
+                    tmp,
+                    "--progress-state-dir",
+                    tmp,
+                    "--progress-client",
+                    "progress-events.py",
+                    "--watch",
+                    "--raices-dir",
+                    "/data/raices",
+                    "--raices-host-gateway",
+                    "mini-1",
+                ]
+            )
+        clase.assert_called_once_with("/data/raices", host_gateway="mini-1")
 
 
 class CronRaices(unittest.TestCase):

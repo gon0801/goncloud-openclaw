@@ -394,6 +394,33 @@ def _mensaje_consolidado(entradas: list[tuple[str, dict]]) -> str:
     return _recortar(lineas)
 
 
+def _excepcion_avisable(excepcion: dict) -> str | None:
+    """Por qué _mensaje_excepciones no puede formatearla, o None si puede.
+
+    Una excepción malformada se salta sola; si llegara al mensaje, lanzaría y callaría
+    los avisos de todas las raíces en cada pasada."""
+    unidad = excepcion.get("unitId")
+    if unidad is not None and not isinstance(unidad, str):
+        return "unitId no es un texto"
+    if not isinstance(excepcion.get("type"), str):
+        return "type no es un texto"
+    try:
+        _instante(excepcion.get("raisedAt"), "raisedAt")
+    except ValueError as fallo:
+        return str(fallo)
+    opciones = excepcion.get("options")
+    if opciones is not None and not isinstance(opciones, list):
+        return "options no es una lista"
+    for opcion in opciones or []:
+        if not (
+            isinstance(opcion, dict)
+            and isinstance(opcion.get("optionId"), str)
+            and isinstance(opcion.get("text"), str)
+        ):
+            return "una opción no trae optionId y text de texto"
+    return None
+
+
 def _mensaje_excepciones(debidas: list[tuple[str, dict]]) -> str:
     lineas = [f"⚠️ *Excepciones sin respuesta* ({len(debidas)})"]
     for root_id, excepcion in debidas[:8]:
@@ -521,6 +548,12 @@ def pasar(
                         continue
                     notado = notados.get(excepcion["exceptionId"])
                     if notado is None or ahora >= notado + timedelta(milliseconds=renotice):
+                        motivo = _excepcion_avisable(excepcion)
+                        if motivo is not None:
+                            errores.append(
+                                f"raíz {root_id}: excepción {excepcion['exceptionId']}: {motivo}"
+                            )
+                            continue
                         debidas.append((root_id, excepcion))
             except (OSError, RuntimeError, ValueError) as fallo:
                 errores.append(f"raíz {root_id}: {fallo}")
@@ -576,9 +609,7 @@ def pasar(
                 or ahora >= ultimo_consolidado + timedelta(milliseconds=consolidado_ms)
             )
             if consolidado_debido and puede_avisar:
-                texto = _mensaje_consolidado(
-                    [(root_id, proyecciones[root_id]) for root_id in sorted(proyecciones)]
-                )
+                texto = _mensaje_consolidado(con_pendientes)
                 contesto = avisar_fn(texto)
                 message_id, causa = _confirmacion(contesto)
                 avisos["consolidado"] = {
@@ -603,20 +634,24 @@ def pasar(
 
 def _gateway(openclaw_bin: str | Path, metodo: str, params: dict) -> object:
     """Una llamada `openclaw gateway call`; devuelve el primer JSON de la salida."""
-    resultado = subprocess.run(
-        [
-            str(openclaw_bin),
-            "gateway",
-            "call",
-            metodo,
-            "--params",
-            json.dumps(params, ensure_ascii=False, separators=(",", ":")),
-            "--json",
-        ],
-        capture_output=True,
-        text=True,
-        timeout=60,
-    )
+    try:
+        resultado = subprocess.run(
+            [
+                str(openclaw_bin),
+                "gateway",
+                "call",
+                metodo,
+                "--params",
+                json.dumps(params, ensure_ascii=False, separators=(",", ":")),
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+    except subprocess.TimeoutExpired as colgado:
+        # RaicesPublisher corre dentro del bucle del host: un TimeoutExpired suelto lo tumbaría.
+        raise RuntimeError(f"gateway sin respuesta en 60 s para {metodo}") from colgado
     if resultado.returncode:
         detalle = " ".join((resultado.stderr or resultado.stdout).split())[:200]
         raise RuntimeError(f"gateway no disponible para {metodo}: {detalle}")
