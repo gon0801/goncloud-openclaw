@@ -1014,6 +1014,7 @@ class Sucesion(Mac):
     """SUA-04 (4.3): el estado vive en <state>/sucesion.json y el canario es un banco falso."""
 
     def plan(self, **kwargs):
+        kwargs.setdefault("enviar_aviso", lambda texto, **kw: {"enviado": True})
         return encargo.sucesion(state_root=self.state, checkout=self.checkout,
                                 opencode_bin=self.bin / "opencode", now=1_800_000_000.0, **kwargs)
 
@@ -1052,8 +1053,11 @@ class Sucesion(Mac):
         self.assertEqual((entry["actual"], entry["anterior"], entry["estado"]),
                          ("zai-coding-plan/glm-5.4-flash", "zai-coding-plan/glm-5.3-flash", "promovido"))
         self.assertIn("zai-coding-plan/glm-5.4-flash reemplazó a zai-coding-plan/glm-5.3-flash", answer["aviso"])
-        # F4: el aviso de la promoción queda pendiente hasta que G5 lo consuma.
-        self.assertIn("aviso pendiente de G5", answer["aviso"] + answer.get("avisoPendiente", ""))
+        # SUA-04 G5: el aviso sale por avisar.py (aquí, el de juguete que siempre manda):
+        # la línea queda con avisoEnviado y sin avisoPendiente.
+        entry = self.leer()["lines"]["zai-coding-plan/glm-{}-flash"]
+        self.assertTrue(entry.get("avisoEnviado"))
+        self.assertNotIn("avisoPendiente", answer)
         # G2 lo lee: un sucesion.json escrito por G3 pasa succession_actual y preparar lo usa.
         self.beat()
         self.assertEqual(self.preparar()["modelo"], "zai-coding-plan/glm-5.4-flash")
@@ -1218,6 +1222,85 @@ class Sucesion(Mac):
         self.assertTrue(marcador.exists(), "el banco inyectado no corrió")
         entry = self.leer()["lines"]["zai-coding-plan/glm-{}-flash"]
         self.assertEqual((entry["actual"], entry["estado"]), ("zai-coding-plan/glm-5.4-flash", "promovido"))
+
+
+import sqlite3 as _sqlite3
+
+
+def _base_telegram(ruta, *, session_key="agent:main:telegram:default:direct:6470689715",
+                   role="user", content="confirmo abrir mistral (mistral, subscription) por favor"):
+    ruta.parent.mkdir(parents=True, exist_ok=True)
+    ruta.unlink(missing_ok=True)
+    db = _sqlite3.connect(ruta)
+    db.execute("CREATE TABLE session_windows (session_id TEXT, session_key TEXT)")
+    db.execute("CREATE TABLE transcript_events (session_id TEXT, seq INTEGER, event_json TEXT, event_zstd BLOB)")
+    db.execute("INSERT INTO session_windows VALUES ('s-1', ?)", (session_key,))
+    evento = {"type": "message", "timestamp": 1792000000000,
+              "message": {"role": role, "content": content}}
+    db.execute("INSERT INTO transcript_events VALUES ('s-1', 7, ?, NULL)", (json.dumps(evento),))
+    db.commit()
+    db.close()
+
+
+class Solicitar(Mac):
+    def test_solicitar_escribe_la_solicitud_y_contesta_la_frase(self):
+        answer = encargo.solicitar("mistral", "mistral", "subscription",
+                                   state_root=self.state, checkout=self.checkout, now=1_800_000_000.0)
+        self.assertEqual(answer["frase"], "confirmo abrir mistral (mistral, subscription)")
+        doc = json.loads((self.state / "solicitudes" / "mistral.json").read_text())
+        self.assertEqual((doc["nombre"], doc["proveedor"], doc["cobro"], doc["frase"]),
+                         ("mistral", "mistral", "subscription", answer["frase"]))
+        # No toca la política.
+        self.assertEqual(self.policy().unreadable, None)
+        self.assertNotIn("mistral", [g.name for g in self.policy().grants])
+
+    def test_solicitar_se_niega_a_un_cerrado(self):
+        answer = encargo.solicitar("go", "opencode-go", "subscription",
+                                   state_root=self.state, checkout=self.checkout, now=1_800_000_000.0)
+        self.assertFalse(answer["ok"])
+        self.assertIn("cerrado", answer["causa"])
+        self.assertFalse((self.state / "solicitudes").exists())
+
+
+class TelegramCitation(Mac):
+    def fake_ssh(self, argv, entrada=None, timeout=None):
+        # El ssh de juguete corre lo que recibe por stdin donde apunta HOME (zsh si está).
+        import subprocess as _sp
+        pedido = argv[-1].strip("'")
+        env = {**os.environ, "HOME": str(self.toy_home)}
+        hecho = _sp.run([sys.executable, "-", pedido], input=entrada, capture_output=True,
+                        text=True, env=env)
+        return hecho.returncode, hecho.stdout, hecho.stderr
+
+    def setUp(self):
+        super().setUp()
+        self.toy_home = self.root / "mini"
+        _base_telegram(self.toy_home / ".openclaw/agents/main/agent/openclaw-agent.sqlite")
+
+    def permitir_tg(self, **cambios_db):
+        (self.bin / "listing").write_text(LISTING + "mistral/mistral-large\n")
+        _base_telegram(self.toy_home / ".openclaw/agents/main/agent/openclaw-agent.sqlite", **cambios_db)
+        return encargo.permitir(
+            "mistral", provider="mistral", billing="subscription", ref="tg:s-1:7",
+            quote="confirmo abrir mistral (mistral, subscription)",
+            state_root=self.state, checkout=self.checkout, prompts=self.prompts,
+            opencode_bin=self.bin / "opencode", correr=self.fake_ssh)
+
+    def test_pasa_con_la_sesion_del_dueno_y_rol_user(self):
+        row = self.permitir_tg()
+        self.assertNotIsInstance(row, str)
+        policy = self.policy()
+        glm = policy.grant_for("mistral")
+        self.assertEqual(glm.decision.ref, "tg:s-1:7")
+
+    def test_se_niega_con_otra_sesion_con_assistant_y_con_frase_ausente(self):
+        row = self.permitir_tg(session_key="agent:main:telegram:default:direct:999")
+        self.assertIsInstance(row, str)
+        self.assertIn("no coteja", row)
+        row = self.permitir_tg(role="assistant")
+        self.assertIsInstance(row, str)
+        row = self.permitir_tg(content="otra cosa entirely")
+        self.assertIsInstance(row, str)
 
 
 class Cerrar(Mac):

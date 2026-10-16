@@ -109,6 +109,7 @@ mkdir -p "$HOME/dev/wt/r-sua02-c-gate" && printf 'x\n' > "$HOME/dev/wt/r-sua02-c
 out="$(bash "$INST" 2>&1)" || fail "instalar con R construido fallo: $out"
 [ -f "$PL2" ] || fail "falta el plist de sucesion generado"
 grep -qF "$HOME/dev/wt/r-sua02-c-gate" "$PL2" || fail "el plist de sucesion no trae AGENT_WORK_SUCESION_RUNTIME_SOURCE con el HOME"
+grep -qF "AGENT_WORK_AVISOS" "$PL2" || fail "el plist de sucesion no prende los avisos (AGENT_WORK_AVISOS=1)"
 grep -qF "$HOME/dev/wt/agent-work-host/scripts/agent-work/encargo.py" "$PL2" || fail "el plist de sucesion no corre encargo.py del checkout del host"
 grep -qF "<string>sucesion</string>" "$PL2" || fail "el plist de sucesion no llama sucesion"
 grep -qF "<integer>5</integer>" "$PL2" || fail "el plist de sucesion no es a las 05"
