@@ -313,8 +313,7 @@ class Authorize(Policies):
         # SUA-04 (4.2): el modelo por omisión sale de defaultGrant, no de un id fijo en el código.
         # Una política que no lo nombra (only_deepseek) no tiene modelo por omisión que correr.
         answer = self.ask(DefaultModel(), policy=self.only_deepseek())
-        self.assertIsInstance(answer, PolicyUnreadable)
-        self.assertIn("defaultGrant", answer.why)
+        self.assertIsInstance(answer, modelos.SinModeloPorOmision)
 
     def test_default_validation_closes_the_policy(self):
         # SUA-04 (4.2): la línea es del proveedor del permiso, el since parsea a esa línea y
@@ -542,6 +541,7 @@ class Explicar(Policies):
         cases = {
             modelos.MalformedModel("Zai/glm"): "modelo-mal-formado",
             PolicyUnreadable("sin cita en el permiso deepseek"): "politica-ilegible",
+            modelos.SinModeloPorOmision(): "sin-modelo-por-omision",
             ProviderNotAllowed((DEFAULT,), (), (), ()): "proveedor-no-permitido",
             ProviderNotConfigured("grok", "xai", "grok"): "proveedor-sin-sesion",
             ModelNotListed(ModelId("zai-coding-plan", "glm-5.3-flahs"), (DEFAULT,)): "modelo-no-existe",
@@ -838,10 +838,10 @@ class Plans(Policies):
 
     def test_an_old_brief_is_refused_when_the_default_provider_lost_its_grant(self):
         refusal = self.plan(policy=self.only_deepseek())
-        self.assertIsInstance(refusal, PolicyUnreadable)
+        self.assertIsInstance(refusal, modelos.SinModeloPorOmision)
         self.assertNotIsInstance(refusal, sesion.LaunchSpec)
         answer = explicar(refusal, registrado=True)
-        self.assertEqual((answer.causa, answer.accion), ("politica-ilegible", "cancelar"))
+        self.assertEqual((answer.causa, answer.accion), ("sin-modelo-por-omision", "cancelar"))
 
     def test_a_header_cannot_reach_a_closed_provider_or_a_model_nobody_lists(self):
         closed = self.plan(b"agent-work.launch.v1\nmodel: opencode-go/deepseek-v4-pro\n---\n")

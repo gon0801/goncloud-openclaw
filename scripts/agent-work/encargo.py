@@ -142,6 +142,8 @@ class ProviderRow:
     """El efectivo viene de sucesion.json, no del since de la política."""
     sucesion_causa: str | None = None
     """Por qué sucesion.json no se pudo usar y el efectivo es el since."""
+    default_quitado: bool = False
+    """El comando quitó también el modelo por omisión (F1): la salida lo dice."""
 
 
 class DeadlineExceeded(RuntimeError):
@@ -605,7 +607,11 @@ def _write_policy(checkout: Path, state_root: Path,
         refused = _host_checkout(checkout, state_root)
         if refused is not None:
             return refused
-        document = policy_document(grants, closed, current.default_grant)
+        # F1: si el permiso que nombraba defaultGrant sale o pierde su default, el
+        # documento pierde también defaultGrant y la política sigue cargando.
+        default_grant = current.default_grant if any(
+            grant.name == current.default_grant and grant.default is not None for grant in grants) else None
+        document = policy_document(grants, closed, default_grant)
         unreadable = ProviderPolicy.parse(document, path.name).unreadable
         if unreadable is not None:
             return f"la política resultante no carga: {unreadable}"
@@ -681,7 +687,8 @@ def permitir(name: str, *, provider: ProviderId | None, billing: Billing | None,
         if existing.provider not in (None, provider):
             return (f"{name} ya está ligado a {existing.provider}: cambiarlo pide una frase nueva del operador "
                     "en --ref y --cita")
-        grant = replace(existing, provider=provider)
+        grant = replace(existing, provider=provider,
+                        default=existing.default if provider == existing.provider else None)
     else:
         citation = citar(ref, quote, prompts)
         if isinstance(citation, str):
@@ -690,9 +697,10 @@ def permitir(name: str, *, provider: ProviderId | None, billing: Billing | None,
         bound = provider if provider is not None else (existing.provider if existing is not None else None)
         if billing is not None:
             grant = ProviderGrant(name, bound, billing, citation, models,
-                                  existing.default if existing is not None else None)
+                                  existing.default if existing is not None and bound == existing.provider else None)
         elif existing is not None and models is not None:
-            grant = replace(existing, provider=bound, models=models)
+            grant = replace(existing, provider=bound, models=models,
+                            default=existing.default if bound == existing.provider else None)
         else:
             return ("con --ref y --cita pasa --cobro (permiso nuevo o frase nueva) o --solo (filtro de un permiso "
                     "que existe)")
@@ -724,7 +732,12 @@ def permitir(name: str, *, provider: ProviderId | None, billing: Billing | None,
         grants = (tuple(grant if entry.name == name else entry for entry in current.grants) if existing is not None
                   else current.grants + (grant,))
         return grants, dict(current.closed)
-    return _write_policy(checkout, state_root, put) or _grant_row(grant, catalog, state_root)
+    written = _write_policy(checkout, state_root, put)
+    if isinstance(written, str):
+        return written
+    row = _grant_row(grant, catalog, state_root)
+    quitado = (existing is not None and existing.default is not None and grant.default is None)
+    return replace(row, default_quitado=True) if quitado else row
 
 
 def _cannot_close(policy: ProviderPolicy, provider: ProviderId) -> str | None:
@@ -783,7 +796,12 @@ def cerrar(provider: ProviderId, *, ref: str | None, quote: str | None, by: str 
                        if grant.provider != provider and not (grant.provider is None and grant.name == provider))
         return _cannot_close(current, provider) or (grants, {**current.closed, provider: closure})
     written = _write_policy(checkout, state_root, close)
-    return written or _closure_row(closure, _catalog_for_the_row(CatalogStore(opencode_bin, state_root)))
+    if isinstance(written, str):
+        return written
+    row = _closure_row(closure, _catalog_for_the_row(CatalogStore(opencode_bin, state_root)))
+    quitado = any(grant.name == policy.default_grant for grant in policy.grants
+                  if grant.provider == provider or (grant.provider is None and grant.name == provider))
+    return replace(row, default_quitado=quitado) if quitado else row
 
 
 def _table(rows: "tuple[ProviderRow, ...]") -> str:
@@ -922,6 +940,8 @@ def _run_politica(args: argparse.Namespace, where: dict, now: float) -> int:
     else:
         outcome = cerrar(ProviderId(args.proveedor), ref=args.ref, quote=args.cita, by=args.por, reason=args.motivo,
                          prompts=args.prompts, now=now, **where)
+    if isinstance(outcome, ProviderRow) and outcome.default_quitado:
+        print(f"{args.command}: se quitó también el modelo por omisión.", file=sys.stderr)
     if isinstance(outcome, ProviderRow) and (outcome.cited or "").endswith(UNVERIFIED_REF):
         print(f"cerrar: cerrado de emergencia, sin cita cotejada. No es una decisión de {OPERATOR}: falta su "
               "frase, que entra con un PR.", file=sys.stderr)

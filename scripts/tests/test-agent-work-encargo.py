@@ -627,6 +627,21 @@ class Perfiles(Mac):
                 self.assertIn(campo, respuesta["error"], f"el mensaje no nombra {campo}")
 
 class Permitir(Mac):
+    def test_rebinding_glm_to_another_provider_drops_its_default_and_the_default_grant(self):
+        # F1: la línea del default es del proveedor viejo; al re-ligar el permiso el
+        # default sale, y con él defaultGrant, y la salida lo dice.
+        (self.bin / "listing").write_text(LISTING + "otro/glm-5.3-flash\n")
+        code, out, err, changed = self.permitir(
+            "glm", "--proveedor", "otro", "--cobro", "subscription", "--ref", "P10901",
+            "--cita", "ok, permite mistral para por CLI, cobra por suscripción")
+        self.assertEqual((code, changed), (0, True), err)
+        self.assertIn("se quitó también el modelo por omisión", err + out)
+        policy = self.policy()
+        glm = next(grant for grant in policy.grants if grant.name == "glm")
+        self.assertEqual((str(glm.provider), glm.default), ("otro", None))
+        self.assertIsNone(policy.default_grant)
+        self.assertIsNone(policy.unreadable)
+
     def permitir(self, *args):
         before = self.policy_path.read_bytes()
         code, out, err = self.cli("permitir", *args)
@@ -849,6 +864,31 @@ class Permitir(Mac):
 
 
 class Cerrar(Mac):
+    def test_closing_the_default_provider_also_drops_the_default(self):
+        # F1 de VEREDICTO-SUA04-G2-r1-bots: cerrar el proveedor del modelo por omisión es el
+        # freno de emergencia y no puede quedarse sin escribir. El documento pierde
+        # defaultGrant, la política carga, y un preparar sin modelo da la frase nueva.
+        for args in (("--por", "coordinador", "--motivo", "prueba de freno"),
+                     ("--ref", "P10902", "--cita", "cierra muse para encargos")):
+            with self.subTest(args=args):
+                code, out, err = self.cli("cerrar", "zai-coding-plan", *args)
+                self.assertEqual(code, 0, err)
+                self.assertIn("se quitó también el modelo por omisión", err + out)
+                policy = self.policy()
+                self.assertIsNone(policy.unreadable)
+                self.assertIsNone(policy.default_grant)
+                self.assertIn("zai-coding-plan", policy.closed)
+                self.assertNotIn("glm", [grant.name for grant in policy.grants])
+                self.beat()
+                answer = self.preparar()
+                self.assertEqual((answer["ok"], answer["causa"]), (False, "sin-modelo-por-omision"))
+                self.assertEqual(answer["frase"],
+                                 "no hay modelo por omisión: el permiso que lo daba se cerró; "
+                                 "pide el encargo con --modelo")
+                self.assertEqual(answer["accion"], "preguntar-a-david")
+                # El siguiente subTest parte de la política íntegra otra vez.
+                self.setUp()
+
     def test_closing_removes_the_grant_and_leaves_davids_words(self):
         code, out, err = self.cli("cerrar", "meta", "--ref", "P10902", "--cita", "cierra muse para encargos")
         self.assertEqual((code, err), (0, ""))

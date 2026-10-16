@@ -323,13 +323,13 @@ def succession_actual(state_root: Path, line: str) -> "tuple[ModelId | None, str
     return parsed, None
 
 
-def effective_default(policy: ProviderPolicy, state_root: "Path | None") -> "tuple[ModelId, str | None] | PolicyUnreadable":
+def effective_default(policy: ProviderPolicy, state_root: "Path | None") -> "tuple[ModelId, str | None] | SinModeloPorOmision":
     """El modelo por omisión efectivo (SUA-04, 4.2): el actual promovido de la línea del permiso
     que nombra `defaultGrant`, o su `since`. La causa de un sucesion.json ilegible viaja con el
     modelo para que `proveedores` la muestre; no cambia qué modelo corre."""
     grant = next((item for item in policy.grants if item.name == policy.default_grant), None)
     if grant is None or grant.default is None:
-        return PolicyUnreadable("la política no nombra un defaultGrant con default: un encargo sin modelo no tiene qué correr")
+        return SinModeloPorOmision()
     if state_root is not None:
         actual, causa = succession_actual(state_root, grant.default.line)
         if actual is not None:
@@ -509,6 +509,12 @@ class PolicyUnreadable:
 
 
 @dataclass(frozen=True)
+class SinModeloPorOmision:
+    """La política carga y no nombra un modelo por omisión (SUA-04 G2, F1): el permiso que lo
+    daba se cerró o se re-ligó. No es una política ilegible: el encargo se pide con --modelo."""
+
+
+@dataclass(frozen=True)
 class ProviderNotAllowed:
     """`models` trae uno para un id exacto o para el modelo por omisión, y todas las coincidencias en
     proveedores sin permiso para un nombre. `closures` trae la cita de cada proveedor cerrado que aparece
@@ -601,9 +607,9 @@ class PerfilRechazado:
     frase: str
 
 
-Refusal = Union[MalformedModel, PolicyUnreadable, ProviderNotAllowed, ProviderNotConfigured, ModelNotListed,
-                ModelOutsideGrant, NameMatchesNothing, NameIsAmbiguous, MalformedHeader, WorkspaceRefused,
-                RouteNotCertified, GenerationNotCertified, ContextoIncompleto, PerfilRechazado]
+Refusal = Union[MalformedModel, PolicyUnreadable, SinModeloPorOmision, ProviderNotAllowed, ProviderNotConfigured,
+                ModelNotListed, ModelOutsideGrant, NameMatchesNothing, NameIsAmbiguous, MalformedHeader,
+                WorkspaceRefused, RouteNotCertified, GenerationNotCertified, ContextoIncompleto, PerfilRechazado]
 
 
 @dataclass(frozen=True)
@@ -707,7 +713,7 @@ def authorize(request: "ModelRequest | MalformedModel", policy: ProviderPolicy,
         candidate = request.model
     else:
         effective = effective_default(policy, state_root)
-        if isinstance(effective, PolicyUnreadable):
+        if isinstance(effective, SinModeloPorOmision):
             return effective
         candidate = effective[0]
     if not isinstance(candidate, ModelId):
@@ -852,6 +858,8 @@ def _frase_sin_host(caso: HostDown) -> tuple[str, tuple[str, ...]]:
 _RECHAZOS: "dict[type, tuple[str, Callable[..., tuple[str, tuple[str, ...]]]]]" = {
     PolicyUnreadable: ("politica-ilegible", lambda caso: (
         f"La política de proveedores no se puede leer ({caso.why}). No corre ningún encargo hasta arreglarla.", ())),
+    SinModeloPorOmision: ("sin-modelo-por-omision", lambda caso: (
+        "no hay modelo por omisión: el permiso que lo daba se cerró; pide el encargo con --modelo", ())),
     MalformedModel: ("modelo-mal-formado", lambda caso: (
         f"«{caso.text}» no es un modelo bien formado. Va como <proveedor>/<modelo>.", ())),
     ProviderNotAllowed: ("proveedor-no-permitido", _frase_no_permitido),
@@ -922,4 +930,7 @@ def explicar(caso: "Refusal | str | HostDown | HostMismatch | SlotBlocked", *, r
     frase, candidatos = redactar(caso)
     if registrado:
         return Explicacion(causa, frase, "cancelar")
-    return Explicacion(causa, frase, "preguntar-a-david" if candidatos else "no-registrar", candidatos)
+    # Sin modelo por omisión, quien pide tiene que nombrar uno: es preguntar-a-david aunque
+    # no haya candidatos que listar (F1 de SUA04-G2).
+    pregunta = bool(candidatos) or isinstance(caso, SinModeloPorOmision)
+    return Explicacion(causa, frase, "preguntar-a-david" if pregunta else "no-registrar", candidatos)
