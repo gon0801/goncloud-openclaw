@@ -309,6 +309,152 @@ class PublicadorNativo(unittest.TestCase):
         self.assertIn("pers", estado["workspaces"])
         self.assertFalse(respaldo.exists())
 
+    def test_crash_entre_bloque_y_estado_y_la_siguiente_aplicar_y_revertir(self):
+        # I19 (diseño 4.10): un apply que muere entre el bloque de cada AGENTS.md y el
+        # estado deja los bloques nuevos en disco con el estado en la generación vieja;
+        # la siguiente --aplicar lo completa sin conflicto y la siguiente --revertir
+        # deja la generación anterior.
+        self.armar()
+        self.publicar("leer")
+        self.publicar("aplicar")
+        bytes_tras_la_generacion_1 = {
+            identificador: self.agents_md(identificador) for identificador in self.ids
+        }
+        self.armar_generacion(2, cambios={"skills/poteto-mode/SKILL.md": "poteto v2\n"})
+        self.publicar("leer")
+        codigo, _ = self.aplicar_con_crash_antes_del_estado()
+        self.assertEqual(codigo, 3)
+        # El crash dejó el estado en la generación 1 y los AGENTS.md con el bloque de la 2.
+        self.assertEqual(self.estado_del_home()["generacion"], 1)
+        bloques_de_la_2 = {
+            identificador: (self.publicacion / "bloques" / f"{identificador}.md").read_bytes()
+            for identificador in self.ids
+        }
+        for identificador in self.ids:
+            propio = self.texto_propio[identificador].encode("utf-8")
+            if not propio.endswith(b"\n"):
+                propio += b"\n"
+            self.assertEqual(self.agents_md(identificador), propio + bloques_de_la_2[identificador])
+        # La reaplicación completa el apply cortado: sin conflictos, estado en la 2.
+        self.publicar("leer")
+        codigo, aplicar = self.publicar("aplicar")
+        self.assertEqual((codigo, aplicar["conflictos"]), (0, 0))
+        self.assertEqual(aplicar["agentes"], {identificador: "igual" for identificador in self.ids})
+        self.assertEqual(self.estado_del_home()["generacion"], 2)
+        ancla = self.home / ".openclaw" / "sua-contexto" / "2" / "estado-anterior.json"
+        self.assertEqual(json.loads(ancla.read_text(encoding="utf-8"))["generacion"], 1)
+        # La reversa posterior funciona por la vía normal: la generación anterior.
+        codigo, revertir = self.publicar("revertir")
+        self.assertEqual((codigo, revertir["conflictos"]), (0, 0))
+        self.assertEqual(
+            revertir["agentes"], {identificador: "revertido" for identificador in self.ids}
+        )
+        for identificador in self.ids:
+            self.assertEqual(
+                self.agents_md(identificador), bytes_tras_la_generacion_1[identificador]
+            )
+        self.assertEqual(self.estado_del_home()["generacion"], 1)
+
+    def test_un_cierre_sigue_cerrado_tras_la_reversa(self):
+        # I19 (diseño 4.10): la política de proveedores vive fuera del paquete que se
+        # publica; ni aplicar ni revertir la tocan, y el cierre sigue ahí.
+        fixture = (
+            self.tmp
+            / "checkout-de-juguete"
+            / "docs"
+            / "evidence"
+            / "agent-work"
+            / "proveedores-permitidos.json"
+        )
+        fixture.parent.mkdir(parents=True)
+        fixture.write_text(
+            json.dumps(
+                {
+                    "schema": "agent-work.provider-policy.v1",
+                    "providers": [],
+                    "closed": [
+                        {
+                            "provider": "proveedor-cerrado",
+                            "decision": {
+                                "by": "David",
+                                "on": "2026-10-16",
+                                "ref": "1",
+                                "quote": "cerrado",
+                            },
+                        }
+                    ],
+                },
+                indent=2,
+                ensure_ascii=False,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        foto = fixture.read_bytes()
+        self.armar()
+        self.publicar("leer")
+        self.publicar("aplicar")
+        self.assertEqual(fixture.read_bytes(), foto)
+        self.publicar("revertir")
+        self.assertEqual(fixture.read_bytes(), foto)
+        cierre = json.loads(fixture.read_text(encoding="utf-8"))["closed"]
+        self.assertEqual(cierre[0]["provider"], "proveedor-cerrado")
+
+    def test_un_alta_no_cambia_a_los_que_ya_estaban(self):
+        # I19 (diseño 4.10): un alta publica al nuevo sin tocar a los que ya estaban:
+        # ni sus AGENTS.md, ni sus digests del estado, ni los perfiles publicados.
+        self.armar()
+        self.publicar("leer")
+        self.publicar("aplicar")
+        bytes_de_los_que_estaban = {
+            identificador: self.agents_md(identificador) for identificador in self.ids
+        }
+        estado = self.estado_del_home()
+        digestos = {
+            identificador: (
+                estado["bloques"][identificador],
+                estado["workspaces"][identificador],
+            )
+            for identificador in self.ids
+        }
+        perfiles = self.home / ".local" / "share" / "agent-work" / "perfiles.v1.json"
+        foto_de_perfiles = perfiles.read_bytes()
+        espacio = self.home / "workspaces" / "nuevo"
+        espacio.mkdir(parents=True)
+        con_nuevo = self.agentes + [
+            {
+                "id": "nuevo",
+                "workspace": str(espacio),
+                "agentDir": str(espacio),
+                "isDefault": False,
+            }
+        ]
+        agents_con_nuevo = self.tmp / "agents-con-nuevo.json"
+        agents_con_nuevo.write_text(json.dumps(con_nuevo) + "\n", encoding="utf-8")
+        # La misma generación, armada ahora con el bloque del nuevo, como la arma la mitad
+        # Mac cuando la lista viva ya lo trae.
+        self.agentes = con_nuevo
+        self.armar()
+        self.publicar("leer", agentes_json=agents_con_nuevo)
+        codigo, aplicar = self.publicar("aplicar", agentes_json=agents_con_nuevo)
+        self.assertEqual((codigo, aplicar["conflictos"]), (0, 0))
+        self.assertEqual(
+            aplicar["agentes"],
+            {"meli": "igual", "pers": "igual", "main": "igual", "nuevo": "publicado"},
+        )
+        for identificador in self.ids:
+            self.assertEqual(self.agents_md(identificador), bytes_de_los_que_estaban[identificador])
+        estado = self.estado_del_home()
+        for identificador in self.ids:
+            self.assertEqual(
+                (estado["bloques"][identificador], estado["workspaces"][identificador]),
+                digestos[identificador],
+            )
+        self.assertEqual(self.agents_md("nuevo"), self.bloque_de("nuevo").encode("utf-8"))
+        self.assertIn("nuevo", estado["bloques"])
+        self.assertIn("nuevo", estado["workspaces"])
+        self.assertEqual(perfiles.read_bytes(), foto_de_perfiles)
+
     def test_un_agente_que_vuelve_aplica_sin_conflicto(self):
         # F2: el retiro olvida el digest, pero el bloque queda en el AGENTS.md. Si el
         # agente vuelve con el mismo workspace, aplicar lo reconoce por el respaldo del
@@ -346,6 +492,35 @@ class PublicadorNativo(unittest.TestCase):
             (self.home / ".openclaw" / "sua-contexto").glob("*/agentes-retirados/pers.json")
         )
         self.assertEqual(sobrantes, [], "quedaron respaldos de retiro viejos de pers")
+
+    def aplicar_con_crash_antes_del_estado(self):
+        """La aplicación en proceso con escribir_atomico que muere antes del estado (I19,
+        diseño 4.10): el crash cae entre la escritura del bloque de cada AGENTS.md y la
+        del estado, y main lo contesta con su línea JSON de rechazo (salida 3)."""
+        real = self.armador.escribir_atomico
+
+        def escritura_que_muere(ruta, datos, modo=None):
+            if ruta.name in ("estado-anterior.json", ".sua-contexto.json"):
+                raise OSError("crash de prueba antes del estado")
+            return real(ruta, datos, modo)
+
+        salida = io.StringIO()
+        with mock.patch.object(self.armador, "escribir_atomico", escritura_que_muere):
+            with contextlib.redirect_stdout(salida):
+                codigo = self.armador.main(
+                    [
+                        "--local",
+                        "--aplicar",
+                        "--publicacion",
+                        str(self.publicacion),
+                        "--home",
+                        str(self.home),
+                        "--agentes-json",
+                        str(self.agents_json),
+                    ]
+                )
+        lineas = salida.getvalue().splitlines()
+        return codigo, json.loads(lineas[-1]) if lineas else {}
 
     def revertir_con_copia_que_falla(self):
         """La reversa en proceso con la copia rota a medias (C6 de SUA03-G5c): el
