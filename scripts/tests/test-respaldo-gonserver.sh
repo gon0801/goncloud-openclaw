@@ -5,8 +5,8 @@
 #   1. openclaw: guarda backup y extras, imprime el sha256 del archivo guardado.
 #   2. Nombre fuera de su familia, con ruta o vacío, y familia desconocida: sale 2 sin escribir.
 #   3. Datos que no son gzip o llegan truncados: sale 3 y no queda archivo ni temporal.
-#   4. Retención: 7 de cada prefijo en openclaw (uno no poda al otro); el mismo día reemplaza.
-#   5. hermes: hermes-backup en hermes/ (7) y el nombre viejo claw-backup en claw/ (8).
+#   4. Retención: 2 de cada prefijo en openclaw (uno no poda al otro); el mismo día reemplaza.
+#   5. hermes: hermes-backup en hermes/ (2) y el nombre viejo claw-backup en claw/ (8).
 #   5b. Fecha del nombre: acepta de hoy-60 a hoy+1 (también cruzando mes y año); fuera de
 #       eso sale 2 sin escribir nada.
 #   5c. Tope de tamaño: lo que pasa de RECIBE_MAX_BYTES sale 4 sin archivo ni temporal;
@@ -15,7 +15,7 @@
 #   7. Vigía: falta, viejo y encogido van en un solo aviso HTML escapado al chat del env.
 #   8. Vigía: si Telegram falla sale 2 y el token no aparece en ninguna salida.
 #   9. Vigía: si no puede revisar (un respaldo ilegible) lo avisa por Telegram y sale 1.
-#  10. Un día más viejo que los siete guardados sale 5 y lo guardado no cambia.
+#  10. Un día más viejo que los dos guardados sale 5 y lo guardado no cambia.
 #
 # Uso: bash scripts/tests/test-respaldo-gonserver.sh
 set -u
@@ -75,10 +75,10 @@ done
 for d in 01 02 03 04 05 06 07 08 09; do
   recibir openclaw "openclaw-backup-202610$d.tar.gz" "$SB/bueno.tar.gz" || fail "no recibió el backup del día $d"
 done
-[ "$(ls "$B/openclaw" | grep -c '^openclaw-backup-')" = 7 ] || fail "no guardó 7 backups: $(ls "$B/openclaw" | tr "\n" " ")"
+[ "$(ls "$B/openclaw" | grep -c '^openclaw-backup-')" = 2 ] || fail "no guardó 2 backups: $(ls "$B/openclaw" | tr "\n" " ")"
 [ -e "$B/openclaw/openclaw-backup-20261015.tar.gz" ] || fail "borró el backup más nuevo"
-[ -e "$B/openclaw/openclaw-backup-20261003.tar.gz" ] && fail "guardó un backup que ya no está entre los 7 más nuevos"
-[ -e "$B/openclaw/openclaw-backup-20261004.tar.gz" ] || fail "borró uno de los 7 más nuevos"
+[ -e "$B/openclaw/openclaw-backup-20261008.tar.gz" ] && fail "guardó un backup que ya no está entre los 2 más nuevos"
+[ -e "$B/openclaw/openclaw-backup-20261009.tar.gz" ] || fail "borró uno de los 2 más nuevos"
 [ -e "$B/openclaw/openclaw-extras-20261015.tar.gz" ] || fail "la poda de backups se llevó los extras"
 printf 'otro\n' > "$SB/src/x/b.txt"; tar -czf "$SB/otro.tar.gz" -C "$SB/src" x
 recibir openclaw openclaw-backup-20261015.tar.gz "$SB/otro.tar.gz" || fail "no aceptó reemplazar el del mismo día"
@@ -90,7 +90,7 @@ for d in 01 02 03 04 05 06 07 08 09; do
   recibir hermes "claw-backup-202610$d.tar.gz" "$SB/bueno.tar.gz" || fail "hermes: no recibió el nombre viejo del día $d"
 done
 [ "$(cat "$SB/out")" = "$(sha "$SB/bueno.tar.gz")" ] || fail "hermes: el sha impreso no es el del archivo"
-[ "$(ls "$B/hermes" | wc -l | tr -d ' ')" = 7 ] || fail "hermes/ no guardó 7: $(ls "$B/hermes" | tr "\n" " ")"
+[ "$(ls "$B/hermes" | tr '\n' ' ')" = "hermes-backup-20261008.tar.gz hermes-backup-20261009.tar.gz " ] || fail "hermes/ no guardó los 2 más nuevos: $(ls "$B/hermes" | tr "\n" " ")"
 [ "$(ls "$B/claw" | wc -l | tr -d ' ')" = 8 ] || fail "claw/ no guardó 8: $(ls "$B/claw" | tr "\n" " ")"
 [ -e "$B/claw/claw-backup-20261002.tar.gz" ] || fail "claw/ borró uno de los 8 más nuevos"
 
@@ -228,13 +228,13 @@ grep -q "no pude revisar los respaldos" "$SB/tg.log" || fail "el aviso no dice q
 
 # 10
 P="$SB/poda-propia"
-for d in 09 10 11 12 13 14 15; do
+for d in 14 15; do
   BASE_PRUEBA="$P" recibir openclaw "openclaw-backup-202610$d.tar.gz" "$SB/bueno.tar.gz" || fail "no recibió el día $d"
 done
 BASE_PRUEBA="$P" recibir openclaw openclaw-backup-20261001.tar.gz "$SB/bueno.tar.gz"; rc=$?
 [ "$rc" -eq 5 ] || fail "un día más viejo que los que se guardan no se rechazó (rc=$rc, out='$(cat "$SB/out")')"
 [ ! -s "$SB/out" ] || fail "un día rechazado imprimió un sha"
-[ "$(ls "$P/openclaw" | tr '\n' ' ')" = "openclaw-backup-20261009.tar.gz openclaw-backup-20261010.tar.gz openclaw-backup-20261011.tar.gz openclaw-backup-20261012.tar.gz openclaw-backup-20261013.tar.gz openclaw-backup-20261014.tar.gz openclaw-backup-20261015.tar.gz " ] \
+[ "$(ls "$P/openclaw" | tr '\n' ' ')" = "openclaw-backup-20261014.tar.gz openclaw-backup-20261015.tar.gz " ] \
   || fail "un día rechazado cambió lo guardado: $(ls -A "$P/openclaw" | tr '\n' ' ')"
 
 echo "ok: receptor por familia con validación, retención y sha; vigía callado al día y con un aviso sin token"

@@ -8,7 +8,7 @@ Este runbook cubre el respaldo diario de la Mac mini donde corre el gateway de O
 
 | Archivo | Contenido | En gonserver | En la Mini |
 |---|---|---|---|
-| `openclaw-backup-AAAAMMDD.tar.gz` | `openclaw backup create --verify`: todo `~/.openclaw` (configuración, `state/openclaw.sqlite`, agentes, `credentials/`, `.env`, perfil del navegador `browser/claw`) | `/mnt/data/backups/openclaw/`, los 7 más nuevos | `~/respaldo-completo/`, los 2 más nuevos |
+| `openclaw-backup-AAAAMMDD.tar.gz` | `openclaw backup create --verify`: todo `~/.openclaw` (configuración, `state/openclaw.sqlite`, agentes, `credentials/`, `.env`, perfil del navegador `browser/claw`) | `/mnt/data/backups/openclaw/`, los 2 más nuevos | `~/respaldo-completo/`, los 2 más nuevos |
 | `openclaw-extras-AAAAMMDD.tar.gz` | Lo que vive fuera de `~/.openclaw`. Requeridos: `~/Library/LaunchAgents/ai.openclaw.*.plist` (al menos uno), `~/goncloud-autoupdate/`, `~/.ssh/`, `~/.zshrc` y el script instalado. Opcionales: `~/Library/LaunchAgents/ai.goncloud.*.plist`, `~/.claude/`, `~/.claude.json`, `~/.openclaw-state/` y `~/.local/bin/` | igual | igual |
 
 Dentro del archivo de extras, `Users/gon/respaldo-completo/RESPALDO-EXTRAS.txt` trae la salida de `openclaw --version` y `node --version` de ese día, y lo que faltaba. Si falta un requerido, la corrida falla y avisa, pero igual sube lo que hay. Si falta un opcional, solo queda anotado (`~/.openclaw-state/` no existía en la Mini el 2026-10-15).
@@ -87,7 +87,7 @@ Se hace una vez, como root en gonserver, desde una copia de este repo. La cuenta
 
    Cada una tiene que mostrar al menos una huella. Si una muestra una línea `ED25519`, su huella tiene que ser la de gonserver.
 
-5. Comprueba el receptor desde la Mini con un archivo de prueba con la fecha de hoy. El receptor rechaza fechas viejas, y un nombre viejo como `20000101` quedaría fuera de los 7 más nuevos. Antes, desde la MacBook, comprueba que todavía no hay extras de hoy, porque la prueba los reemplazaría. Usa la misma fecha que imprime `date +%Y%m%d` en la Mini:
+5. Comprueba el receptor desde la Mini con un archivo de prueba con la fecha de hoy. El receptor rechaza fechas viejas, y un nombre viejo como `20000101` quedaría fuera de los 2 más nuevos. Antes, desde la MacBook, comprueba que todavía no hay extras de hoy, porque la prueba los reemplazaría. Usa la misma fecha que imprime `date +%Y%m%d` en la Mini:
 
    ```sh
    F=AAAAMMDD
