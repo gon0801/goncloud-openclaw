@@ -135,15 +135,19 @@ patron_casa() { # <ruta> <patron>: 0 si la ruta casa con el patron completo
   [[ $ruta =~ ^$re$ ]]
 }
 
-ruta_es_fast() { # <ruta>: 0 si ALGUNA regla de la allowlist casa con la ruta
-  local ruta=$1 patron
+ruta_casa_en_archivo() { # <ruta> <archivo de reglas>: 0 si ALGUNA regla casa con la ruta
+  local ruta=$1 archivo=$2 patron
   while IFS= read -r patron || [ -n "$patron" ]; do
     patron=${patron#${patron%%[![:space:]]*}}   # sangria inicial
     patron=${patron%${patron##*[![:space:]]}}   # espacio final
     case $patron in ''|'#'*) continue ;; esac
     patron_casa "$ruta" "$patron" && return 0
-  done < "$ALLOWLIST"
+  done < "$archivo"
   return 1
+}
+
+ruta_es_fast() { # <ruta>: 0 si ALGUNA regla de la allowlist casa con la ruta
+  ruta_casa_en_archivo "$1" "$ALLOWLIST"
 }
 
 # Archivos que controlan la clasificacion misma (la llave y sus cerraduras):
@@ -158,14 +162,7 @@ ruta_es_control() { # <ruta>: 0 si la ruta controla la clasificacion
   case $1 in
     scripts/ci-fast-allowlist.txt|scripts/ci-rutas-control.txt|scripts/clasificar-cambio.sh|.github/workflows/quality.yml) return 0 ;;
   esac
-  local ruta=$1 patron
-  while IFS= read -r patron || [ -n "$patron" ]; do
-    patron=${patron#${patron%%[![:space:]]*}}   # sangria inicial
-    patron=${patron%${patron##*[![:space:]]}}   # espacio final
-    case $patron in ''|'#'*) continue ;; esac
-    patron_casa "$ruta" "$patron" && return 0
-  done < "$RUTAS_CONTROL"
-  return 1
+  ruta_casa_en_archivo "$1" "$RUTAS_CONTROL"
 }
 
 # Symlinks (120000), gitlinks (160000) y modos desconocidos JAMAS son fast:

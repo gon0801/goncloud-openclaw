@@ -69,9 +69,10 @@ def _rechazo_de_artefacto(veredicto: str, ruta: str) -> str | None:
     porque este archivo es standalone para la Mini (solo biblioteca estándar): un changes
     exige un hallazgos.v1 válido y un approved no aprueba con un bloqueante tipado ni con una
     línea que empieza con BLOQUEANTE o BLOCKER."""
+    raw = Path(ruta).read_bytes()
     try:
-        documento = json.loads(Path(ruta).read_bytes().decode("utf-8"))
-    except (OSError, UnicodeDecodeError, ValueError):
+        documento = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, ValueError):
         documento = None
     if veredicto == "changes":
         if documento is None:
@@ -88,11 +89,7 @@ def _rechazo_de_artefacto(veredicto: str, ruta: str) -> str | None:
                         "en la evidencia de un approved"
                     )
         return None
-    try:
-        texto = Path(ruta).read_bytes().decode("utf-8", errors="replace")
-    except OSError:
-        return None
-    for linea in texto.splitlines():
+    for linea in raw.decode("utf-8", errors="replace").splitlines():
         if linea.startswith(("BLOQUEANTE", "BLOCKER")):
             return (
                 "aprobado-con-bloqueante: la evidencia trae una línea que empieza "
