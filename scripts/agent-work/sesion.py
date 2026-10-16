@@ -424,12 +424,20 @@ def claude_argv(spec: LaunchSpec, claude_bin: Path, *, task_id: str) -> tuple[st
     --add-dir lleva la carpeta de la corrida, la única fuera del cwd donde el
     sandbox deja escribir (M-23). `--restricted --strict-mcp-config --tools` deja
     en pie solo las herramientas del perfil (M-24): con `--setting-sources
-    project`, el settings del repo de trabajo corría sus hooks, sumaba permisos
-    y traía los conectores de la cuenta. `--allowed-tools` lleva la misma lista."""
+    project`, el settings del repo     de trabajo corría sus hooks, sumaba permisos
+    y traía los conectores de la cuenta. `--allowed-tools` lleva la misma lista.
+
+    B3 de G7-r4: con perfil (paquete presente), `--append-system-prompt-file` lleva
+    el AGENTS.md de la corrida, el mismo archivo que opencode recibe en
+    `instructions` (run_config): sin él, claude no lee la skill ni el playbook del
+    paquete y conducta sale roja (banco-r3). Sin perfil no hay paquete y no se suma
+    nada. La ayuda de claude 2.1.301 lo lista como `--append-system-prompt[-file]`,
+    vía de contexto junto a `--add-dir` y `--plugin-dir`; las skills del paquete se
+    leen con Read por su ruta, como pide el bloque del AGENTS.md."""
     if task_id.startswith("-"):
         raise ValueError(f"un taskId no empieza con guion: {task_id!r}")
     herramientas = ",".join(spec.herramientas)
-    return (
+    argv = [
         str(claude_bin),
         "-p",
         delivery_line(str(spec.run.assignment)) + SCRATCH_RULE,
@@ -453,7 +461,10 @@ def claude_argv(spec: LaunchSpec, claude_bin: Path, *, task_id: str) -> tuple[st
         str(spec.run.path),
         "--settings",
         CLAUDE_SANDBOX_SETTINGS,
-    )
+    ]
+    if spec.perfil is not None:
+        argv += ["--append-system-prompt-file", str(spec.run.context / "AGENTS.md")]
+    return tuple(argv)
 
 
 def claude_env(spec: LaunchSpec) -> "dict[str, str | None]":

@@ -885,7 +885,7 @@ def corrida_claude(*, con_lista=False):
         (
             "c2",
             "Read",
-            {"file_path": f"{RUN_CLAUDE}/contexto/skills/poteto-mode/playbooks/playbook.md"},
+            {"file_path": f"{RUN_CLAUDE}/{PLAYBOOK}"},
             "el playbook\n",
         ),
         ("c3", "Edit", {"file_path": "/repo/demo/calc.py"}, "calc.py actualizado\n"),
@@ -917,10 +917,10 @@ def corrida_claude(*, con_lista=False):
     return lineas
 
 
-def juzgar_claude(lineas, playbook, resultado="Pruebas: Ran 4 tests in 0.01s, OK."):
+def juzgar_claude(lineas, resultado="Pruebas: Ran 4 tests in 0.01s, OK."):
     return conducta.juzgar(
         conducta.pasos_claude(lineas),
-        playbook=playbook,
+        playbook=PLAYBOOK,
         texto_del_playbook=TEXTO,
         resultado=resultado,
     )
@@ -934,7 +934,14 @@ class ConductaClaude(unittest.TestCase):
         # comando y su salida, emparejado por tool_use_id, y un resultado con
         # error (exit 1) también terminó y cuenta.
         esperados = (
-            ("p4.jsonl", ["echo dentro > dentro.txt && echo OK1"]),
+            (
+                "p4.jsonl",
+                [
+                    "echo dentro > dentro.txt && echo OK1",
+                    "echo fuera > /Users/dn/.local/state/sua-loop/mediciones/m21/b/fuera.txt"
+                    " && echo OK2",
+                ],
+            ),
             (
                 "p5.jsonl",
                 [
@@ -958,11 +965,11 @@ class ConductaClaude(unittest.TestCase):
         # lectura desaparecen. El claude medido (p3b/p4/p5, 2.1.301) no tiene
         # ninguna herramienta de lista (sin TodoWrite), así que la lista no puede
         # salir y el veredicto no es verde: es la limitación declarada.
-        veredicto = juzgar_claude(corrida_claude(), f"{RUN_CLAUDE}/{PLAYBOOK}")
+        veredicto = juzgar_claude(corrida_claude())
         self.assertEqual(veredicto.razones, ("no hay lista de pasos (todowrite)",))
 
     def test_la_corrida_claude_que_deja_la_lista_pasa_completa(self):
-        veredicto = juzgar_claude(corrida_claude(con_lista=True), f"{RUN_CLAUDE}/{PLAYBOOK}")
+        veredicto = juzgar_claude(corrida_claude(con_lista=True))
         self.assertEqual(veredicto, conducta.Veredicto(True, ()))
 
     def test_la_lectura_fuera_del_paquete_y_la_tarde_no_cuentan(self):
@@ -984,15 +991,15 @@ class ConductaClaude(unittest.TestCase):
         ]
         for nombre, lineas in (("tarde", tarde), ("fuera", fuera)):
             with self.subTest(nombre):
-                veredicto = juzgar_claude(lineas, f"{RUN_CLAUDE}/{PLAYBOOK}")
+                veredicto = juzgar_claude(lineas)
                 self.assertIn(SIN_POTETO, veredicto.razones)
 
     def test_main_con_forma_claude_juzga_el_stream_desde_el_archivo(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp = Path(tmp)
-            libro = tmp / "contexto" / "skills" / "poteto-mode" / "playbooks" / "playbook.md"
+            libro = tmp / "contexto" / "skills" / "poteto-mode" / "playbooks" / "feature.md"
             libro.parent.mkdir(parents=True)
-            shutil.copy(FIXTURAS / "playbook.md", libro)
+            shutil.copy(FIXTURAS / "m16b-feature.md", libro)
             (tmp / "resultado.md").write_text(
                 "Pruebas: Ran 4 tests in 0.01s, OK.\n", encoding="utf-8"
             )

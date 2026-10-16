@@ -10,10 +10,12 @@ Un digest dice qué texto se entregó, no que el modelo lo siguió. Esto lee lo 
 4. El resultado cita la salida de esa corrida.
 
 Es una aproximación (riesgo 1 del diseño): un modelo puede leer, escribir la lista y tomar un
-atajo. Por eso cada sonda tiene su control, que debe dar rojo por la razón esperada. Las dos
+atajo. Por eso cada sonda tiene su control, que debe dar rojo por la razón esperada. Las tres
 formas de eventos son las de opencode 1.18.35 (`tool_use` con `part.tool` y `part.state.input`,
-paquete `contexto/`) y las nativas de OpenClaw (`transcript_events` con `toolCall`/`toolResult`,
-paquete `skills/`, que `extraer-nativo.py` baja de la Mini).
+paquete `contexto/`), el stream-json de claude (eventos `assistant` con `tool_use` de nombres
+`Read`/`Edit`/`Bash` y `file_path`, M-21, paquete `contexto/`) y las nativas de OpenClaw
+(`transcript_events` con `toolCall`/`toolResult`, paquete `skills/`, que `extraer-nativo.py`
+baja de la Mini).
 
     conducta.py --forma openclaw --eventos <eventos.jsonl> --playbook <playbook.md> \
         --resultado <archivo>
@@ -39,8 +41,8 @@ TESTS = re.compile(
 PRIMER_PASO = re.compile(r"^1\.\s+(.+)$", re.MULTILINE)
 CITADAS = 5
 """Las últimas líneas de la salida de las pruebas que pueden citarse en el resultado."""
-RAIZ_DE_FORMA = {"opencode": "contexto", "openclaw": "skills"}
-PREFIJO_DE_FORMA = {"opencode": "contexto/", "openclaw": ""}
+RAIZ_DE_FORMA = {"opencode": "contexto", "openclaw": "skills", "claude": "contexto"}
+PREFIJO_DE_FORMA = {"opencode": "contexto/", "openclaw": "", "claude": "contexto/"}
 ENVUELTA = "tool_call"
 """El nombre que envuelve las llamadas nativas: arguments trae la herramienta en `id` y sus
 argumentos en `args` (caso real de M-15: sessions_spawn)."""
@@ -283,6 +285,76 @@ def pasos_openclaw(lineas: list[str]) -> list[Paso]:
     return [paso for _, paso in sorted(pasos, key=lambda par: par[0])]
 
 
+def _salida_claude(contenido: object) -> str:
+    """El texto de un tool_result de claude: un string, o la unión de los `text` de
+    su contenido (la misma unión que `_texto_de`)."""
+    if isinstance(contenido, str):
+        return contenido
+    return _texto_de(contenido)
+
+
+def _paso_claude(nombre: str, entrada: dict, salida: str) -> Paso:
+    """Una llamada de claude traducida al vocabulario que `juzgar` ya conoce. Los
+    nombres medidos en 2.1.301 (p3b/p4/p5) viajan con mayúscula y las rutas en
+    `file_path`. Un `Task` cuenta como cambio, como el `task` de opencode (D3): los
+    eventos de su hijo no están en este stream. Una `Skill` de claude no cuenta como
+    lectura del paquete: su input no trae carpeta y la copia que carga puede ser la
+    global, no la de la corrida; la del paquete se lee con Read por su ruta."""
+    ruta = entrada.get("file_path") or entrada.get("path") or entrada.get("notebook_path")
+    if nombre == "Read":
+        return Paso("read", str(ruta) if ruta else None, "", salida)
+    if nombre in ("Edit", "Write", "NotebookEdit"):
+        return Paso("edit", str(ruta) if ruta else None, "", salida)
+    if nombre == "Bash":
+        return Paso("bash", None, str(entrada.get("command") or ""), salida)
+    if nombre == "TodoWrite":
+        todos = entrada.get("todos") if isinstance(entrada.get("todos"), list) else []
+        detalle = "\n".join(
+            str(todo.get("content", "")) for todo in todos if isinstance(todo, dict)
+        )
+        return Paso("todowrite", None, detalle, salida)
+    if nombre == "Task":
+        return Paso("edit", None, str(entrada.get("description") or ""), salida)
+    return Paso(nombre.lower(), str(ruta) if ruta else None, "", salida)
+
+
+def pasos_claude(lineas: list[str]) -> list[Paso]:
+    """Las llamadas con resultado del stream-json de claude (M-21, punto 4): un evento
+    `assistant` por llamada (`tool_use` con id, name e input) y su resultado en el
+    `tool_result` de un evento `user` posterior, emparejado por id. Solo cuentan las
+    llamadas cuyo resultado llegó, el equivalente del `completed` de opencode; una
+    salida con error (un Bash con exit 1) también terminó y cuenta."""
+    resultados: dict[str, str] = {}
+    llamadas: list[tuple[str, str, dict]] = []
+    for linea in lineas:
+        try:
+            evento = json.loads(linea)
+        except ValueError:
+            continue
+        if not isinstance(evento, dict):
+            continue
+        mensaje = evento.get("message") if isinstance(evento.get("message"), dict) else {}
+        piezas = mensaje.get("content") if isinstance(mensaje.get("content"), list) else []
+        if evento.get("type") == "user":
+            for pieza in piezas:
+                if isinstance(pieza, dict) and pieza.get("type") == "tool_result":
+                    resultados[str(pieza.get("tool_use_id"))] = _salida_claude(pieza.get("content"))
+        elif evento.get("type") == "assistant":
+            for pieza in piezas:
+                if isinstance(pieza, dict) and pieza.get("type") == "tool_use":
+                    entrada = pieza.get("input") if isinstance(pieza.get("input"), dict) else {}
+                    llamadas.append(
+                        (str(pieza.get("id") or ""), str(pieza.get("name") or ""), entrada)
+                    )
+    pasos = []
+    for identificador, nombre, entrada in llamadas:
+        salida = resultados.get(identificador)
+        if salida is None:
+            continue
+        pasos.append(_paso_claude(nombre, entrada, salida))
+    return pasos
+
+
 def _primeras_frases_numeradas(texto: str) -> dict[int, str]:
     """La primera frase de cada paso numerado del playbook, sin backticks."""
     frases = {}
@@ -408,7 +480,8 @@ def main(argv: list[str] | None = None) -> int:
         "--forma",
         choices=tuple(RAIZ_DE_FORMA),
         default="opencode",
-        help="de dónde vienen los eventos: opencode (--format json) o la Mini nativa",
+        help="de dónde vienen los eventos: opencode (--format json), "
+        "claude (stream-json) o la Mini nativa",
     )
     args = parser.parse_args(argv)
     try:
@@ -423,7 +496,12 @@ def main(argv: list[str] | None = None) -> int:
                 f"--playbook debe ser la ruta del playbook dentro del paquete "
                 f"(con {raiz}/ en su ruta resuelta): {args.playbook}"
             )
-        lector = pasos_opencode if args.forma == "opencode" else pasos_openclaw
+        lectores = {
+            "opencode": pasos_opencode,
+            "openclaw": pasos_openclaw,
+            "claude": pasos_claude,
+        }
+        lector = lectores[args.forma]
         pasos = lector(args.eventos.read_text(encoding="utf-8", errors="replace").splitlines())
         # D2: los escritos del propio publicador (acceptRef, resultRef, el artefacto) no
         # son cambios del trabajador. resolve() no exige que las rutas existan.

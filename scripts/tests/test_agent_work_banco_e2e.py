@@ -689,12 +689,15 @@ class BancoE2E(unittest.TestCase):
         return snapshot
 
     def conducta_verdict(self, task_id, artifact_path, playbook):
-        """conducta contra los eventos de la corrida. El playbook es un archivo real: la copia de la
-        corrida cuando tuvo paquete, la del control si no."""
+        """conducta contra los eventos de la corrida, con la forma del adaptador del
+        banco (B3 de G7-r4: el stream de claude no se lee como el de opencode). El
+        playbook es un archivo real: la copia de la corrida cuando tuvo paquete, la
+        del control si no."""
         asignacion = json.loads(self.run_dir(task_id).assignment.read_text(encoding="utf-8"))
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
-            code = conducta.main(["--eventos", str(self.record(task_id).events),
+            code = conducta.main(["--forma", ADAPTER,
+                                  "--eventos", str(self.record(task_id).events),
                                   "--playbook", str(playbook), "--resultado", str(artifact_path),
                                   "--directorio", asignacion["workspaceRef"],
                                   "--excluir", str(self.run_dir(task_id).path),
