@@ -205,6 +205,20 @@ class Reporte(unittest.TestCase):
                 "aprobado-con-bloqueante",
             ),
             ("approved-normal", "approved", "pruebas verdes, sin marcadores\n", 0, None),
+            (
+                "approved-hallazgos-mal-formado",
+                "approved",
+                json.dumps({"schema": "hallazgos.v1", "findings": [{"id": "F1", "bloqueante": 1}]}),
+                3,
+                "resultado-invalido",
+            ),
+            (
+                "changes-sin-hallazgos",
+                "changes",
+                json.dumps({"schema": "hallazgos.v1", "findings": []}),
+                3,
+                "resultado-invalido",
+            ),
         ]
         for nombre, veredicto, contenido, codigo, frase in casos:
             with self.subTest(nombre=nombre):

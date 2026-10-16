@@ -162,6 +162,9 @@ def es_hallazgos(content, sin_bloqueantes=False):
     if not (isinstance(documento, dict) and documento.get("schema") == "hallazgos.v1"
             and isinstance(documento.get("findings"), list)):
         return False
+    if not sin_bloqueantes and not documento["findings"]:
+        # Un cambios sin hallazgos no pide nada (CodeRabbit en #328).
+        return False
     return not sin_bloqueantes or not any(
         isinstance(h, dict) and h.get("bloqueante") is True for h in documento["findings"])
 

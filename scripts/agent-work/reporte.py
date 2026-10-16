@@ -78,8 +78,13 @@ def _rechazo_de_artefacto(veredicto: str, ruta: str) -> str | None:
         if documento is None:
             return f"resultado-invalido: el artefacto no parsea como {HALLAZGOS_SCHEMA}"
         defecto = _defecto_de_hallazgos(documento)
+        if not defecto and not documento["findings"]:
+            defecto = "un changes trae al menos un hallazgo"
         return f"resultado-invalido: {defecto}" if defecto else None
     if isinstance(documento, dict) and documento.get("schema") == HALLAZGOS_SCHEMA:
+        defecto = _defecto_de_hallazgos(documento)
+        if defecto:
+            return f"resultado-invalido: {defecto}"
         hallazgos = documento.get("findings")
         if isinstance(hallazgos, list):
             for hallazgo in hallazgos:

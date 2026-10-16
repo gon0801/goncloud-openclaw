@@ -410,9 +410,17 @@ def contenido_rechazado(contrato: str, carga: object, raw: bytes) -> str | None:
             return (f"resultado-invalido: el archivo de findingsRef no parsea "
                     f"como {HALLAZGOS_SCHEMA}")
         defecto = defecto_de_hallazgos(documento)
+        if not defecto and not documento["findings"]:
+            # Un changes sin ningún hallazgo no pide nada que corregir (CodeRabbit en #328).
+            defecto = "un changes trae al menos un hallazgo"
         return f"resultado-invalido: {defecto}" if defecto else None
     if carga.get("verdict") == "approved":
         if isinstance(documento, dict) and documento.get("schema") == HALLAZGOS_SCHEMA:
+            # Un hallazgos.v1 mal formado no pasa por approved (CodeRabbit en #328): con
+            # "bloqueante": 1 el bloqueante iba sin tipar y se colaba.
+            defecto = defecto_de_hallazgos(documento)
+            if defecto:
+                return f"resultado-invalido: {defecto}"
             hallazgos = documento.get("findings")
             if isinstance(hallazgos, list):
                 for hallazgo in hallazgos:

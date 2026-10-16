@@ -199,7 +199,8 @@ else:
         self.cli("record-verdict", "--corrida", "run-1", "--carril", "B3", "--intento", "try-1",
                  "--ronda", "9", "--sha", SHA, "--verdict", "approved",
                  "--evidence-file", str(self.input))
-        for verdict, texto in (("approved", json.dumps(hallazgos)), ("changes", '{"otra": "cosa"}')):
+        for verdict, texto in (("approved", json.dumps(hallazgos)), ("changes", '{"otra": "cosa"}'),
+                               ("changes", json.dumps({"schema": "hallazgos.v1", "findings": []}))):
             with self.subTest(verdict=verdict):
                 self.input.write_text(texto + "\n")
                 self.cli("record-verdict", "--corrida", "run-1", "--carril", "B3",

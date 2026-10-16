@@ -242,6 +242,13 @@ class HostReceipts(unittest.TestCase):
              "todo bien\nBLOQUEANTE hay una fuga\n", "aprobado-con-bloqueante"),
             ("approved-linea-blocker", {"verdict": "approved", "evidenceRef": "evidence.txt"},
              "BLOCKER fuga de datos\n", "aprobado-con-bloqueante"),
+            # CodeRabbit en #328: un hallazgos.v1 mal formado no pasa por approved, y un
+            # changes sin hallazgos no pide nada.
+            ("approved-hallazgos-mal-formado", {"verdict": "approved", "evidenceRef": "evidence.txt"},
+             json.dumps({"schema": "hallazgos.v1", "findings": [{"id": "F1", "bloqueante": 1}]}),
+             "resultado-invalido"),
+            ("changes-sin-hallazgos", {"verdict": "changes", "findingsRef": "evidence.txt"},
+             json.dumps({"schema": "hallazgos.v1", "findings": []}), "resultado-invalido"),
         ]
         for nombre, carga, contenido, motivo in casos:
             with self.subTest(nombre=nombre):
