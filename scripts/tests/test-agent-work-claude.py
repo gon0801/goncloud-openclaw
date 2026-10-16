@@ -370,6 +370,16 @@ class HostClaude(unittest.TestCase):
         self.assertEqual(argv[argv.index("--model") + 1], "opus")
         self.assertEqual(run_host.bin_para("opencode"), Path("/bin/true"))
 
+    def test_un_version_fallido_no_se_guarda(self):
+        # CodeRabbit en #324: un `claude --version` que falló una vez no deja la ruta
+        # cerrada para siempre; la pasada siguiente vuelve a preguntar.
+        run_host = self.run_host()
+        bueno = self.claude_falso
+        run_host.claude_bin = self.tmp / "no-existe"
+        self.assertEqual(run_host.catalogo_para("claude").cli_version, "sin contestar su versión")
+        run_host.claude_bin = bueno
+        self.assertEqual(run_host.catalogo_para("claude").cli_version, "2.1.301")
+
     def test_un_claim_no_autorizado_no_corta_la_pasada(self):
         # B2 de G7-r3: el gateway autoriza por host una lista de adaptadores; si
         # opencode no esta en la de este host, su rechazo no puede matar el claim
@@ -401,6 +411,42 @@ class HostClaude(unittest.TestCase):
             pedidos.clear()
             self.assertEqual(run_host.claim(), "reclamada-claude")
             self.assertEqual(pedidos, ["opencode", "claude"])
+
+    def test_si_ningun_adaptador_esta_autorizado_el_rechazo_sale(self):
+        # DeepSeek F2 en #324: R da la misma frase para un device no autorizado. Si
+        # ningún adaptador pasa, no es un adaptador fuera de la lista: es el host, y
+        # el rechazo sale por la pasada como antes de G7.
+        import native_gateway
+
+        run_host = self.run_host()
+
+        def claim_rechazado(client, *, host, manager, backend, instance_id, deps, adapter_id):
+            raise RuntimeError(
+                "native projection Gateway rejected request managedTasks.host.claim: "
+                "Managed host device or adapter is not authorized"
+            )
+
+        with mock.patch.object(native_gateway, "claim_run_once", claim_rechazado):
+            with self.assertRaisesRegex(RuntimeError, "not authorized"):
+                run_host.claim()
+
+    def test_la_frase_fuera_del_claim_no_se_toma_por_un_adaptador(self):
+        # DeepSeek F2 en #324: la frase en un error que no es el del claim de R (el
+        # plan, el paquete, el lanzamiento) sale como siempre.
+        import native_gateway
+
+        run_host = self.run_host()
+
+        def plan_roto(client, *, host, manager, backend, instance_id, deps, adapter_id):
+            # Solo opencode falla, y claude tendría tarea: si la frase se tomara por un
+            # adaptador rechazado, el error se tragaría y saldría la tarea de claude.
+            if adapter_id == "opencode":
+                raise RuntimeError("el paquete dice: adapter is not authorized")
+            return "reclamada-claude"
+
+        with mock.patch.object(native_gateway, "claim_run_once", plan_roto):
+            with self.assertRaisesRegex(RuntimeError, "el paquete dice"):
+                run_host.claim()
 
     def test_un_error_de_otra_clase_en_el_claim_sigue_saliendo(self):
         import native_gateway

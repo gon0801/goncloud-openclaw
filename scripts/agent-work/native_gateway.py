@@ -614,10 +614,14 @@ class RunHost:
                                       timeout=20)
                 trozos = [t for t in done.stdout.split()
                           if re.fullmatch(r"[0-9][0-9A-Za-z.+-]{0,63}", t)]
-                self._version_claude = trozos[0] if trozos else "sin contestar su versión"
+                if trozos:
+                    self._version_claude = trozos[0]
             except (OSError, subprocess.TimeoutExpired):
-                self._version_claude = "sin contestar su versión"
-        return catalogo_claude(self._version_claude, listed_at=self.clock())
+                pass
+        # Solo se guarda una versión que contestó (CodeRabbit en #324): un --version que
+        # falló una vez no deja la ruta cerrada hasta reiniciar el host.
+        return catalogo_claude(self._version_claude or "sin contestar su versión",
+                               listed_at=self.clock())
 
     def _launched_model(self, operation):
         try:
@@ -732,6 +736,8 @@ class RunHost:
             raise ValueError(f"{plan.model.model} is not what authorize permits now; nothing was launched")
 
     def claim(self):
+        rechazo = None
+        intentados = 0
         for adapter_id in ADAPTERS:
             rechazado = self._claim_rechazado_en.get(adapter_id)
             if rechazado is not None and self.clock() - rechazado < CATALOG_RECHECK_SECONDS:
@@ -740,22 +746,32 @@ class RunHost:
                 claimed = claim_run_once(self.client, host=self.host, manager=self.manager,
                                          backend=self.backend, instance_id=self.instance_id, deps=self,
                                          adapter_id=adapter_id)
-            except Exception as error:
+            except RuntimeError as error:
                 # B2 de G7-r3: el gateway autoriza por host una lista de adaptadores
                 # (managedTasks.hosts[<host>].adapters en la Mini). Que uno no esté
                 # autorizado no corta la pasada: se anota una vez, se sigue con los
                 # demás y se reintenta cada CATALOG_RECHECK_SECONDS (la cadencia con
                 # que el host ya relee su catálogo). Otro error sale como siempre.
-                if "adapter is not authorized" not in str(error):
+                # Solo el rechazo del claim de R (DeepSeek F2 en #324): la misma frase en un
+                # error del plan, del paquete o del lanzamiento sale como siempre.
+                texto = str(error)
+                if ("managedTasks.host.claim" not in texto
+                        or "adapter is not authorized" not in texto):
                     raise
+                rechazo = error
                 self._claim_rechazado_en[adapter_id] = self.clock()
                 print(f"agent-work: el gateway no autoriza el claim de {adapter_id} en "
                       f"{self.client.host_id}; se sigue con los demás adaptadores y se "
                       f"reintenta en {CATALOG_RECHECK_SECONDS:.0f} s", file=sys.stderr, flush=True)
                 continue
+            intentados += 1
             self._claim_rechazado_en.pop(adapter_id, None)
             if claimed is not None:
                 return claimed
+        if rechazo is not None and intentados == 0:
+            # Ningún adaptador pasó: R usa la misma frase para un device que no autoriza,
+            # y eso es del host entero, no de un adaptador fuera de la lista.
+            raise rechazo
         return None
 
     def _session_directory(self, key):

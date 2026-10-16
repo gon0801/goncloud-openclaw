@@ -598,7 +598,7 @@ def launch_script(spec: LaunchSpec, argv: tuple[str, ...], env: "dict[str, str |
     record = SessionRecord(spec.record)
     return "\n".join([
         f'[ "$(/usr/bin/id -rg)" = {gid} ] || exit {EXIT_OUTSIDE_GROUP}',
-        f"cd -- {shlex.quote(str(spec.workspace.root))} || exit {EXIT_NO_WORKSPACE}",
+        f"cd -- {shlex.quote(str(adaptador(spec.adapter_id).carpeta(spec)))} || exit {EXIT_NO_WORKSPACE}",
         f"/bin/mkdir -p -m 700 -- {shlex.quote(str(spec.run.scratch))} || exit {EXIT_NO_SCRATCH}",
         *((f"export {name}={shlex.quote(value)}" if value is not None else f"unset {name}")
           for name, value in env.items()),

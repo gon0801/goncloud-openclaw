@@ -88,6 +88,12 @@ class Mac(unittest.TestCase):
         self.bin.mkdir()
         (self.bin / "opencode").write_text(OPENCODE_DOUBLE)
         (self.bin / "opencode").chmod(0o755)
+        # El doble de claude contesta la versión certificada (DeepSeek F1 en #324): sin él
+        # las pruebas de la ruta claude dependían del claude instalado en la máquina, y en
+        # el runner de CI, que no lo tiene, la ruta salía no certificada.
+        (self.bin / "claude").write_text(
+            '#!/bin/sh\ncase "$*" in --version) echo "2.1.301 (Claude Code)";; *) exit 64;; esac\n')
+        (self.bin / "claude").chmod(0o755)
         (self.bin / "version").write_text("1.18.35\n")
         (self.bin / "listing").write_text(LISTING)
         self.repo = self.root / "dev" / "demo"
@@ -109,7 +115,8 @@ class Mac(unittest.TestCase):
         out, err = io.StringIO(), io.StringIO()
         with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
             code = encargo.main(["--checkout", str(self.checkout), "--state-root", str(self.state),
-                                 "--opencode", str(self.bin / "opencode"), "--workspace-root", str(self.root / "dev"),
+                                 "--opencode", str(self.bin / "opencode"), "--claude", str(self.bin / "claude"),
+                                 "--workspace-root", str(self.root / "dev"),
                                  *args], prompts=self.prompts)
         return code, out.getvalue(), err.getvalue()
 
