@@ -24,6 +24,7 @@ import fcntl
 import json
 import os
 import re
+import shlex
 import sqlite3
 import subprocess
 import sys
@@ -31,10 +32,12 @@ import tempfile
 import time
 import unicodedata
 from dataclasses import dataclass, replace
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Iterator, Literal
 
 from contracts import HostBeat, RunDir, SessionRecord
+import avisar as aviso_mod
 import contexto
 import hashlib
 import lineas
@@ -57,6 +60,11 @@ CATALOG_RECHECK_SECONDS = 60.0
 PREPARAR_DEADLINE_SECONDS = 30.0
 """Lo que `preparar` puede tardar en total: `main` lo corre dentro de su turno."""
 GIT_TIMEOUT_SECONDS = 5.0
+MINI_SSH = os.environ.get("AGENT_WORK_MINI_SSH", "gon@100.73.187.5")
+"""La Mini de main: a donde va el cotejo de las citas tg: (SUA-04, 4.8)."""
+SSH_OPCIONES = ("-o", "BatchMode=yes", "-o", "ConnectTimeout=15", "-o", "ServerAliveInterval=15")
+OPENCLAW_BIN = Path(os.environ.get("AGENT_WORK_OPENCLAW_BIN", str(Path.home() / ".openclaw-r" / "openclaw")))
+"""El openclaw de la Mac, el que manda el aviso a David."""
 OPENCODE_BIN = Path(os.environ.get("AGENT_WORK_OPENCODE", "/opt/homebrew/bin/opencode"))
 STATE_ROOT = Path(os.environ.get("AGENT_WORK_STATE_ROOT", str(Path.home() / ".local/state/agent-work-host")))
 PROMPTS_DB = Path.home() / ".claude-mem/claude-mem.db"
@@ -709,7 +717,8 @@ def _correr_banco_inyectado(env_extra: dict, state_root: Path) -> "tuple[int | N
 
 def sucesion(*, state_root: Path, checkout: Path, aplicar: bool = False, revertir: str | None = None,
              now: float, opencode_bin: Path = OPENCODE_BIN, correr_banco=None,
-             runtime_source: str | None = None) -> dict:
+             runtime_source: str | None = None, enviar_aviso=None,
+             openclaw_bin: Path = OPENCLAW_BIN) -> dict:
     """`encargo.py sucesion [--aplicar] [--revertir <línea>]` (SUA-04, 4.3). Escribe solo
     sucesion.json, nunca la política. Sin banderas imprime lo que haría.
 
@@ -798,10 +807,19 @@ def sucesion(*, state_root: Path, checkout: Path, aplicar: bool = False, reverti
             aviso = (f"sucesion: {elegido['sucesor']} reemplazó a {elegido['actual']} en la línea {line}; "
                      f"evidencia: {entry['evidencia']}")
             entry["aviso"] = aviso
+            envio = (enviar_aviso or aviso_mod.avisar)(aviso, policy=policy, openclaw_bin=openclaw_bin)
+            if envio.get("enviado"):
+                entry["avisoEnviado"] = True
+                entry.pop("avisoPendiente", None)
+            else:
+                entry["avisoPendiente"] = f"aviso pendiente: {envio.get('causa', 'no salió')}"
             _escribir_sucesion(state_root, doc)
-            return {"ok": True, "accion": "promovido", "linea": line, "promovido": elegido["sucesor"],
-                    "anterior": elegido["actual"], "aviso": aviso, "avisoPendiente": "aviso pendiente de G5",
-                    "evidencia": entry["evidencia"]}
+            respuesta = {"ok": True, "accion": "promovido", "linea": line, "promovido": elegido["sucesor"],
+                         "anterior": elegido["actual"], "aviso": aviso,
+                         "evidencia": entry["evidencia"]}
+            if entry.get("avisoPendiente"):
+                respuesta["avisoPendiente"] = entry["avisoPendiente"]
+            return respuesta
         if clase == "rojo":
             entry.update({"candidato": elegido["sucesor"], "estado": "rechazado",
                           "causa": "canario rojo por el modelo", "intentos": int(entry.get("intentos") or 0) + 1,
@@ -907,7 +925,7 @@ def _write_policy(checkout: Path, state_root: Path,
         # documento pierde también defaultGrant y la política sigue cargando.
         default_grant = current.default_grant if any(
             grant.name == current.default_grant and grant.default is not None for grant in grants) else None
-        document = policy_document(grants, closed, default_grant)
+        document = policy_document(grants, closed, default_grant, current.owner_telegram_chat)
         unreadable = ProviderPolicy.parse(document, path.name).unreadable
         if unreadable is not None:
             return f"la política resultante no carga: {unreadable}"
@@ -937,10 +955,119 @@ def _closed(policy: ProviderPolicy, *keys: "str | None") -> str | None:
     return next((_closed_phrase(policy.closed[key]) for key in keys if key in policy.closed), None)
 
 
+def _ssh_remoto(mini: str):
+    def correr(argv, entrada=None, timeout=None):
+        try:
+            hecho = subprocess.run(["ssh", *SSH_OPCIONES, mini, *argv], input=entrada,
+                                   capture_output=True, text=True, timeout=timeout or 120)
+        except subprocess.TimeoutExpired:
+            return 1, "", "ssh no contestó"
+        return hecho.returncode, hecho.stdout, hecho.stderr
+
+    return correr
+
+
+AYUDANTE_TG = """
+import json, sqlite3, sys, os
+pedido = json.loads(sys.argv[1])
+ruta = os.path.expanduser("~/.openclaw/agents/main/agent/openclaw-agent.sqlite")
+db = sqlite3.connect("file:" + ruta + "?mode=ro", uri=True)
+clave = db.execute("SELECT session_key FROM session_windows WHERE session_id = ?",
+                   (pedido["session_id"],)).fetchone()
+esperada = "agent:main:telegram:default:direct:" + pedido["chat"]
+if not clave or clave[0] != esperada:
+    print(json.dumps({"ok": False, "causa": "la sesión no es la del dueño con main"}))
+    raise SystemExit(0)
+fila = db.execute("SELECT event_json, event_zstd FROM transcript_events WHERE session_id = ? AND seq = ?",
+                  (pedido["session_id"], pedido["seq"])).fetchone()
+if not fila:
+    print(json.dumps({"ok": False, "causa": "no hay evento con ese seq"}))
+    raise SystemExit(0)
+crudo = fila[0]
+if crudo is None and fila[1] is not None:
+    from compression import zstd
+    crudo = zstd.decompress(fila[1]).decode("utf-8")
+evento = json.loads(crudo)
+mensaje = evento.get("message") or {}
+contenido = mensaje.get("content")
+texto = contenido if isinstance(contenido, str) else " ".join(
+    parte.get("text", "") for parte in contenido or [] if isinstance(parte, dict))
+if evento.get("type") != "message" or mensaje.get("role") != "user":
+    print(json.dumps({"ok": False, "causa": "el evento no es un mensaje del dueño (rol user)"}))
+elif pedido["cita"] not in texto:
+    print(json.dumps({"ok": False, "causa": "la frase no está literal en el mensaje"}))
+else:
+    print(json.dumps({"ok": True, "timestamp": evento.get("timestamp")}))
+"""
+
+
+def _citar_telegram(ref: str, quote: str, policy: ProviderPolicy, correr) -> "OperatorCitation | str":
+    """La cita tg:<session_id>:<seq> (SUA-04, 4.8): la base de main en la Mini, en solo
+    lectura y por stdin, como extraer-nativo. Sin cotejo no hay permiso, como con P####."""
+    partes = ref.split(":")
+    if len(partes) != 3 or not partes[2].isdigit():
+        return f"la cita {ref} no tiene la forma tg:<session_id>:<seq>"
+    if not policy.owner_telegram_chat:
+        return "la política no trae ownerTelegramChat: no hay chat del dueño contra el que cotejar"
+    pedido = {"session_id": partes[1], "seq": int(partes[2]), "cita": quote,
+              "chat": policy.owner_telegram_chat}
+    rc, out, err = correr(["python3", "-", shlex.quote(json.dumps(pedido))], entrada=AYUDANTE_TG)
+    if rc != 0:
+        return f"la cita tg: no coteja: no se pudo leer la base de main en la Mini ({err.strip()[:160]})"
+    try:
+        respuesta = json.loads(out)
+    except ValueError:
+        return "la cita tg: no coteja: el cotejo no contestó un JSON"
+    if not respuesta.get("ok"):
+        return f"la cita tg: no coteja: {respuesta.get('causa', 'sin causa')}"
+    marca = respuesta.get("timestamp")
+    try:
+        segundos = float(marca) / (1000.0 if float(marca) > 1e12 else 1.0)
+        fecha = datetime.fromtimestamp(segundos, tz=timezone.utc).date().isoformat()
+    except (TypeError, ValueError):
+        return "la cita tg: no coteja: el evento no trae timestamp"
+    return OperatorCitation(OPERATOR, fecha, ref, quote)
+
+
+def solicitar(name: str, provider: str, billing: str, *, state_root: Path, checkout: Path,
+              now: float) -> dict:
+    """`encargo.py solicitar <nombre> --proveedor <id> --cobro <cobro>` (SUA-04, 4.8).
+
+    main no puede escribir la política ni abrir un proveedor cerrado en silencio: deja la
+    solicitud en <state_root>/solicitudes/<proveedor>.json y contesta la frase que David
+    tiene que decir, por el chat que sea. Nada se escribe en la política."""
+    policy = ProviderPolicy.load(Path(checkout) / POLICY_FILE)
+    if policy.unreadable is not None:
+        return {"ok": False, "causa": policy.unreadable}
+    if provider in policy.closed:
+        return {"ok": False, "causa": f"{provider} está cerrado: David lo abre con permitir, "
+                                      "que coteja su frase, no con una solicitud"}
+    if any(grant.name == name for grant in policy.grants):
+        return {"ok": False, "causa": f"{name} ya tiene permiso"}
+    frase = f"confirmo abrir {name} ({provider}, {billing})"
+    carpeta = Path(state_root) / "solicitudes"
+    carpeta.mkdir(parents=True, exist_ok=True)
+    destino = carpeta / f"{provider}.json"
+    documento = {"nombre": name, "proveedor": provider, "cobro": billing,
+                 "pedidoEn": datetime.fromtimestamp(now, tz=timezone.utc).isoformat(),
+                 "frase": frase}
+    fd, pending = tempfile.mkstemp(prefix=".solicitud-", dir=carpeta)
+    try:
+        with os.fdopen(fd, "wb") as stream:
+            stream.write((json.dumps(documento, indent=2, ensure_ascii=False) + "\n").encode())
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(pending, destino)
+    except BaseException:
+        Path(pending).unlink(missing_ok=True)
+        raise
+    return {"ok": True, "frase": frase, "solicitud": str(destino)}
+
+
 def permitir(name: str, *, provider: ProviderId | None, billing: Billing | None, ref: str | None,
              quote: str | None, checkout: Path, state_root: Path, prompts: Path = PROMPTS_DB,
              include: tuple[str, ...] = (), exclude: tuple[str, ...] = (),
-             opencode_bin: Path = OPENCODE_BIN) -> "ProviderRow | str":
+             opencode_bin: Path = OPENCODE_BIN, correr=None, mini: str | None = None) -> "ProviderRow | str":
     """`encargo.py permitir <nombre> [--proveedor <id>] [--cobro subscription|per-token] [--solo <patrón>]
     [--menos <patrón>] [--ref P#### --cita "<palabras del operador>"]`
 
@@ -986,7 +1113,10 @@ def permitir(name: str, *, provider: ProviderId | None, billing: Billing | None,
         grant = replace(existing, provider=provider,
                         default=existing.default if provider == existing.provider else None)
     else:
-        citation = citar(ref, quote, prompts)
+        if ref.startswith("tg:"):
+            citation = _citar_telegram(ref, quote, policy, correr or _ssh_remoto(mini or MINI_SSH))
+        else:
+            citation = citar(ref, quote, prompts)
         if isinstance(citation, str):
             return citation
         models = ModelFilter(include, exclude, citation) if include else None
@@ -1163,6 +1293,10 @@ def _parser() -> argparse.ArgumentParser:
     perfiles_cmd = commands.add_parser("perfiles", help="los perfiles del checkout y los agentes sin perfil, en una línea JSON")
     perfiles_cmd.add_argument("--mini", default=None, metavar="user@host",
                               help="suma alta-sin-registrar, retirado y perfil-incompleto contra la lista viva de la Mini, por ssh")
+    solicitar_cmd = commands.add_parser("solicitar", help="pedir abrir un proveedor: deja la solicitud y contesta la frase para David")
+    solicitar_cmd.add_argument("nombre", help="el nombre del permiso, por ejemplo mistral")
+    solicitar_cmd.add_argument("--proveedor", required=True, help="el id del proveedor")
+    solicitar_cmd.add_argument("--cobro", required=True, choices=("subscription", "per-token"))
     sucesion_cmd = commands.add_parser("sucesion", help="la sucesión del modelo por omisión: qué haría, o --aplicar")
     sucesion_cmd.add_argument("--aplicar", action="store_true", help="corre a lo más un canario y promueve o rechaza")
     sucesion_cmd.add_argument("--revertir", metavar="LINEA", help="vuelve la línea a su anterior y la deja rechazada")
@@ -1247,6 +1381,13 @@ def _run_politica(args: argparse.Namespace, where: dict, now: float) -> int:
     return _show(args.command, outcome)
 
 
+def _run_solicitar(args: argparse.Namespace, where: dict, now: float) -> int:
+    respuesta = solicitar(args.nombre, args.proveedor, args.cobro, now=now,
+                          state_root=where["state_root"], checkout=where["checkout"])
+    print(json.dumps(respuesta, ensure_ascii=False))
+    return 0 if respuesta.get("ok") else 3
+
+
 def _run_sucesion(args: argparse.Namespace, where: dict, now: float) -> int:
     respuesta = sucesion(aplicar=args.aplicar, revertir=args.revertir,
                          runtime_source=args.runtime_source, now=now, **where)
@@ -1255,7 +1396,7 @@ def _run_sucesion(args: argparse.Namespace, where: dict, now: float) -> int:
 
 
 _COMMANDS = {"preparar": _run_preparar, "estado": _run_estado, "perfiles": _run_perfiles,
-             "proveedores": _run_proveedores, "sucesion": _run_sucesion,
+             "proveedores": _run_proveedores, "sucesion": _run_sucesion, "solicitar": _run_solicitar,
              "permitir": _run_politica, "cerrar": _run_politica}
 
 
