@@ -44,7 +44,7 @@ SCHEMA_RECETA = "agent-work.recetas.v1"
 CAMPOS_PR = "number,isDraft,headRefOid,state,comments"
 CONSULTA_THREADS = (
     "query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name)"
-    "{pullRequest(number:$number){reviewThreads(first:100){nodes{isResolved"
+    "{pullRequest(number:$number){reviewThreads(first:100){pageInfo{hasNextPage}nodes{isResolved"
     " comments(first:100){nodes{author{login}body}}}}}}}"
 )
 AUTORES_BOT = frozenset({"github-actions", "github-actions[bot]"})
@@ -549,9 +549,15 @@ def recolectar(gh_bin, repo: str, numero: int, head: str) -> VistaPR:
         "reviewThreads",
     )
     try:
-        nodos = threads["data"]["repository"]["pullRequest"]["reviewThreads"]["nodes"]
-    except (KeyError, TypeError) as error:
+        hilos = threads["data"]["repository"]["pullRequest"]["reviewThreads"]
+        nodos = hilos["nodes"]
+        mas = bool((hilos.get("pageInfo") or {}).get("hasNextPage"))
+    except (KeyError, TypeError, AttributeError) as error:
         raise Falla("reviewThreads sin la forma esperada") from error
+    if mas:
+        # Falla cerrada (DeepSeek F7 y CodeRabbit en #330): un hilo sin resolver después del
+        # 100 no puede quedar sin mirar. Con más de 100 hilos, el merge se decide a mano.
+        raise Falla("el PR tiene más de 100 hilos de revisión: listo no los mira todos")
     inline = pagina_plana(gh_bin, f"repos/{repo}/pulls/{numero}/comments")
     sticky = [c for c in comentarios if MARCA_STICKY in c.cuerpo and c.autor in AUTORES_BOT]
     marca = parsear_bot(sticky[-1].cuerpo) if sticky else None
@@ -735,8 +741,8 @@ def main(argv=None, gh_bin: str = "gh") -> int:
         sub.add_argument("--receta", type=Path, default=RECETA_POR_DEFECTO)
         sub.add_argument("--gh", default=None, help="binario gh; las pruebas inyectan el juguete")
     args = parser.parse_args(argv)
-    if not RE_SHA.fullmatch(args.sha):
-        print(f"merge: --sha no son 7..40 hex: {args.sha}", file=sys.stderr)
+    if not re.fullmatch(r"[0-9a-f]{40}", args.sha):
+        print(f"merge: --sha tiene que ser el sha completo de 40 hex: {args.sha}", file=sys.stderr)
         return 3
     gh = args.gh or gh_bin
     try:

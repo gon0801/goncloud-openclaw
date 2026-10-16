@@ -422,6 +422,32 @@ class MergeConToy(unittest.TestCase):
 
     # --- mergear ---------------------------------------------------------------
 
+    def test_mas_de_cien_hilos_falla_cerrado(self):
+        # DeepSeek F7 y CodeRabbit en #330: un hilo sin resolver después del 100 no puede
+        # quedar sin mirar.
+        pr = self.escenario_verde()
+        self.guardar(321, pr)
+        threads = json.loads((self.store / "threads.json").read_text())
+        threads["data"]["repository"]["pullRequest"]["reviewThreads"]["pageInfo"] = {
+            "hasNextPage": True
+        }
+        (self.store / "threads.json").write_text(json.dumps(threads, ensure_ascii=False))
+        codigo, salida, error = self.correr(
+            "listo", "321", "--sha", HEAD321, "--repo", REPO, "--receta", str(RECETA)
+        )
+        self.assertEqual(codigo, 3)
+        self.assertIn("más de 100 hilos", salida + error)
+
+    def test_un_sha_corto_se_rechaza_en_el_borde(self):
+        # DeepSeek F8 en #330: un sha corto daba head-movido; ahora se pide el completo.
+        self.guardar(321, self.escenario_verde())
+        codigo, salida, error = self.correr(
+            "listo", "321", "--sha", HEAD321[:7], "--repo", REPO, "--receta", str(RECETA)
+        )
+        self.assertEqual(codigo, 3, salida + error)
+        self.assertNotIn("head-movido", salida)
+        self.assertIn("40", salida + error)
+
     def test_mergear_sobre_un_pr_ya_mergeado_con_otro_head_no_certifica(self):
         # DeepSeek F1 en #330: si el PR ya está MERGED con otro head, el recibo no puede
         # certificar como mergeado un sha que nunca entró.
