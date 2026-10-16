@@ -12,6 +12,7 @@ import {
   type WorkerBloque,
   validarFase,
 } from "./contrato.ts";
+import type { ArchivoRaiz, VistaRaices } from "./raices.ts";
 
 const ESC_MAP: Record<string, string> = {
   "&": "&amp;",
@@ -36,7 +37,7 @@ export function truncar(s: string, max: number): string {
 }
 
 /** El único camino al HTML para un valor dinámico: truncar primero, escapar después. */
-function t(v: unknown, max: number = TEXTO_MAX): string {
+export function t(v: unknown, max: number = TEXTO_MAX): string {
   const s = typeof v === "string" ? v : String(v ?? "");
   return esc(truncar(s, max));
 }
@@ -378,4 +379,160 @@ ${nav}
 </body>
 </html>
 `;
+}
+
+// ---------------------------------------------------------------------------
+// Raíces (SUA-06 §4.4): páginas de solo lectura de proyecciones. El tiempo
+// llega SIEMPRE por parámetro (`ahora`); el único <script> del plugin es el
+// refresh estático de acá abajo, con cero bytes de datos.
+// ---------------------------------------------------------------------------
+
+/** Texto EXACTO cuyo sha256 viaja en la CSP de las páginas de raíces. */
+export const SCRIPT_RAIZ =
+  'setInterval(function(){fetch(location.href).then(function(r){if(r.ok){location.reload();return;}document.getElementById("conexion").hidden=false;}).catch(function(){document.getElementById("conexion").hidden=false;});},60000);';
+
+/** Meta refresh (sin JS; una navegación no es fetch directive) + banner + script estático. */
+const REFRESH_HTML = `<meta http-equiv="refresh" content="300"><div id="conexion" hidden>sin conexión</div><script>${SCRIPT_RAIZ}</script>`;
+
+const CSS_RAICES = `.vieja{color:#8b93a7}
+.desconocido{color:#8b93a7}
+#conexion{background:#8a1c1c;color:#fff;padding:10px 14px;border-radius:8px;margin:0 0 14px;font-weight:600}
+.envolver{overflow-x:auto}
+.progreso{display:flex;gap:24px;flex-wrap:wrap;margin:14px 0 20px}
+.p-rot{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:#8b93a7;margin-bottom:4px}
+.p-item .barra{max-width:160px;margin:4px 0 2px}
+@media (max-width:480px){body{padding:12px}}
+`;
+
+const RAIZ_UNIDADES_TOPE = 200;
+
+export function formatearHace(ms: number): string {
+  const m = Math.max(0, ms);
+  if (m < 60000) return "menos de 1 min";
+  if (m < 3600000) return `hace ${Math.floor(m / 60000)} min`;
+  if (m < 86400000) return `hace ${Math.floor(m / 3600000)} h`;
+  return `hace ${Math.floor(m / 86400000)} d`;
+}
+
+function paginaRaices(titulo: string, cuerpo: string): string {
+  return `<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${titulo}</title>
+<style>${CSS}${CSS_RAICES}</style>
+</head>
+<body>
+${REFRESH_HTML}
+<main>
+${cuerpo}
+<footer>Solo lectura: proyecciones sistema-agentes.proyeccion.v1 que deja el emisor del host; este panel no tiene acciones.</footer>
+</main>
+</body>
+</html>
+`;
+}
+
+function frescuraRaiz(generatedAt: string, staleAfterMs: number, ahora: number): string {
+  const edad = Math.max(0, ahora - Date.parse(generatedAt));
+  return `generada ${formatearHace(edad)}${edad > staleAfterMs ? ' <span class="vieja">vieja</span>' : ""}`;
+}
+
+function celdaProgreso(v: number | null): string {
+  return v === null ? '<span class="desconocido">?</span>' : `${t(v)}%`;
+}
+
+function barraRotulada(rotulo: string, v: number | null): string {
+  const valor =
+    v === null
+      ? '<span class="desconocido">?</span>'
+      : `<div class="barra"><i style="width:${t(v, 3)}%"></i></div>${t(v)}%`;
+  return `<div class="p-item"><span class="p-rot">${rotulo}</span>${valor}</div>`;
+}
+
+function razonDeArchivo(a: ArchivoRaiz): string {
+  switch (a.estado) {
+    case "invalida":
+      return a.razones[0] ?? "inválida";
+    case "json-roto":
+      return "json roto";
+    case "enlace":
+      return "es un enlace";
+    case "fuera":
+      return "apunta fuera del directorio de raíces";
+    case "ilegible":
+      return `ilegible (${a.detalle})`;
+    default:
+      return "";
+  }
+}
+
+export function renderRaices(vista: VistaRaices, ahora: number): string {
+  if (vista.estado === "vacio") {
+    return paginaRaices("Raíces", `<h1>Raíces</h1>
+<p>sin raíces</p>`);
+  }
+  if (vista.estado === "error") {
+    return paginaRaices("Raíces", `<h1>Raíces</h1>
+<p>no se pudo leer el directorio de proyecciones (${t(vista.detalle, 60)})</p>`);
+  }
+  const filas = vista.items
+    .map((item) => {
+      const nombre = item.nav
+        ? `<a href="/runbook/tablero/raices/${encodeURIComponent(item.stem)}">${t(item.stem, 80)}</a>`
+        : t(item.stem, 80);
+      if (item.archivo.estado !== "ok") {
+        return `<tr><td>${nombre}</td><td colspan="4">proyección inválida: ${t(razonDeArchivo(item.archivo), 120)}</td></tr>`;
+      }
+      const doc = item.archivo.doc;
+      return `<tr><td>${nombre}</td><td>${frescuraRaiz(doc.generatedAt, doc.freshness.staleAfterMs, ahora)}</td><td>${celdaProgreso(doc.progress.declared)}</td><td>${celdaProgreso(doc.progress.observed)}</td><td>${celdaProgreso(doc.progress.accepted)}</td></tr>`;
+    })
+    .join("\n");
+  return paginaRaices("Raíces", `<h1>Raíces</h1>
+<div class="envolver"><table>
+<tr><th>RAÍZ</th><th>GENERADA</th><th>DECLARADO</th><th>OBSERVADO</th><th>ACEPTADO</th></tr>
+${filas}
+</table></div>`);
+}
+
+export function renderRaiz(stem: string, archivo: ArchivoRaiz, ahora: number): string {
+  if (archivo.estado !== "ok") {
+    const razones =
+      archivo.estado === "invalida"
+        ? `\n<ul class="res">${archivo.razones.map((r) => `<li>${t(r, 200)}</li>`).join("")}</ul>`
+        : "";
+    return paginaRaices(`raíz ${t(stem, 80)}`, `<h1>raíz ${t(stem, 80)}</h1>
+<p>proyección inválida${archivo.estado === "json-roto" ? ": json roto" : ""}</p>${razones}
+<p><a href="/runbook/tablero/raices">← raíces</a></p>`);
+  }
+  const doc = archivo.doc;
+  const visibles = doc.units.slice(0, RAIZ_UNIDADES_TOPE);
+  const resto = doc.units.length - RAIZ_UNIDADES_TOPE;
+  const filas = visibles
+    .map(
+      (u) => `<tr>
+<td>${t(u.unitId, 80)}</td>
+<td>${t(u.state, 60)}</td>
+<td>${t(u.host, 60)}</td>
+<td>${t(u.executor, 60)}</td>
+<td>${u.modelId === null ? "—" : t(u.modelId, 80)}</td>
+<td>${t(u.nextCheckAt, 40)}</td>
+<td>${u.error === null ? "" : t(u.error, 120)}</td>
+</tr>`,
+    )
+    .join("\n");
+  return paginaRaices(`raíz ${t(stem, 80)}`, `<h1>raíz ${t(stem, 80)}</h1>
+<p class="sub">plan ${t(doc.planRevision)} · época ${t(doc.controlEpoch)} · ${t(doc.generatedAt, 40)} (${frescuraRaiz(doc.generatedAt, doc.freshness.staleAfterMs, ahora)})</p>
+<div class="progreso">
+${barraRotulada("declarado", doc.progress.declared)}
+${barraRotulada("observado", doc.progress.observed)}
+${barraRotulada("aceptado", doc.progress.accepted)}
+</div>
+<div class="envolver"><table>
+<tr><th>UNIDAD</th><th>ESTADO</th><th>HOST</th><th>EJECUTOR</th><th>MODELO</th><th>PRÓXIMA REVISIÓN</th><th>ERROR</th></tr>
+${filas}
+${resto > 0 ? `\n<tr><td colspan="7">… y ${t(resto)} unidades más</td></tr>` : ""}
+</table></div>
+<p><a href="/runbook/tablero/raices">← raíces</a></p>`);
 }
