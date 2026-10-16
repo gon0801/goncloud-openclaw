@@ -187,9 +187,9 @@ class Route:
             return None
         if self.status != "certified":
             # Las versiones medidas de una ruta sin certificar todavía no certifican nada.
-            return RouteNotCertified(cli_version, ())
+            return RouteNotCertified(cli_version, (), self.adapter_id)
         if cli_version not in self.certified_cli_versions:
-            return RouteNotCertified(cli_version, tuple(sorted(self.certified_cli_versions)))
+            return RouteNotCertified(cli_version, tuple(sorted(self.certified_cli_versions)), self.adapter_id)
         if generation is not None and str(generation) not in self.certified_context_generations:
             certified = tuple(sorted(int(key) for key in self.certified_context_generations if key.isdigit()))
             return GenerationNotCertified(generation, certified)

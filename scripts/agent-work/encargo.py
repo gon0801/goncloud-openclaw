@@ -43,6 +43,7 @@ import contexto
 import hashlib
 import lineas
 from spool import SETTLED as OPERACIONES_CERRADAS
+from modelos import claude_por_omision
 from modelos import (MODEL_PATTERN, POLICY_FILE, PROVIDER, Billing, Catalog, CatalogStore, CatalogUnavailable,
                      ContextoIncompleto, Explicacion, HostDown, HostMismatch, ModelFilter, ModelId, ModelNotListed,
                      OperatorCitation, PerfilRechazado, PermittedModel, PolicyUnreadable, ProviderClosure,
@@ -54,7 +55,7 @@ from sesion import (ALLOWED_ROOT, COVERAGE_FILE, EXIT_NO_SCRATCH, EXIT_NO_WORKSP
 
 HOST_ID = "mac-local"
 ADAPTER_ID = "opencode"
-CLAUDE_BIN = Path(os.environ.get("AGENT_WORK_CLAUDE") or shutil.which("claude") or "claude")
+CLAUDE_BIN = claude_por_omision()
 """El binario de claude para preguntarle su versión: nunca se corre un modelo desde aquí."""
 
 

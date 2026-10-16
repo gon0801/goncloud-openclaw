@@ -8,6 +8,7 @@ p4 y p5 (el sandbox encierra Bash en el cwd y en --add-dir).
 """
 
 import json
+import os
 import shutil
 import sys
 import tempfile
@@ -309,6 +310,38 @@ class PlanClaude(unittest.TestCase):
         tools = argv[argv.index("--tools") + 1].split(",")
         self.assertNotIn("Edit", tools)
         self.assertNotIn("Write", tools)
+
+
+class BinarioDeClaude(unittest.TestCase):
+    """El canario vivo de G7 (2026-10-16): el exec de main corre sin ~/.local/bin en el
+    PATH, `which claude` no lo encuentra y preparar contestaba que la Mac no decía su
+    versión. Sin variable ni PATH, el binario es el de ~/.local/bin, donde lo instala
+    Claude Code, como opencode es /opt/homebrew/bin/opencode."""
+
+    def test_sin_path_se_usa_el_de_local_bin(self):
+        with tempfile.TemporaryDirectory() as casa:
+            local = Path(casa) / ".local/bin/claude"
+            local.parent.mkdir(parents=True)
+            local.write_text("#!/bin/sh\n")
+            local.chmod(0o755)
+            entorno = {"HOME": casa, "PATH": "/usr/bin:/bin"}
+            with mock.patch.dict(os.environ, entorno, clear=True):
+                self.assertEqual(modelos.claude_por_omision(), local)
+            with mock.patch.dict(
+                os.environ, {**entorno, "AGENT_WORK_CLAUDE": "/otro/claude"}, clear=True
+            ):
+                self.assertEqual(modelos.claude_por_omision(), Path("/otro/claude"))
+
+    def test_la_frase_de_ruta_no_certificada_nombra_al_cli_de_la_ruta(self):
+        # El canario dijo "la Mac tiene opencode sin contestar su versión" para la ruta claude.
+        for versiones in (("2.1.301",), ()):
+            with self.subTest(versiones=versiones):
+                caso = modelos.RouteNotCertified("sin contestar su versión", versiones, "claude")
+                frase, _ = modelos._frase_ruta(caso)
+                self.assertIn("claude", frase)
+                self.assertNotIn("opencode", frase)
+        frase, _ = modelos._frase_ruta(modelos.RouteNotCertified("1.18.36", ("1.18.35",)))
+        self.assertIn("opencode 1.18.36", frase)
 
 
 class HostClaude(unittest.TestCase):

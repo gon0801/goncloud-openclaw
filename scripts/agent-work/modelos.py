@@ -599,10 +599,27 @@ class WorkspaceRefused:
     why: Literal["not-absolute", "outside-root", "not-a-git-toplevel", "missing", "no-commit", "invalid"]
 
 
+def claude_por_omision() -> Path:
+    """El claude de esta Mac: AGENT_WORK_CLAUDE, el del PATH o el de ~/.local/bin, donde lo
+    instala Claude Code. El exec de main corre sin ~/.local/bin en el PATH (canario de G7,
+    2026-10-16), y sin este último paso `which` no lo encontraba."""
+    import shutil
+
+    if os.environ.get("AGENT_WORK_CLAUDE"):
+        return Path(os.environ["AGENT_WORK_CLAUDE"])
+    en_path = shutil.which("claude")
+    if en_path:
+        return Path(en_path)
+    local = Path(os.environ.get("HOME") or Path.home()) / ".local/bin/claude"
+    return local if local.is_file() else Path("claude")
+
+
 @dataclass(frozen=True)
 class RouteNotCertified:
     cli_version: str
     certified_versions: tuple[str, ...]
+    cli: str = "opencode"
+    """El CLI de la ruta: la frase lo nombra (opencode o claude)."""
 
 
 @dataclass(frozen=True)
@@ -868,10 +885,10 @@ def _frase_ambiguo(caso: NameIsAmbiguous) -> tuple[str, tuple[str, ...]]:
 
 def _frase_ruta(caso: RouteNotCertified) -> tuple[str, tuple[str, ...]]:
     if caso.certified_versions:
-        return (f"Ruta certificada para {_lista(caso.certified_versions)}, la Mac tiene opencode {caso.cli_version}.",
+        return (f"Ruta certificada para {_lista(caso.certified_versions)}, la Mac tiene {caso.cli} {caso.cli_version}.",
                 ())
-    return ("La ruta de encargos por opencode todavía no está certificada. "
-            f"La Mac tiene opencode {caso.cli_version}."), ()
+    return (f"La ruta de encargos por {caso.cli} todavía no está certificada. "
+            f"La Mac tiene {caso.cli} {caso.cli_version}."), ()
 
 
 def _frase_generacion(caso: GenerationNotCertified) -> tuple[str, tuple[str, ...]]:
