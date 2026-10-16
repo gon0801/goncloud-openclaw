@@ -59,3 +59,53 @@ DENIALS ['Write:/Users/dn/.local/state/sua-loop/mediciones/m24/fuera/w.txt', 'Re
 ```
 
 El archivo de fuera no existe y el editado sigue con su texto. `--restricted` encierra las herramientas de archivo en el cwd y en `--add-dir` (su `--help` lo dice: "confines the file tools to the working directories (--add-dir included)"), y el sandbox encierra Bash (M-23).
+
+## M-18, la ruta "encargo nativo a un agente" de punta a punta (2026-10-16, coordinador)
+
+`agentes.py sondear ingenieria` desde la Mac: `main` arma el brief con `brief.py --agente ingenieria --perfil ingenieria --contrato`, crea y admite la tarea gestionada (`target.kind=agent`), R lanza el hijo de `ingenieria` y el hijo reporta con `reporte.py` por `managed_tasks_report`.
+
+- **M-18 (G4, 471eabf8): rojo.** La tarea `87b98ddf-12b4-466f-94f1-632a6c688ff5` llegó al hijo, pero el hijo no tenía protocolo de reporte: armó `{result: {contract, typedPayload, artifacts}}` y R contestó "Managed task result is invalid". La tarea quedó admitida y sin resultado, con 0 entregas a David y `memory/` igual. De ahí salió G4b (4.5b).
+- M-18b (b7387f9b) y M-18c (9146530f): las tareas 61fa5ea9 y a1819dae llegaron a `result-recorded`, pero la sonda daba rojo por defectos suyos: buscaba el marcador en `result_json`, y la lectura del artefacto se rompía en el zsh de la Mini.
+- **M-18d (33b9c7ac): verde.** `{"ok": true, "taskId": "1682b3ab-d70b-4443-a790-8812f49e6607", "estado": "result-recorded", "marcador": true, "entregas": 0, "memoriaIgual": true}`, con el artefacto borrado.
+- **M-18e (cafe6333): verde otra vez.** La tarea fdd844fa quedó `result-recorded`, con el marcador, 0 entregas y la memoria igual. El ayudante borró el artefacto resolviendo la ruta con realpath.
+
+## M-19 y M-20, la sucesión nativa (`claw_autoupdate` de goncloud-hermes, en la Mini)
+
+- **M-19 (dry-run, solo lectura).** `python3 ~/goncloud-autoupdate/claw_autoupdate.py --openclaw ~/.openclaw/bin/openclaw --config ~/.openclaw/openclaw.json --dry-run`, salida 0. Plan: `openai/gpt-5.6-sol -> openai/gpt-6.1-sol` en defaults, adversary, ingenieria y main. Una corrida anterior lo había dejado "No cambiado": su sonda falló porque `models.providers["openai"]` no declaraba el modelo.
+- **M-20 (la primera corrida real, launchd `ai.goncloud.claw-autoupdate` a las 04:50 PDT).** Salida 0. El log literal:
+
+```
+Claw: modelos 2026-10-16
+- No cambiado: openai/gpt-5.6-sol -> openai/gpt-6.1-sol (sonda (xhigh): Thinking level "xhigh" is not supported for openai/gpt-6.1-sol. Use one of: minimal, low, medium, high, ultra.).
+```
+
+Encontró el sucesor y lo sondeó antes de promover. La sonda usó el nivel de razonamiento del modelo actual, que el sucesor no acepta, y no promovió: falla cerrada, como pide I10 ("canario fallido no se promueve"). La causa es distinta de la de M-19. Las dos quedan como filas de goncloud-hermes en `followups.md`.
+
+## M-22, una promoción en la ruta por CLI con una línea de fixture (2026-10-16, coordinador)
+
+La línea del modelo por omisión de verdad, `zai-coding-plan/glm-{}-flash`, no tiene sucesor en el catálogo (`glm-5.3-flash` es la única versión). Para medir la promoción completa, un checkout aparte cambió solo la línea de `glm` en `proveedores-permitidos.json` a `zai-coding-plan/glm-{}` desde `zai-coding-plan/glm-5.2`. El catálogo real lista `glm-5.2` y `glm-5.3`. Se usó un `--state-root` vacío y aparte, con los avisos apagados. Después, `encargo.py sucesion --aplicar` con el R construido:
+
+```
+{"ok": true, "accion": "promovido", "linea": "zai-coding-plan/glm-{}", "promovido": "zai-coding-plan/glm-5.3", "anterior": "zai-coding-plan/glm-5.2", ..., "avisoPendiente": "aviso pendiente: avisos apagados (AGENT_WORK_AVISOS no es 1)"}
+```
+
+El canario fue el caso de ingeniería del banco real, con opencode y `glm-5.3`:
+
+```
+BANCO_E2E case=ingenieria task=cefd442d-970a-41c5-8e74-da1fae4f11b5 conducta=ok suite_repo=pasa
+BANCO_E2E case=ingenieria desenlace=verde causa=ninguna
+Ran 1 test in 195.846s
+OK
+```
+
+Después, `encargo.py proveedores` sobre ese estado muestra el efectivo `zai-coding-plan/glm-5.3 (promovido desde sucesion.json)`, sin editar `proveedores-permitidos.json`. El aviso quedó pendiente porque los avisos se apagaron a propósito.
+
+## La ventana viva de SUA-04 (2026-10-16, coordinador)
+
+- El host de encargos pasó a `main` (`25f6d941`) y se reinició.
+- En la Mini, `managedTasks.hosts["mac-local"].adapters` pasó de `["opencode"]` a `["opencode", "claude"]` con `openclaw config patch` (el dry-run validó antes). El gateway lo tomó en caliente: el host dejó de recibir el rechazo del claim de claude sin reiniciar el gateway.
+- `instalar-mac.sh` corrió con `LAUNCHCTL_BIN=/usr/bin/true`, porque el vigilante `tmux-activity-watch` sigue apagado a propósito: escribió los archivos y no cargó nada. Después, `launchctl bootstrap gui/501 ~/Library/LaunchAgents/ai.goncloud.agent-work-sucesion.plist` cargó a mano solo `diario` (05:30). Su primera corrida real, el 2026-10-16 a las 05:30, salió con 0: `{"ok": true, "sucesion": {"accion": "nada-que-probar", ...}, "fuentes": {"ok": true, ..., "aviso": {"vencen": [], "enviado": false, "ultimoAviso": null}}}`.
+- La skill `encargo-cli` de `main` quedó publicada en la Mini con los pasos de `solicitar` (sha1 `cd21aa5c`, con respaldo). `agent-dispatch` ya coincidía con el repo.
+- **Canario vivo de la ruta claude.** `main` lo pidió "por CLI con claude opus" sobre un repo de juguete. El primer intento salió rojo en `preparar`: el exec de `main` no tiene `~/.local/bin` en el PATH, así que no encontraba `claude`, y la frase nombraba a opencode. Lo arregló #326. En el segundo intento, la tarea `b8c5a12d-5276-4099-91b4-87ff10ffc6b1` tuvo modelo `anthropic/opus`, cobro `subscription`, estado `acknowledged`, cierre `AbsenceVerified`, `proveedoresLlamados: ["anthropic"]` y `permisosNegados: []`. El init de claude trajo `model: claude-opus-5-5`, las siete herramientas del perfil y `mcp_servers: []`, y el repo quedó arreglado con su prueba verde.
+
+Nota de CodeRabbit en #324: M-21 no registró conectores con `--setting-sources project` y M-24 sí, en otro repo y con los conectores de claude.ai cargados en la cuenta. La ruta usa `--restricted --strict-mcp-config`, que M-24 midió sin MCP, así que la diferencia no cambia la ruta. Queda sin explicar.
