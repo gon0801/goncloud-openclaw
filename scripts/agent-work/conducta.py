@@ -152,13 +152,37 @@ def _lee(paso: Paso, sufijo: str) -> bool:
 
 def _texto_de(contenido: object) -> str:
     """El texto de un toolResult nativo: la unión de los `text` de su contenido. Lo que no
-    tiene esa forma (contenido ausente, piezas sin texto) aporta vacío, no rompe."""
+    tiene esa forma (contenido ausente, piezas sin texto) aporta vacío, no rompe.
+
+    Una llamada que llegó por `tool_search` devuelve ese texto como un JSON con la
+    forma del resultado interno: la salida es su `details.aggregated` y, si no lo
+    trae, la unión de los `text` de su `content`. Lo que no es un JSON así queda
+    como está."""
     trozos = []
     if isinstance(contenido, list):
         for pieza in contenido:
             if isinstance(pieza, dict) and pieza.get("text") is not None:
                 trozos.append(str(pieza["text"]))
-    return "".join(trozos)
+    texto = "".join(trozos)
+    try:
+        interno = json.loads(texto)
+    except ValueError:
+        return texto
+    if not isinstance(interno, dict):
+        return texto
+    if isinstance(interno.get("result"), dict):
+        interno = interno["result"]
+    detalles = interno.get("details")
+    if isinstance(detalles, dict) and isinstance(detalles.get("aggregated"), str):
+        return detalles["aggregated"]
+    partes = interno.get("content")
+    if isinstance(partes, list):
+        return "".join(
+            str(pieza["text"])
+            for pieza in partes
+            if isinstance(pieza, dict) and pieza.get("text") is not None
+        )
+    return texto
 
 
 def _detalle_de_lista(argumentos: dict) -> str:
@@ -181,7 +205,11 @@ def _detalle_de_lista(argumentos: dict) -> str:
 
 
 def _paso_nativo(nombre: str, argumentos: dict, salida: str) -> Paso:
-    """Una llamada nativa traducida al vocabulario que `juzgar` ya conoce de opencode."""
+    """Una llamada nativa traducida al vocabulario que `juzgar` ya conoce de opencode.
+
+    Las herramientas que llegan por `tool_search` traen el nombre con espacio de
+    nombres (`openclaw:core:progress_card`): cuenta su última parte."""
+    nombre = nombre.rsplit(":", 1)[-1]
     if nombre == "read":
         ruta = argumentos.get("path")
         return Paso("read", str(ruta) if ruta else None, "", salida)
