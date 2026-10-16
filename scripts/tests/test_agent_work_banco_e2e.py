@@ -315,6 +315,13 @@ class Briefs(unittest.TestCase):
         self.assertFalse(nombra_procedencia("saluda.py devuelve hola\ntest-saluda.py espera hello\n"))
         self.assertFalse(nombra_procedencia("saluda.py:2 devuelve hola\nla prueba espera hello\n"))
 
+    def test_the_expected_generation_comes_from_the_current_manifest(self):
+        # G5d-r3: assert_package_and_flota espera la generación del manifiesto
+        # vigente, no un literal: con la generación 2 falló contra flota.json.
+        manifiesto = contexto.leer_json(contexto.MANIFIESTO)
+        self.assertEqual(generacion_esperada(), manifiesto["generation"])
+        self.assertEqual(manifiesto["generation"], 2)
+
     def test_artifact_path_reads_what_the_host_recorded(self):
         # E: el inspect de R devuelve artifactRef como artifact:<sha256>; la ruta real es
         # la que el host grabó en results/<op>.json.
