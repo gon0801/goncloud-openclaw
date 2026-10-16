@@ -442,10 +442,14 @@ def _valida_perfiles(documento: object) -> dict:
     return documento
 
 
-def perfiles(checkout: Path) -> dict:
-    """`encargo.py perfiles`. Solo lectura: los perfiles del checkout en una línea, para que quien
-    pide vea qué especialidades existen, qué rutas las atienden y qué agentes siguen sin perfil
-    (SUA-03, 4.4)."""
+def perfiles(checkout: Path, mini: str | None = None, correr=None) -> dict:
+    """`encargo.py perfiles [--mini [user@host]]`. Solo lectura: los perfiles del checkout en una
+    línea, para que quien pide vea qué especialidades existen, qué rutas las atienden y qué
+    agentes siguen sin perfil (SUA-03, 4.4).
+
+    Con --mini suma los estados de 4.5 contra la lista viva (alta-sin-registrar, retirado y
+    perfil-incompleto, con su frase): por ssh si trae user@host, o con el openclaw local si va
+    solo, que es como lo corre main en la Mini. Sin --mini, la salida de hoy."""
     documento = _valida_perfiles(contexto.leer_json(Path(checkout) / CONTEXTO_DIR / "perfiles.v1.json"))
     filas = []
     for perfil in documento["profiles"]:
@@ -458,8 +462,28 @@ def perfiles(checkout: Path) -> dict:
             "competencia": {clave: {"status": dato.get("status"), "validUntil": dato.get("validUntil")}
                             for clave, dato in perfil["competence"].items()},
         })
-    return {"ok": True, "perfiles": filas,
-            "agentesSinPerfil": [agente["agentId"] for agente in documento.get("agents", ())]}
+    respuesta = {"ok": True, "perfiles": filas,
+                 "agentesSinPerfil": [agente["agentId"] for agente in documento.get("agents", ())]}
+    if mini is not None:
+        import agentes as agentes_mod
+        if correr is None:
+            correr = agentes_mod._ssh(mini) if mini != "local" else agentes_mod._local()
+        vivos = agentes_mod.lista_viva(mini, correr)
+        coverage = contexto.leer_json(Path(checkout) / COVERAGE_FILE)
+        estados = agentes_mod.descubrir(documento, vivos, coverage.get("requesters", ()))
+        respuesta["estados"] = {
+            "alta-sin-registrar": {
+                "frase": "está en la Mini y G no lo conoce: entra por un PR que lo pone en agents con sin-perfil",
+                "agentes": [f["agentId"] for f in estados if f["estado"] == "alta-sin-registrar"]},
+            "retirado": {
+                "frase": "G lo conoce y la Mini ya no lo tiene: la siguiente publicación lo olvida",
+                "agentes": [f["agentId"] for f in estados if f["estado"] == "retirado" and "perfil" not in f]},
+            "perfil-incompleto": {
+                "frase": "un perfil nombra en su ruta un agente que la Mini no tiene",
+                "perfiles": [{"perfil": f["perfil"], "agentId": f["agentId"]}
+                             for f in estados if f["estado"] == "perfil-incompleto"]},
+        }
+    return respuesta
 
 
 def _session(provider: ProviderId | None,
@@ -821,7 +845,9 @@ def _parser() -> argparse.ArgumentParser:
     prepare.add_argument("--perfil", help="perfil de trabajador para la cabecera del brief; sin él, un encargo sin paquete")
     state = commands.add_parser("estado", help="el latido del host de encargos, o lo que corrió una tarea")
     state.add_argument("--tarea", metavar="TASKID")
-    commands.add_parser("perfiles", help="los perfiles del checkout y los agentes sin perfil, en una línea JSON")
+    perfiles_cmd = commands.add_parser("perfiles", help="los perfiles del checkout y los agentes sin perfil, en una línea JSON")
+    perfiles_cmd.add_argument("--mini", nargs="?", const="local", default=None,
+                              help="suma alta-sin-registrar, retirado y perfil-incompleto contra la lista viva: user@host por ssh, o solo --mini en la Mini")
     listing = commands.add_parser("proveedores", help="qué proveedores pueden correr, cómo cobran y qué falta")
     listing.add_argument("--refrescar", action="store_true", help="pide a opencode que vuelva a bajar su lista")
     allow = commands.add_parser("permitir", help="escribe un permiso, un filtro o el id de un permiso que existe")
@@ -868,7 +894,7 @@ def _run_estado(args: argparse.Namespace, where: dict, now: float) -> int:
 
 def _run_perfiles(args: argparse.Namespace, where: dict, now: float) -> int:
     try:
-        respuesta = perfiles(checkout=where["checkout"])
+        respuesta = perfiles(checkout=where["checkout"], mini=args.mini)
     except (OSError, ValueError, KeyError, TypeError) as error:
         print(
             json.dumps(

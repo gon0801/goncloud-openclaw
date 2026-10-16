@@ -495,6 +495,21 @@ class Perfiles(Mac):
         self.assertEqual([set(p) for p in respuesta["perfiles"]][:1],
                          [{"id", "purpose", "resultContracts", "rutas", "writesSource", "competencia"}])
 
+    def test_perfiles_with_mini_adds_the_three_states(self):
+        # SUA-04 (4.5): con --mini y un ssh falso, perfiles suma alta, retiro e incompleto.
+        viva = [{"id": "main", "workspace": "/w/main"}, {"id": "ingenieria", "workspace": "/w/i"},
+                {"id": "nuevo", "workspace": "/w/n"}]
+
+        def fake(argv, entrada=None):
+            return 0, json.dumps(viva), ""
+        respuesta = encargo.perfiles(checkout=self.checkout, mini="u@h", correr=fake)
+        self.assertEqual(respuesta["estados"]["alta-sin-registrar"]["agentes"], ["nuevo"])
+        # reviewer es también un solicitante de coverage.json: no es trabajador ni retirado aquí.
+        self.assertIn("amazon", respuesta["estados"]["retirado"]["agentes"])
+        self.assertIn({"perfil": "amazon", "agentId": "amazon"},
+                      respuesta["estados"]["perfil-incompleto"]["perfiles"])
+        self.assertNotIn("estados", encargo.perfiles(checkout=self.checkout))
+
     def test_an_unreadable_profiles_file_is_an_error_and_not_a_traceback(self):
         (self.checkout / "scripts" / "agent-work" / "contexto" / "perfiles.v1.json").write_text("{")
         code, out, err = self.cli("perfiles")
