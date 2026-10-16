@@ -58,16 +58,16 @@ Documentos que manda este diseño y que no cambia:
 
 ### 4.1 El derivador
 
-`scripts/agent-work/proyeccion.py derivar <snapshot.json>` y la función `derivar(snapshot, ahora, stale_after_ms, intervalo_ms) -> dict`, con biblioteca estándar, que corre en la Mac y en la Mini (Python 3.9). `stale_after_ms` y `intervalo_ms` los pasa quien llama (M1): no salen del snapshot.
+`scripts/agent-work/proyeccion.py derivar <snapshot.json>` y la función `derivar(snapshot, ahora, stale_after_ms, intervalo_ms, notados) -> dict`, con biblioteca estándar, que corre en la Mac y en la Mini (Python 3.9). `stale_after_ms`, `intervalo_ms` y `notados` (el mapa `exceptionId → notadoEn` del checkpoint del emisor, vacío si no hay) los pasa quien llama: no salen del snapshot.
 
-- `rootId`, `planRevision` y `controlEpoch` salen de `meta`, y `generatedAt` es `ahora`.
-- `progress`: con los criterios de aceptación de las unidades del plan vigente, `declared` = el porcentaje de unidades con al menos un intento reportado (`reported` o más); `observed` = el porcentaje con un claim `passed` en cada criterio de verificación; `accepted` = el porcentaje en estado `accepted` con aceptación integrada vigente. Sin criterios válidos, `null` (el desconocido), nunca 0. Los pesos son iguales por unidad, salvo que el plan los fije (diseño del sistema unificado, líneas 324-330).
+- `schema` es el literal `sistema-agentes.proyeccion.v1`; `rootId`, `planRevision` y `controlEpoch` salen de `meta`, y `generatedAt` es `ahora`.
+- `progress`: con los criterios de aceptación de las unidades del plan vigente, `declared` = el porcentaje de unidades con al menos un intento reportado (`reported` o más); `observed` = el porcentaje con un claim `passed` en cada criterio de verificación; `accepted` = el porcentaje en estado `accepted` con aceptación integrada vigente. Cada porcentaje es un entero de 0 a 100 truncado (2 de 3 es 66, como el fixture `proyeccion/valida.json`, porque el validador exige enteros, `contrato.py:411`). Sin criterios válidos, `null` (el desconocido), nunca 0. Los pesos son iguales por unidad, salvo que el plan los fije (diseño del sistema unificado, líneas 324-330).
 - `units[]`: una fila por unidad del plan, con su último intento (M2):
   - `state`: el del último `UnitDocument`, o `pending`/`ready` para las de `unbound`.
   - `executor` y `host`: de `assignment.target`. Con `kind: "cli"`, `executor` es `cli:<adapterId>` y `host` es `hostId`; con `kind: "agent"`, `executor` es `agent:<agentId>` y `host` es el host del gateway (el que corre `leer`). Sin intento, `executor` `"sin-asignar"` y `host` el del gateway.
   - `modelId`: `null` (el snapshot no lo trae; vendrá cuando la flota llegue a R, fila en §7).
   - `error`: la clase del último incidente de esa unidad, o `null`.
-  - `nextCheckAt` (B1: el contrato lo pide en cada fila y no admite `null`): es la próxima vez que el sistema mira esa unidad. Para una unidad con una excepción abierta sin respuesta, el reaviso que lleva el emisor en su checkpoint (`notadoEn + renoticeAfterMs`, 4.2), porque el `noticed_at` de R no viaja en el snapshot. Para cualquier otra, incluidas las cerradas mientras la raíz siga abierta, `ahora + intervalo_ms` (la siguiente pasada del emisor). Si la raíz trae `meta.authority.deadline` y es anterior, ese. Es grueso a propósito, y la prueba de 4.1 fija los tres casos.
+  - `nextCheckAt` (B1: el contrato lo pide en cada fila y no admite `null`): es la próxima vez que el sistema mira esa unidad. Para una unidad con una excepción abierta sin respuesta, `notados[exceptionId] + renoticeAfterMs` (el emisor lo guarda al avisar, 4.2), porque el `noticed_at` de R no viaja en el snapshot; si la excepción todavía no está en `notados`, `ahora` (se avisa en esta misma pasada). Para cualquier otra, incluidas las cerradas mientras la raíz siga abierta, `ahora + intervalo_ms` (la siguiente pasada del emisor). Si la raíz trae `meta.authority.deadline` y es anterior, ese. Es grueso a propósito, y la prueba de 4.1 fija los tres casos.
 - `freshness.staleAfterMs`: `stale_after_ms`, que `leer` y `pasar` toman de `managedTasks.runTimeoutSeconds` de la configuración del gateway (en milisegundos). Usar el tiempo de una tarea como frescura del panel es una decisión: una proyección sin pasar en más que eso ya no dice lo que pasa.
 - Allowlist: solo los campos del contrato (la prueba del contrato ya rechaza un campo extra). Nada de prompts, argv, transcripciones ni rutas absolutas; los textos van recortados y sin caracteres de control.
 
@@ -79,7 +79,7 @@ Método nuevo de R, `managedTasks.root.list` (operator.admin, como `root.read`):
 
 ### 4.2 El emisor de las raíces
 
-Una pasada (`proyeccion.py pasar`), igual en la Mac y en la Mini:
+Una pasada (`proyeccion.py pasar`), igual en la Mac y en la Mini. Toma un candado `flock` no bloqueante sobre `<dir>/.pasada.lock` (como `.host-publish.lock` de `ProgressPublisher`, `native_gateway.py:924-936`): si otro host de la misma máquina tiene la pasada, esta se salta, así nadie lee el checkpoint antes de que avance y David no recibe el aviso dos veces.
 
 1. Lista las raíces abiertas (`managedTasks.root.list`), las lee y deriva cada proyección.
 2. **Consolidado**: si hay pendientes y pasaron 30 min desde el último consolidado avisado, arma un mensaje con todas las raíces vivas. Dos tareas comparten el mismo reloj y el mismo consolidado, y cerrar una no apaga la otra (plan, "Verificar").
@@ -87,11 +87,13 @@ Una pasada (`proyeccion.py pasar`), igual en la Mac y en la Mini:
 4. Envía por `avisar.py`, con la misma compuerta. `avisar` pasa a devolver el `messageId` que trae la salida `--json` de `openclaw message send` (M3), y el checkpoint (`<dir>/checkpoint.json`, escritura atómica) avanza solo con un `messageId` entero positivo, como ya lo exige `avance-tick.mjs:122-128`. Un envío fallido no lo adelanta, y la pasada siguiente reintenta.
 5. Escribe la última proyección de cada raíz en `<dir>/proyecciones/<rootId>.json`, que es lo que lee el panel. `<dir>` (M5): en la Mini, `<stateDir del plugin tablero-runbook>/raices/`; el plugin gana `raicesDir` en su `configSchema`, con ese valor por omisión. En la Mac, `~/.local/state/agent-work-host/raices/`. El panel y los avisos leen el mismo snapshot de la misma pasada (plan, paso 3).
 
-En la Mac, el host de encargos llama a la pasada en su bucle, como hoy a `ProgressPublisher`. En la Mini, un cron nativo de tipo comando (payload `command` con su argv, que corre desacoplado sin modelo ni sesión: `src/cron/persisted-shape.ts:180-215`, el mismo patrón del cron `avance-tareas`; M4) la corre cada 5 min (el latido del diseño del sistema unificado, líneas 333-336). Hasta que SUA-09O encienda las raíces, la pasada no encuentra ninguna raíz y no hace nada.
+En la Mac, el host de encargos llama a la pasada en su bucle, como hoy a `ProgressPublisher`. En la Mini, un cron nativo de tipo comando (payload `command` con su argv, que corre desacoplado sin modelo ni sesión: `src/cron/persisted-shape.ts:180-215`, el mismo patrón del cron `avance-tareas`; M4) la corre cada 5 min (el latido del diseño del sistema unificado, líneas 333-336). El argv del cron es `env AGENT_WORK_AVISOS=1 python3 <checkout>/scripts/agent-work/proyeccion.py pasar ...`: la compuerta de `avisar.py` la pone el job, como el plist de sucesión la pone en la Mac. Hasta que SUA-09O encienda las raíces, la pasada no encuentra ninguna raíz y no hace nada.
 
 ### 4.3 El ruido de "get no devolvió documento"
 
-`progress-events.py publish` distingue una corrida que el tablero no conoce (con un `runbook.progress.get` que conteste `desconocida` tres veces seguidas en pasadas distintas) y archiva su cola en `archivo-<fecha>/` con una línea en el log, en vez de reintentar para siempre. El plugin no se toca. Esto cierra la fila B16 de `followups.md`.
+Primero el plugin (es lo que pide la fila B16 de `followups.md`): `runbook.progress.get` contesta una razón propia, `sin-registro`, cuando no hay registro ni documento legado de esa corrida, distinta de `desconocida`, que se queda para el candado vencido y el registro ilegible (`index.ts:318-326`, `progress-store.ts:44-74`). El plugin se publica en el gateway de la Mini como cualquier cambio de `tablero-runbook`.
+
+Después, `progress-events.py publish` archiva la cola de una corrida (la mueve a `archivo-<fecha>/` con una línea en el log) solo cuando `get` contesta `sin-registro`. Con `desconocida` hace lo de hoy: deja la cola y la pasada siguiente reintenta, porque puede ser una corrida viva con el candado ocupado. No hace falta contar pasadas: la razón ya es inequívoca. Esto cierra la fila B16.
 
 ### 4.4 La vista de solo lectura
 
@@ -108,7 +110,9 @@ Una página nueva del plugin `tablero-runbook`, `/runbook/tablero/raices` (la li
 | Frescura, corrupción, PID reutilizado, métricas ausentes | Un snapshot viejo sale vencido; un JSON roto es un error con nombre; las métricas que faltan son `null`. El PID reutilizado ya lo cubre el host (SUA-03). |
 | Secretos y XSS sintéticos | Un snapshot con `<script>`, una llave falsa y una ruta absoluta en un texto: la proyección los recorta o los rechaza y la vista los escapa. |
 | Rutas maliciosas (I17) | `/runbook/tablero/raices/..%2F..%2Fx` y un `rootId` con `/` contestan 400 y no leen nada fuera de `raicesDir`. |
-| `nextCheckAt` siempre definido | `derivar` con una unidad viva, una con excepción abierta (con y sin `notadoEn` en el checkpoint) y una cerrada: los tres valores esperados, ninguno `null`. |
+| `nextCheckAt` siempre definido | `derivar` con una unidad viva, una con excepción abierta (con y sin su `exceptionId` en `notados`) y una cerrada: los valores esperados, ninguno `null`. |
+| Un emisor por máquina | Dos pasadas a la vez sobre el mismo `<dir>`: una se salta por el candado y David recibe un solo aviso. |
+| Colas de corridas desconocidas | `get` con `sin-registro` archiva la cola; con `desconocida` (candado o registro ilegible) la deja y reintenta. |
 | Teclado, móvil, error, offline, vacío | En el panel elegido (§8): capturas de escritorio y celular de cada estado, como en M-26. |
 | Sin OpenGrokBot | Un grep de candado: ninguna rebanada lo instala ni lo nombra fuera de texto histórico. |
 
@@ -119,7 +123,7 @@ Una página nueva del plugin `tablero-runbook`, `/runbook/tablero/raices` (la li
 | P0 | 4.1b, `managedTasks.root.list` en R, con su prueba y la compuerta de R. | — |
 | P1 | 4.1, el derivador, con sus fixtures y la prueba del contrato. | — |
 | P2 | 4.2, el emisor y su checkpoint (con el `messageId` de `avisar`), en la Mac (host) y la Mini (cron nativo de comando, sin efecto hasta SUA-09O). | P0, P1 |
-| P3 | 4.3, el ruido de las colas desconocidas. | — |
+| P3 | 4.3: la razón `sin-registro` en el plugin (y su publicación en el gateway), y el archivado en `progress-events.py`. | — |
 | P4 | 4.4, la página del plugin `tablero-runbook`, con sus capturas de escritorio y celular. | P1, P2 |
 | P5 | La evidencia de M-26 en el repo (`docs/evidence/sistema-agentes-unificado/SUA-06-lobsterboard.md` y sus capturas), el recibo `SUA-06.md` y las filas. | P1 a P4 |
 
