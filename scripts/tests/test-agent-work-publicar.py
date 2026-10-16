@@ -376,6 +376,24 @@ class PublicadorNativo(unittest.TestCase):
         self.publicar("revertir")
         self.assertIn(b"linea del duenyo", ruta.read_bytes())
 
+    def test_crash_en_la_primera_publicacion_y_edicion_del_dueno_no_se_certifica(self):
+        # DeepSeek F1 en #323: con el estado vacío (primera publicación cortada) el guardia
+        # tampoco puede certificar una línea del dueño escrita antes de reaplicar.
+        self.armar()
+        self.publicar("leer")
+        codigo, _ = self.aplicar_con_crash_antes_del_estado()
+        self.assertEqual(codigo, 3)
+        editado = self.ids[0]
+        ruta = self.home / "workspaces" / editado / "AGENTS.md"
+        ruta.write_bytes(b"linea del duenyo\n" + ruta.read_bytes())
+        self.publicar("leer")
+        codigo, aplicar = self.publicar("aplicar")
+        self.assertEqual(aplicar["agentes"][editado], "conflicto: cambió después de publicar")
+        for otro in self.ids[1:]:
+            self.assertEqual(aplicar["agentes"][otro], "igual")
+        self.publicar("revertir")
+        self.assertIn(b"linea del duenyo", ruta.read_bytes())
+
     def test_un_cierre_sigue_cerrado_tras_la_reversa(self):
         # I19 (diseño 4.10): la política de proveedores vive fuera del paquete. Ni la
         # publicación la lleva ni aplicar o revertir la escriben en el home, así que una

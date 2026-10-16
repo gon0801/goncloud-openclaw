@@ -645,12 +645,15 @@ def aplicar_en_la_mini(publicacion: Path, home: Path, agentes_json: Path | None)
             conflictos += 1
             continue
         if contenido == actual:
-            rezagado = estado["bloques"].get(identificador) not in (
-                None,
-                sha256hex(bloques[identificador]),
-            )
-            if rezagado and not _fuera_igual_al_respaldo(
-                actual, suya / gen / "workspaces" / f"{identificador}.AGENTS.md"
+            # La misma condición con que más abajo se certifica (DeepSeek F1 en #323): el
+            # estado vacío de una primera publicación cortada también va rezagado. Solo la
+            # vuelta de un retirado, sin foto de esta generación, sigue su camino de siempre.
+            rezagado = estado["bloques"].get(identificador) != sha256hex(bloques[identificador])
+            foto = suya / gen / "workspaces" / f"{identificador}.AGENTS.md"
+            if (
+                rezagado
+                and (foto.exists() or not datos_retiro)
+                and not _fuera_igual_al_respaldo(actual, foto)
             ):
                 # CodeRabbit en #322: lo que está fuera del bloque cambió desde la foto que
                 # el apply cortado guardó. Es del dueño: certificarlo haría que una reversa

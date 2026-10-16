@@ -785,6 +785,13 @@ class Fuentes(Mac):
         self.assertFalse((self.state / "fuentes.json").exists())
         # Con los avisos apagados no hay fallo: es la corrida a mano de siempre.
         self.assertIs(self.correr_fuentes(aviso=True)["ok"], True)
+        # Y por la línea de comandos el código de salida no contradice el JSON (DeepSeek F2
+        # en #323).
+        with mock.patch.object(encargo.aviso_mod, "avisar", side_effect=enviar), \
+                mock.patch.object(encargo.time, "time", return_value=self.AHORA.timestamp()):
+            code, out, err = self.cli("fuentes", "--aviso")
+        self.assertEqual(code, 3, out + err)
+        self.assertIs(json.loads(out)["ok"], False)
 
     def test_menos_de_siete_dias_no_llama_a_avisar(self):
         viejo = self.AHORA.timestamp() - 3 * 86400

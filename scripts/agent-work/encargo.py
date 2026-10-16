@@ -1547,7 +1547,7 @@ def _run_fuentes(args: argparse.Namespace, where: dict, now: float) -> int:
         print(json.dumps({"ok": False, "error": mensaje}, ensure_ascii=False), file=sys.stderr)
         return 3
     print(json.dumps(respuesta, ensure_ascii=False))
-    return 0
+    return 0 if respuesta.get("ok") else 3
 
 
 def _run_proveedores(args: argparse.Namespace, where: dict, now: float) -> int:
