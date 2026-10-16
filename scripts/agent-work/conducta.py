@@ -312,7 +312,7 @@ def _paso_claude(nombre: str, entrada: dict, salida: str) -> Paso:
         return Paso("bash", None, str(entrada.get("command") or ""), salida)
     if nombre == "TaskCreate":
         return Paso("todowrite", None, str(entrada.get("subject") or ""), salida)
-    if nombre == "Task":
+    if nombre in ("Task", "Agent"):
         return Paso("edit", None, str(entrada.get("description") or ""), salida)
     return Paso(nombre.lower(), str(ruta) if ruta else None, "", salida)
 

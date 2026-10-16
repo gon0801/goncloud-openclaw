@@ -353,6 +353,17 @@ class HostClaude(unittest.TestCase):
         )
 
     def test_el_host_planea_y_arma_el_argv_de_claude(self):
+        # El plan del host lee la fuente real del paquete (las skills de pstack de esta
+        # Mac); el runner de CI no la tiene (CI de #324), como las pruebas de ruta viva.
+        manifiesto = contexto.leer_json(ROOT / "scripts/agent-work/contexto/poteto.v1.json")
+        fuente = contexto.fuente_del_paquete(manifiesto)
+        faltan = [
+            a["path"]
+            for a in manifiesto.get("files", ())
+            if isinstance(a, dict) and not (Path(fuente) / a.get("path", "")).is_file()
+        ]
+        if not Path(fuente).is_dir() or faltan:
+            self.skipTest(f"sin la fuente del paquete en {fuente}")
         run_host = self.run_host()
         (self.tmp / "run").mkdir(exist_ok=True)
         plan = run_host.plan(
@@ -379,6 +390,20 @@ class HostClaude(unittest.TestCase):
         self.assertEqual(run_host.catalogo_para("claude").cli_version, "sin contestar su versión")
         run_host.claude_bin = bueno
         self.assertEqual(run_host.catalogo_para("claude").cli_version, "2.1.301")
+
+    def test_la_version_de_claude_se_relee_pasada_la_ventana(self):
+        # DeepSeek F7 en #324: el host es un demonio; un `claude update` cambia la versión.
+        import native_gateway
+
+        reloj = {"t": 1000.0}
+        run_host = self.run_host(clock=lambda: reloj["t"])
+        self.assertEqual(run_host.catalogo_para("claude").cli_version, "2.1.301")
+        self.claude_falso.write_text(
+            '#!/bin/sh\ncase "$*" in --version) echo "2.1.400 (Claude Code)";; *) exit 64;; esac\n'
+        )
+        self.assertEqual(run_host.catalogo_para("claude").cli_version, "2.1.301")
+        reloj["t"] += native_gateway.CATALOG_RECHECK_SECONDS
+        self.assertEqual(run_host.catalogo_para("claude").cli_version, "2.1.400")
 
     def test_un_claim_no_autorizado_no_corta_la_pasada(self):
         # B2 de G7-r3: el gateway autoriza por host una lista de adaptadores; si

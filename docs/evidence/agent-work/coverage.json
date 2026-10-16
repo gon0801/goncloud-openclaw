@@ -56,7 +56,7 @@
         "directoryGuard": {
           "rule": "sandbox de claude (M-23): Bash escribe en el cwd y en las carpetas de --add-dir (la carpeta de la corrida); --restricted --strict-mcp-config --tools deja en pie solo las herramientas del perfil (M-24: con --setting-sources project el settings del repo corría hooks, sumaba permisos y traía los conectores de la cuenta); dontAsk niega las herramientas fuera de --allowed-tools",
           "evidence": "M-23 (artifacts/SUA04-G7/RESULTADO.md y p4.jsonl/p5.jsonl) y M-24 (mediciones/m24/RESULTADO.md, restricted.jsonl y restricted-tools.jsonl)",
-          "limitation": "Medido con Bash, Write, Edit, TaskCreate y el hijo de Task en carpetas locales (M-21, M-23 y banco de G7); el sandbox deja escribir en /tmp (M-24, punto 3). La generación 1 del paquete no se certifica para claude: la ruta nació con la 2."
+          "limitation": "Medido con Bash (sandbox, M-23), Write y Edit fuera de la carpeta (negados por --restricted, M-24 punto 6), TaskCreate y el hijo de Task (banco de G7); el sandbox deja escribir en /tmp (M-24, punto 3). La generación 1 del paquete no se certifica para claude: la ruta nació con la 2."
         }
       }
     }

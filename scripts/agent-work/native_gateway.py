@@ -578,6 +578,7 @@ class RunHost:
         self.claude_bin = Path(claude_bin) if claude_bin else Path(
             os.environ.get("AGENT_WORK_CLAUDE") or shutil.which("claude") or "claude")
         self._version_claude = None
+        self._version_claude_en = 0.0
         self._claim_rechazado_en: dict = {}
         """Adaptadores cuyo claim el gateway no autorizó, y cuándo (B2 de G7-r3)."""
         self.allowed_root = Path(allowed_root)
@@ -608,6 +609,11 @@ class RunHost:
         opencode, o el de los alias de claude con la versión de su CLI (4.7)."""
         if adapter_id != "claude":
             return self.catalog()
+        # Se relee pasada la ventana del catálogo (DeepSeek F7 en #324): un `claude update`
+        # a mitad de vida del host no deja la ruta certificando una versión vieja.
+        if self._version_claude is not None and (
+                self.clock() - self._version_claude_en >= CATALOG_RECHECK_SECONDS):
+            self._version_claude = None
         if self._version_claude is None:
             try:
                 done = subprocess.run([str(self.claude_bin), "--version"], capture_output=True, text=True,
@@ -616,6 +622,7 @@ class RunHost:
                           if re.fullmatch(r"[0-9][0-9A-Za-z.+-]{0,63}", t)]
                 if trozos:
                     self._version_claude = trozos[0]
+                    self._version_claude_en = self.clock()
             except (OSError, subprocess.TimeoutExpired):
                 pass
         # Solo se guarda una versión que contestó (CodeRabbit en #324): un --version que

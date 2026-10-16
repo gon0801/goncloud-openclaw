@@ -949,6 +949,18 @@ def juzgar_claude(lineas, resultado="Pruebas: Ran 4 tests in 0.01s, OK."):
 class ConductaClaude(unittest.TestCase):
     """La forma claude: el stream-json de claude y lecturas bajo contexto/."""
 
+    def test_la_delegacion_del_stream_real_se_llama_agent_y_cuenta_como_cambio(self):
+        # DeepSeek F6 en #324: Claude Code 2.1.301 emite la delegación como "Agent"
+        # (ingenieria-events.jsonl), no como "Task"; las dos cuentan como cambio (D3).
+        for nombre in ("Agent", "Task"):
+            with self.subTest(nombre=nombre):
+                lineas = [
+                    llamada_claude("a1", nombre, description="arregla saluda"),
+                    resultado_claude("a1", "ok\n"),
+                ]
+                (paso,) = conducta.pasos_claude(lineas)
+                self.assertEqual(paso.tool, "edit")
+
     def test_pasos_claude_lee_los_streams_reales_p4_y_p5(self):
         # M-23: los dos streams reales del encierro. Cada Bash queda con su
         # comando y su salida, emparejado por tool_use_id, y un resultado con

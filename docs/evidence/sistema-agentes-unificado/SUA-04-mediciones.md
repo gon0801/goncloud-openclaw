@@ -46,3 +46,16 @@ OK
 - **revisión rota**: sobre el repo con el defecto sembrado, `verdict: changes` con el hallazgo; la foto del repo real queda igual y el clon de la corrida se borra al cerrar.
 
 Las corridas anteriores del mismo banco destaparon y cerraron, en orden: el claim de un adaptador no autorizado que cortaba la pasada (G7 r3), claude sin el paquete de contexto (r4), la lista de pasos que en 2.1.301 es `TaskCreate` (r5, M-24 punto 5) y el juez de la forma claude, que solo contaba lecturas con Read y la cita de las últimas líneas (r6).
+
+### M-24, punto 6: las herramientas de archivo fuera de la carpeta (2026-10-16, coordinador)
+
+Mismo repo de juguete, `--restricted --strict-mcp-config --tools Read,Edit,Write,Bash --allowed-tools Read,Edit,Write,Bash --add-dir <run>` y el sandbox. Pedido: Write de un archivo fuera (carpeta bajo `~/.local/state`, no `/tmp`), Edit de un archivo fuera y Write de uno dentro de `--add-dir`. Resultado (`restricted-write.jsonl`):
+
+```
+RES /Users/dn/.local/state/sua-loop/mediciones/m24/fuera/w.txt is outside <cwd>, ...
+RES /Users/dn/.local/state/sua-loop/mediciones/m24/fuera/e.txt is outside <cwd>, ...
+RES File created successfully at: <run>/dentro.txt
+DENIALS ['Write:/Users/dn/.local/state/sua-loop/mediciones/m24/fuera/w.txt', 'Read:/Users/dn/.local/state/sua-loop/mediciones/m24/fuera/e.txt']
+```
+
+El archivo de fuera no existe y el editado sigue con su texto. `--restricted` encierra las herramientas de archivo en el cwd y en `--add-dir` (su `--help` lo dice: "confines the file tools to the working directories (--add-dir included)"), y el sandbox encierra Bash (M-23).
