@@ -1,0 +1,74 @@
+{
+  "schema": "agent-work.recetas.v1",
+  "repos": {
+    "gon0801/goncloud-openclaw": {
+      "base": "main",
+      "metodo": "squash",
+      "checks": ["clasificador", "ci-contract", "gate", "reconcile"],
+      "bots": ["coderabbit", "ai-review"],
+      "naceDraft": false,
+      "traerBase": "merge",
+      "firmasInfra": ["timed out after", "ECONNRESET", "rate limit"],
+      "carriles": {
+        "completo": [
+          "clasificador",
+          "shards (1/5, 1)",
+          "shards (2/5, 2)",
+          "shards (3/5, 3)",
+          "shards (4/5, 4)",
+          "shards (5/5, 5)",
+          "ci-contract",
+          "gate",
+          "reconcile"
+        ],
+        "rapido": ["clasificador", "ci-contract", "gate", "reconcile"]
+      }
+    },
+    "gon0801/goncloud-pr-review": {
+      "base": "main",
+      "metodo": "squash",
+      "checks": [
+        "quality",
+        "gate",
+        "verify-partition",
+        "workflows",
+        "test (shard 0/2)",
+        "test (shard 1/2)",
+        "reconcile"
+      ],
+      "bots": ["coderabbit", "ai-review"],
+      "naceDraft": false,
+      "traerBase": "merge",
+      "firmasInfra": ["timed out after", "ECONNRESET", "rate limit"],
+      "carriles": {
+        "completo": [
+          "quality",
+          "gate",
+          "verify-partition",
+          "workflows",
+          "test (shard 0/2)",
+          "test (shard 1/2)",
+          "reconcile"
+        ],
+        "rapido": [
+          "quality",
+          "gate",
+          "verify-partition",
+          "workflows",
+          "test (shard 0/2)",
+          "test (shard 1/2)",
+          "reconcile"
+        ]
+      }
+    },
+    "gon0801/goncloud-hermes": {
+      "base": "feat/hermes-team",
+      "metodo": "squash",
+      "checks": [],
+      "bots": ["coderabbit", "ai-review"],
+      "naceDraft": false,
+      "traerBase": "merge",
+      "firmasInfra": ["timed out after", "ECONNRESET", "rate limit"]
+    }
+  }
+}

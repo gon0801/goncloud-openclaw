@@ -1,0 +1,93 @@
+{
+ "number": 321,
+ "isDraft": false,
+ "headRefOid": "a3967285970254a93c586bd1fbce326db0c6a51b",
+ "state": "MERGED",
+ "statusCheckRollup": [
+  {
+   "__typename": "CheckRun",
+   "name": "clasificador",
+   "status": "COMPLETED",
+   "conclusion": "SUCCESS"
+  },
+  {
+   "__typename": "CheckRun",
+   "name": "reconcile",
+   "status": "COMPLETED",
+   "conclusion": "SUCCESS"
+  },
+  {
+   "__typename": "CheckRun",
+   "name": "ci-contract",
+   "status": "COMPLETED",
+   "conclusion": "SUCCESS"
+  },
+  {
+   "__typename": "CheckRun",
+   "name": "shards (1/5, 1)",
+   "status": "COMPLETED",
+   "conclusion": "SUCCESS"
+  },
+  {
+   "__typename": "CheckRun",
+   "name": "shards (2/5, 2)",
+   "status": "COMPLETED",
+   "conclusion": "SUCCESS"
+  },
+  {
+   "__typename": "CheckRun",
+   "name": "shards (3/5, 3)",
+   "status": "COMPLETED",
+   "conclusion": "SUCCESS"
+  },
+  {
+   "__typename": "CheckRun",
+   "name": "shards (4/5, 4)",
+   "status": "COMPLETED",
+   "conclusion": "SUCCESS"
+  },
+  {
+   "__typename": "CheckRun",
+   "name": "shards (5/5, 5)",
+   "status": "COMPLETED",
+   "conclusion": "SUCCESS"
+  },
+  {
+   "__typename": "CheckRun",
+   "name": "gate",
+   "status": "COMPLETED",
+   "conclusion": "SUCCESS"
+  },
+  {
+   "__typename": "StatusContext",
+   "context": "CodeRabbit",
+   "state": "SUCCESS"
+  }
+ ],
+ "comments": [
+  {
+   "author": {
+    "login": "coderabbitai"
+   },
+   "body": "<!-- This is an auto-generated comment: summarize by coderabbit.ai -->\n<!-- This is an auto-generated comment: rate limited by coderabbit.ai -->\n\n> [!WARNING]\n> ## Review limit reached\n> \n> Your organization has reached its usage spending cap. Adjust your spending cap in the [billing tab](https://app.coderabbit.ai/settings/billing?tab=usage&orgId=5de774ba-7013-4c5a-86a8-5e6a2fb1f43a).\n> \n> **Next included review available in 10 minutes.**\n> \n> [Check out review usage here](https://app.coderabbit.ai/dashboard/review-capacity?orgId=5de774ba-7013-4c5a-86a8-5e6a2fb1f43a).\n> \n> <details>\n> <summary><strong>View limit details</strong></summary>\n> <dl>\n> <dd>\n> \n> **Limit details:** You’ve used the included review currently available. Your 73 included PR review attempts over the past 7 days set your current allowance at 1 review per hour.\n> \n> [Learn how review limits work](https://docs.coderabbit.ai/management/plans#rate-limits).\n> \n> **Review configuration:**\n> \n> <details>\n> <summary><strong>⚙️ Run configuration</strong></summary>\n> <dl>\n> <dd>\n> \n> - **Configuration used**: defaults\n> - **Review profile**: CHILL\n> - **Plan**: Essentials\n> - **Run ID**: `5d721f0e-1517-4d92-b3d9-9efaada2a2b7`\n> \n> </dd>\n> </dl>\n> </details>\n> \n> <details>\n> <summary><strong>📥 Commits</strong></summary>\n> <dl>\n> <dd>\n> \n> Reviewing files that changed from the base of the PR and between ee196e972a54970b73e79c0a09816446c38327b8 and a3967285970254a93c586bd1fbce326db0c6a51b.\n> \n> </dd>\n> </dl>\n> </details>\n> \n> <details>\n> <summary><strong>📒 Files selected for processing: 13</strong></summary>\n> <dl>\n> <dd>\n> \n> * `.pre-commit-config.yaml`\n> * `agents/main/agent/workshop-skills/encargo-cli/SKILL.md`\n> * `docs/evidence/agent-work/proveedores-permitidos.json`\n> * `ruff.toml`\n> * `scripts/agent-work/avisar.py`\n> * `scripts/agent-work/encargo.py`\n> * `scripts/agent-work/modelos.py`\n> * `scripts/mac/ai.goncloud.agent-work-sucesion.plist`\n> * `scripts/tests/test-agent-work-avisar.py`\n> * `scripts/tests/test-agent-work-encargo.py`\n> * `scripts/tests/test-agent-work-modelos.py`\n> * `scripts/tests/test-agent-work-python.sh`\n> * `scripts/tests/test-instalar-mac.sh`\n> \n> </dd>\n> </dl>\n> </details>\n> \n> </dd>\n> </dl>\n> </details>\n\n<!-- end of auto-generated comment: rate limited by coderabbit.ai -->\n\n<!-- autopilot:start -->\n- [ ] <!-- {\"checkboxId\":\"2708ad07-9f24-4260-9c11-7dc76a49f2e3\"} --> <strong title=\"Keep fixing CodeRabbit findings and required CI, and resolving merge conflicts\">Autofix</strong> · Keep fixing CodeRabbit findings and required CI, and resolving merge conflicts\n<!-- autopilot:end -->\n<!-- tips_start -->\n\n\n\n\n\n\n<sub>Comment `@coderabbitai help` to get the list of available commands.</sub>\n\n<!-- tips_end -->"
+  },
+  {
+   "author": {
+    "login": "github-actions"
+   },
+   "body": "<!-- ai-review:sticky -->\n<!-- ai-review:sha=a3967285970254a93c586bd1fbce326db0c6a51b -->\n<!-- ai-review:completion=a3967285970254a93c586bd1fbce326db0c6a51b:complete -->\n<!-- ai-review:findings={\"schema\":3,\"generation\":4,\"revision\":{\"base_sha\":\"ee196e972a54970b73e79c0a09816446c38327b8\",\"head_sha\":\"a3967285970254a93c586bd1fbce326db0c6a51b\",\"policy_digest\":\"3ee2cc1dd49a9212c66491e5926ba777de747344486f7f96321e4e086ab3e54c\"},\"next_id\":10,\"completion\":\"complete_claim\",\"command_cursor\":0,\"request_count\":3,\"pending_requests\":[],\"receipts\":[],\"findings\":[{\"id\":\"F1\",\"title\":\"solicitar no valida --proveedor: escritura arbitraria fuera de state_root\",\"severity\":\"High\",\"status\":{\"kind\":\"resolved\",\"at_sha\":\"ed4463879eb3139154ff16cf1e6e5fc1fb01451b\"},\"primary_anchor\":{\"kind\":\"legacy\",\"path\":\"scripts/agent-work/encargo.py\",\"line\":1050},\"related_anchors\":[],\"cause_hint\":null,\"evidence\":[]},{\"id\":\"F2\",\"title\":\"El cotejo tg: usa compression.zstd en la Mini (Python 3.9) y falla con toda fila comprimida\",\"severity\":\"High\",\"status\":{\"kind\":\"resolved\",\"at_sha\":\"ed4463879eb3139154ff16cf1e6e5fc1fb01451b\"},\"primary_anchor\":{\"kind\":\"legacy\",\"path\":\"scripts/agent-work/encargo.py\",\"line\":988},\"related_anchors\":[],\"cause_hint\":null,\"evidence\":[]},{\"id\":\"F3\",\"title\":\"solicitar solo se niega por el id cerrado, no por el nombre\",\"severity\":\"Medium\",\"status\":{\"kind\":\"resolved\",\"at_sha\":\"ed4463879eb3139154ff16cf1e6e5fc1fb01451b\"},\"primary_anchor\":{\"kind\":\"legacy\",\"path\":\"scripts/agent-work/encargo.py\",\"line\":1042},\"related_anchors\":[],\"cause_hint\":null,\"evidence\":[]},{\"id\":\"F4\",\"title\":\"--target/--message no coinciden con las formas -t/-m que usa el resto del repo\",\"severity\":\"Medium\",\"status\":{\"kind\":\"open\"},\"primary_anchor\":{\"kind\":\"legacy\",\"path\":\"scripts/agent-work/avisar.py\",\"line\":31},\"related_anchors\":[],\"cause_hint\":null,\"evidence\":[]},{\"id\":\"F5\",\"title\":\"isdigit() sin isascii() deja un ValueError sin atrapar en la cita tg:\",\"severity\":\"Low\",\"status\":{\"kind\":\"resolved\",\"at_sha\":\"ed4463879eb3139154ff16cf1e6e5fc1fb01451b\"},\"primary_anchor\":{\"kind\":\"legacy\",\"path\":\"scripts/agent-work/encargo.py\",\"line\":1008},\"related_anchors\":[],\"cause_hint\":null,\"evidence\":[]},{\"id\":\"F6\",\"title\":\"La prueba del evento comprimido exige compression.zstd (Python 3.14+) y cae en el runner de CI\",\"severity\":\"Medium\",\"status\":{\"kind\":\"resolved\",\"at_sha\":\"a3967285970254a93c586bd1fbce326db0c6a51b\"},\"primary_anchor\":{\"kind\":\"legacy\",\"path\":\"scripts/tests/test-agent-work-encargo.py\",\"line\":1132},\"related_anchors\":[],\"cause_hint\":null,\"evidence\":[]},{\"id\":\"F7\",\"title\":\"solicitar no mira si el id ya esta ligado a otro permiso: la frase que pide es inaplicable\",\"severity\":\"Low\",\"status\":{\"kind\":\"resolved\",\"at_sha\":\"a3967285970254a93c586bd1fbce326db0c6a51b\"},\"primary_anchor\":{\"kind\":\"legacy\",\"path\":\"scripts/agent-work/encargo.py\",\"line\":1078},\"related_anchors\":[],\"cause_hint\":null,\"evidence\":[]},{\"id\":\"F8\",\"title\":\"El seq de la cita tg: no tiene tope de digitos y revienta en sqlite en vez de negarse limpio\",\"severity\":\"Low\",\"status\":{\"kind\":\"resolved\",\"at_sha\":\"a3967285970254a93c586bd1fbce326db0c6a51b\"},\"primary_anchor\":{\"kind\":\"legacy\",\"path\":\"scripts/agent-work/encargo.py\",\"line\":1026},\"related_anchors\":[],\"cause_hint\":null,\"evidence\":[]},{\"id\":\"F9\",\"title\":\"La cita tg: acepta una --cita vacia y el cotejo pasa sin frase\",\"severity\":\"Low\",\"status\":{\"kind\":\"resolved\",\"at_sha\":\"a3967285970254a93c586bd1fbce326db0c6a51b\"},\"primary_anchor\":{\"kind\":\"legacy\",\"path\":\"scripts/agent-work/encargo.py\",\"line\":1052},\"related_anchors\":[],\"cause_hint\":null,\"evidence\":[]}]} -->\n### Revisión automática · DeepSeek V4.1 Flash · OpenCode Go · a396728\n\n**Veredicto:** 1 Medium abierto (8 resueltos).\n\n## Nuevos en este push\n\nNinguno.\n\n## Siguen abiertos\n\n- 🟡 Medium · `scripts/agent-work/avisar.py:31` · --target/--message no coinciden con las formas -t/-m que usa el resto del repo · F4\n\n<details><summary>Resueltos (8)</summary>\n\n- 🟠 High · `scripts/agent-work/encargo.py:1050` · solicitar no valida --proveedor: escritura arbitraria fuera de state_root · F1\n- 🟠 High · `scripts/agent-work/encargo.py:988` · El cotejo tg: usa compression.zstd en la Mini (Python 3.9) y falla con toda fila comprimida · F2\n- 🟡 Medium · `scripts/agent-work/encargo.py:1042` · solicitar solo se niega por el id cerrado, no por el nombre · F3\n- ⚪ Low · `scripts/agent-work/encargo.py:1008` · isdigit() sin isascii() deja un ValueError sin atrapar en la cita tg: · F5\n- 🟡 Medium · `scripts/tests/test-agent-work-encargo.py:1132` · La prueba del evento comprimido exige compression.zstd (Python 3.14+) y cae en el runner de CI · F6\n- ⚪ Low · `scripts/agent-work/encargo.py:1078` · solicitar no mira si el id ya esta ligado a otro permiso: la frase que pide es inaplicable · F7\n- ⚪ Low · `scripts/agent-work/encargo.py:1026` · El seq de la cita tg: no tiene tope de digitos y revienta en sqlite en vez de negarse limpio · F8\n- ⚪ Low · `scripts/agent-work/encargo.py:1052` · La cita tg: acepta una --cita vacia y el cotejo pasa sin frase · F9\n\n</details>\n\n## Detalle del revisor\n\nHe revisado el push 2 (delta `ed44638..a396728`) y verifiqué cada hallazgo anterior contra el código en HEAD, además de leer completo `diff.patch` y las zonas cambiadas de `encargo.py` y `scripts/tests/test-agent-work-encargo.py`.\n\n\n### Estado de los hallazgos anteriores (comprobado contra el código en HEAD)\n\n- **F6 resuelto** — `scripts/tests/test-agent-work-encargo.py:1246`: `@unittest.skipUnless(_hay_zstd(), ...)` salta la prueba comprimida cuando no hay `compression.zstd` ni el binario `zstd` (lo imita `extraer-nativo.py:_decodificador`). `shutil` ya está importado en el archivo (línea 14), así que no hay `NameError`.\n- **F7 resuelto** — `scripts/agent-work/encargo.py:1082-1084`: `solicitar` se niega con «ya está ligado al permiso …» cuando el id ya lo tiene otro permiso, coherente con la negativa que `permitir` daría después (`encargo.py:1171-1174`); la prueba nueva discrimina porque esa cadena solo la produce la rama nueva.\n- **F8 resuelto** — `encargo.py:1026`: `re.fullmatch(r\"\\d{1,18}\", partes[2], flags=re.ASCII)` deja el `seq` dentro del entero de sqlite (el tope de 18 dígitos es el mismo criterio que `PROMPT_REF`, y un `seq` de 25 dígitos ya no llega a la consulta). La prueba con `\"9\"*25` sí fallaría sin el arreglo.\n- **F9 resuelto** — `encargo.py:1028`: `if not quote.strip(): return \"la cita está vacía\"`, antes de leer la política y de gastar el ssh; sin él `\"\" in texto` habría pasado el cotejo y la prueba lo detecta.\n- **F4 sigue abierto** — `scripts/agent-work/avisar.py` no cambió en este push, así que el uso de `--target`/`--message` frente a las formas `-t`/`-m` que sí usa el repo (`scripts/mac/respaldo-completo.sh:64`, `docs/evidence/u3a-seguimiento-inmediato/arnes/test-pasarela.sh:55`) queda como estaba.\n\nNo encontré regresiones en el delta: la validación de `PROVIDER` (`[a-z0-9][a-z0-9-]{0,63}`) sigue cerrando la ruta de `solicitar`, `_write_policy` preserva `ownerTelegramChat` con su único escritor, y las pruebas nuevas cubren tanto la negativa por id ligado como los dos casos de `tg:`.\n\n<details><summary>Alcance de la revisión</summary>\n\n- Revisados: 13 archivo(s)\n- Turnos: 35/60 · tokens entrada 101,865 (+1,355,008 en caché) · salida 33,820\n\n</details>"
+  },
+  {
+   "author": {
+    "login": "gon0801"
+   },
+   "body": "Triage de la revisión de DeepSeek (906565d), arreglado en ed446387 (más merge de main):\n- **F1 High** (solicitar escribía fuera de state_root): válido y bloqueante. `solicitar` valida nombre e id con `PROVIDER.fullmatch` antes de tocar disco. Prueba `test_solicitar_no_escribe_fuera_de_solicitudes` (../host, ruta absoluta, a/b, vacío); roja sin el arreglo.\n- **F2 High** (zstd en Python 3.9 de la Mini): válido y bloqueante. El ayudante remoto solo hace el cotejo de sesión y devuelve el evento: `event_json` o `event_zstd` en base64; se descomprime y se coteja en la Mac (`compression.zstd` o `zstd -d`). El ssh de juguete ahora corre con un paquete `compression` que no importa (imita la 3.9) y la fixture tiene la fila comprimida: `test_pasa_con_el_evento_comprimido`, roja con el código anterior. La fila con los dos campos nulos contesta \"no hay evento con ese seq\".\n- **F3 Medium** (nombre cerrado): válido, se arregla. `solicitar` usa `_closed(policy, name, provider)` y contesta la misma frase de cierre que `permitir`. Prueba `test_solicitar_se_niega_si_el_nombre_es_un_cerrado`.\n- **F4 Medium** (`--target`/`--message`): no aplica. `~/.openclaw-r/openclaw message send --help` lista `-t, --target <dest>` y `-m, --message <text>`: la forma larga es válida.\n- **F5 Low** (`isdigit` con Unicode): se arregla, es una línea: `isascii() and isdigit()`. Prueba `test_un_seq_que_no_es_un_numero_ascii_se_niega_limpio`.\n\nMutaciones: quitar cada arreglo pone roja su prueba (F1 4 fallas + 1 error, F2/F3 1 falla, F5 1 error). Suites: test-agent-work-encargo.py 96 OK, test-agent-work-python.sh verde."
+  },
+  {
+   "author": {
+    "login": "gon0801"
+   },
+   "body": "Push 3 (sobre ed44638):\n- **F6 Medium** (CI rojo, shard 5): válido. La fila comprimida de la prueba usa `compression.zstd` o el binario `zstd -c` y la prueba se salta si no hay ninguno; `_evento_tg` ya descomprimía con el binario. Comprobado con un `compression` que no importa: con el binario pasa, sin binario se salta.\n- **F7 Low**: se arregla. `solicitar` se niega si el id ya está ligado a otro permiso. Prueba `test_solicitar_se_niega_si_el_id_ya_es_de_otro_permiso`.\n- **F8 Low**: se arregla. El seq va con `\\d{1,18}` ASCII, como `PROMPT_REF`.\n- **F9 Low**: se arregla. Cita vacía: \"la cita está vacía\" antes del ssh, como `citar`. Una prueba para F8 y F9.\n- **F4**: sigue sin aplicar. `openclaw message send --help` (2026.10.x en la Mac) lista `-t, --target <dest>` y `-m, --message <text>`: son la misma opción.\nMutaciones: quitar cada arreglo pone roja su prueba. test-agent-work-encargo.py OK."
+  }
+ ]
+}
