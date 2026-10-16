@@ -91,11 +91,11 @@ En la Mac, el host de encargos llama a la pasada en su bucle, como hoy a `Progre
 
 ### 4.3 El ruido de "get no devolvió documento"
 
-Primero el plugin (es lo que pide la fila B16 de `followups.md`): `runbook.progress.get` contesta una razón propia, `sin-registro`, cuando no hay registro ni documento legado de esa corrida, distinta de `desconocida`, que se queda para el candado vencido y el registro ilegible (`index.ts:318-326`, `progress-store.ts:44-74`). El plugin se publica en el gateway de la Mini como cualquier cambio de `tablero-runbook`.
+Primero el plugin (es lo que pide la fila B16 de `followups.md`): cuando no hay registro ni documento legado de esa corrida, `runbook.progress.get` sigue contestando `{ok: false, razon: "desconocida"}` (de eso dependen `tablero-trabajo.sh:92-95`, que lo lee como "todavía no existe" para abrir un trabajo, y `cierre-de-fase.sh:282`; F12 de #332) y suma un campo opcional `sinRegistro: true` que los consumidores viejos ignoran. Con el candado vencido o el registro ilegible, el campo no va (`index.ts:318-326`, `progress-store.ts:44-74`). El plugin se publica en el gateway de la Mini como cualquier cambio de `tablero-runbook`.
 
 Hay un tercer caso (F6 de #332): la corrida que solo tiene documento legado (`progress/c/<id>.json`, que `runbook.progress.set` sigue escribiendo, `index.ts:277-284`). Hoy `get` contesta `ok: true` sin `revision`, y `progress-events.py:118` lanza la misma línea de ruido. Esa respuesta **no se cambia**: otros consumidores dependen de su `ok: true` (F8 de #332). Lo reconoce el cliente: `ok: true` sin `revision` es "sin revisión administrada". Esa cola **no se archiva**, porque un `run.opened` o un import posterior la vuelve publicable (F9): se queda en `queue/`, y el cliente escribe la línea en el log una sola vez por cambio de estado (deja un marcador `runs/<c>/.sin-revision` y no la repite mientras siga igual).
 
-Después, `progress-events.py publish` archiva la cola de una corrida (la mueve a `archivo-<fecha>/` con una línea en el log) solo cuando `get` contesta `sin-registro`. Con `desconocida` hace lo de hoy: deja la cola y la pasada siguiente reintenta, porque puede ser una corrida viva con el candado ocupado. No hace falta contar pasadas: la razón ya es inequívoca. Esto cierra la fila B16.
+Después, `progress-events.py publish` archiva la cola de una corrida (la mueve a `archivo-<fecha>/` con una línea en el log) solo cuando `get` contesta `desconocida` con `sinRegistro: true`. Con `desconocida` sin el campo hace lo de hoy: deja la cola y la pasada siguiente reintenta, porque puede ser una corrida viva con el candado ocupado. No hace falta contar pasadas: el campo ya es inequívoco. Esto cierra la fila B16.
 
 ### 4.4 La vista de solo lectura
 
@@ -115,7 +115,7 @@ Una página nueva del plugin `tablero-runbook`, `/runbook/tablero/raices` (la li
 | Rutas maliciosas (I17) | `/runbook/tablero/raices/..%2F..%2Fx` y un `rootId` con `/` contestan 400 y no leen nada fuera de `raicesDir`. |
 | `nextCheckAt` siempre definido | `derivar` con una unidad viva, una con excepción abierta (con y sin su `exceptionId` en `notados`) y una cerrada: los valores esperados, ninguno `null`. |
 | Un emisor por máquina | Dos pasadas a la vez sobre el mismo `<dir>`: una se salta por el candado y David recibe un solo aviso. |
-| Colas de corridas desconocidas | `get` con `sin-registro` archiva la cola; `ok: true` sin `revision` (solo documento legado) la deja y escribe una línea por cambio de estado, no una por pasada; con `desconocida` (candado o registro ilegible) la deja y reintenta. Los consumidores de `get` (`tablero-trabajo.sh`, las rutas) siguen viendo `ok: true` para el documento legado. |
+| Colas de corridas desconocidas | `get` con `desconocida` y `sinRegistro: true` archiva la cola; `ok: true` sin `revision` (solo documento legado) la deja y escribe una línea por cambio de estado, no una por pasada; con `desconocida` (candado o registro ilegible) la deja y reintenta. Los consumidores de `get` siguen viendo lo mismo: `ok: true` para el documento legado y `desconocida` para la corrida que no existe (`test-tablero-trabajo.sh` y `cierre-de-fase.sh` sin cambios, más una prueba con el doble del gateway contestando el campo nuevo). |
 | Teclado, móvil, error, offline, vacío | En el panel elegido (§8): capturas de escritorio y celular de cada estado, como en M-26. |
 | Sin OpenGrokBot | Un grep de candado: ninguna rebanada lo instala ni lo nombra fuera de texto histórico. |
 
@@ -126,7 +126,7 @@ Una página nueva del plugin `tablero-runbook`, `/runbook/tablero/raices` (la li
 | P0 | 4.1b, `managedTasks.root.list` en R, con su prueba y la compuerta de R. | — |
 | P1 | 4.1, el derivador, con sus fixtures y la prueba del contrato. | — |
 | P2 | 4.2, el emisor y su checkpoint (con el `messageId` de `avisar`), en la Mac (host) y la Mini (cron nativo de comando, sin efecto hasta SUA-09O). | P0, P1 |
-| P3 | 4.3: la razón `sin-registro` en el plugin (y su publicación en el gateway), el archivado con esa razón y el caso del documento legado en `progress-events.py`. | — |
+| P3 | 4.3: el campo `sinRegistro` en el plugin (y su publicación en el gateway), el archivado con ese campo y el caso del documento legado en `progress-events.py`. | — |
 | P4 | 4.4, la página del plugin `tablero-runbook`, con sus capturas de escritorio y celular. | P1, P2 |
 | P5 | La evidencia de M-26 en el repo (`docs/evidence/sistema-agentes-unificado/SUA-06-lobsterboard.md` y sus capturas), el recibo `SUA-06.md` y las filas. | P1 a P4 |
 
