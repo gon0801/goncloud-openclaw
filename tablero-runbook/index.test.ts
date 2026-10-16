@@ -385,6 +385,50 @@ it("v2-native-workers: el HTML del tablero es identico por RPC y HTTP", async ()
     rmSync(dir, { recursive: true, force: true });
   });
 
+  // P3 (SUA-06 §4.3): "desconocida" junta tres causas; sinRegistro:true separa la
+  // única en la que el publicador puede archivar su cola (ni registro administrado
+  // ni doc legado). Las demás causas no llevan el campo, bit a bit como hoy.
+  it("corrida sin registro ni doc legado: desconocida con sinRegistro", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "tablero-p3-sin-registro-"));
+    const host = await cargar({ stateDir: dir });
+    const r = await llamarMetodo(host.metodos, "runbook.progress.get", { corrida: "corrida-nueva" });
+    assert.deepEqual(r, { ok: false, razon: "desconocida", sinRegistro: true });
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("log administrado corrupto: desconocida SIN sinRegistro", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "tablero-p3-log-roto-"));
+    const host = await cargar({ stateDir: dir });
+    mkdirSync(join(dir, "progress", "e"), { recursive: true });
+    writeFileSync(join(dir, "progress", "e", "log-roto.json"), "{no-es-json", "utf8");
+    const r = await llamarMetodo(host.metodos, "runbook.progress.get", { corrida: "log-roto" });
+    assert.deepEqual(r, { ok: false, razon: "desconocida" });
+    assert.ok(!("sinRegistro" in r), "un registro ilegible no es sinRegistro");
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("corrida con solo doc legado: ok sin revision y sin sinRegistro", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "tablero-p3-legado-"));
+    const host = await cargar({ stateDir: dir });
+    const doc = fixtureDoc("v2-campos-validos.json");
+    mkdirSync(join(dir, "progress", "c"), { recursive: true });
+    writeFileSync(join(dir, "progress", "c", `${doc.corrida}.json`), JSON.stringify(doc, null, 2), "utf8");
+    const r = await llamarMetodo(host.metodos, "runbook.progress.get", { corrida: doc.corrida });
+    assert.equal(r.ok, true);
+    assert.equal(r.doc.corrida, doc.corrida);
+    assert.ok(!("revision" in r), "el doc legado no trae revision");
+    assert.ok(!("sinRegistro" in r), "un doc legado existente no es sinRegistro");
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("get de fase sin documento: desconocida con sinRegistro", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "tablero-p3-fase-sin-doc-"));
+    const host = await cargar({ stateDir: dir });
+    const r = await llamarMetodo(host.metodos, "runbook.progress.get", { fase: "99" });
+    assert.deepEqual(r, { ok: false, razon: "desconocida", sinRegistro: true });
+    rmSync(dir, { recursive: true, force: true });
+  });
+
   it("get de fase existente: html idéntico byte a byte al de la ruta, y los 3 headers", async () => {
     const dir = mkdtempSync(join(tmpdir(), "tablero-74-html-"));
     const host = await cargar({ stateDir: dir });

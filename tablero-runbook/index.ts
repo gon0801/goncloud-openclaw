@@ -298,25 +298,51 @@ function manejarSet(log: Logger, cfg: Config, params: unknown): RespuestaSet {
 
 type RespuestaTablero =
   | { ok: true; doc: ProgresoDoc; derivado: ReturnType<typeof derivar>; html: string; plan?: PlanCruce; revision?: number }
-  | { ok: false; razon: "desconocida" | "disco" };
+  | { ok: false; razon: "desconocida"; sinRegistro?: true }
+  | { ok: false; razon: "disco"; sinRegistro?: undefined };
+
+/**
+ * Lectura del registro administrado de una clave (SUA-06 §4.3): {ok:false} es
+ * registro ilegible o candado vencido (hoy ambas caían en el catch de
+ * armarTablero como "desconocida" sin tocar el legado); {ok:true} sin snapshot
+ * es "no hay registro administrado" y habilita leer el doc legado.
+ */
+function leerAdministrado(cfg: Config, clave: ClaveTablero):
+  { ok: true; snapshot?: { doc: ProgresoDoc; revision: number } } | { ok: false } {
+  try {
+    const snapshot = clave.kind === "corrida"
+      ? readManagedSnapshot(cfg.stateDir, clave.id)
+      : readManagedPhaseSnapshot(cfg.stateDir, clave.id);
+    return { ok: true, snapshot };
+  } catch {
+    return { ok: false };
+  }
+}
 
 async function armarTablero(
   cfg: Config,
   cfgGithub: ReturnType<typeof leerGithubConfig>,
   clave: ClaveTablero,
 ): Promise<RespuestaTablero> {
+  const administrado = leerAdministrado(cfg, clave);
+  if (!administrado.ok) return { ok: false, razon: "desconocida" };
   let crudo: string;
   let revision: number | undefined;
-  try {
-    const managed = clave.kind === "corrida"
-      ? readManagedSnapshot(cfg.stateDir, clave.id)
-      : readManagedPhaseSnapshot(cfg.stateDir, clave.id);
-    revision = managed?.revision;
-    crudo = managed === undefined
-      ? readFileSync(rutaDoc(cfg.stateDir, clave), "utf8")
-      : JSON.stringify(managed.doc);
-  } catch {
-    return { ok: false, razon: "desconocida" };
+  if (administrado.snapshot === undefined) {
+    try {
+      crudo = readFileSync(rutaDoc(cfg.stateDir, clave), "utf8");
+    } catch (err) {
+      // sinRegistro es la conjunción exacta "sin registro administrado Y sin
+      // doc legado" (ENOENT): cualquier otro errno (permisos, EISDIR...) o un
+      // registro ilegible sigue siendo "desconocida" sin campo, bit a bit hoy.
+      if ((err as { code?: unknown } | null)?.code === "ENOENT") {
+        return { ok: false, razon: "desconocida", sinRegistro: true };
+      }
+      return { ok: false, razon: "desconocida" };
+    }
+  } else {
+    revision = administrado.snapshot.revision;
+    crudo = JSON.stringify(administrado.snapshot.doc);
   }
   let doc: ProgresoDoc;
   try {
@@ -713,7 +739,11 @@ export default definePluginEntry({
         }
         const respuesta = await armarTablero(cfg, cfgGithub, clave);
         if (!respuesta.ok) {
-          respond(true, { ok: false, razon: respuesta.razon });
+          // El campo solo sube por el RPC (SUA-06 §4.3): las rutas HTTP
+          // consumen la misma RespuestaTablero sin propagarlo.
+          const fallo: Record<string, unknown> = { ok: false, razon: respuesta.razon };
+          if (respuesta.sinRegistro !== undefined) fallo["sinRegistro"] = respuesta.sinRegistro;
+          respond(true, fallo);
           return;
         }
         const payload: Record<string, unknown> = {
