@@ -1,10 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <!--
-  Sucesión del modelo por omisión de la ruta por CLI (SUA-04, 4.3): una pasada diaria de
-  `encargo.py sucesion` en modo aplicar, desde el checkout del host. Es un proceso de una pasada,
-  no un daemon: promueve como mucho un sucesor por corrida, con su canario, y nunca con un
-  encargo en vuelo. Lo instala scripts/mac/instalar-mac.sh (que sustituye /Users/dn por el
+  Pasada diaria de la ruta por CLI (SUA-04, 4.3 y 4.9): una corrida de
+  `encargo.py diario` desde el checkout del host, que corre la sucesión en modo
+  aplicar y después el aviso semanal de fuentes, cada mitad aislada (si una falla,
+  la otra corre igual). Es un proceso de una pasada, no un daemon: promueve como
+  mucho un sucesor por corrida, con su canario, y nunca con un encargo en vuelo.
+  Lo instala scripts/mac/instalar-mac.sh (que sustituye /Users/dn por el
   HOME de quien lo corre); no instalarlo a mano.
   Remove:
     launchctl bootout gui/501/ai.goncloud.agent-work-sucesion
@@ -21,8 +23,7 @@
     <string>/Users/dn/dev/wt/agent-work-host</string>
     <string>--state-root</string>
     <string>/Users/dn/.local/state/agent-work-host</string>
-    <string>sucesion</string>
-    <string>--aplicar</string>
+    <string>diario</string>
   </array>
   <key>EnvironmentVariables</key>
   <dict>
@@ -32,6 +33,8 @@
     <string>/opt/homebrew/bin:/usr/bin:/bin</string>
     <key>LANG</key>
     <string>en_US.UTF-8</string>
+    <key>AGENT_WORK_AVISOS</key>
+    <string>1</string>
     <key>AGENT_WORK_SUCESION_RUNTIME_SOURCE</key>
     <string>/Users/dn/dev/wt/r-sua02-c-gate</string>
   </dict>

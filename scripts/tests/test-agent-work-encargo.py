@@ -19,6 +19,7 @@ import tempfile
 import threading
 import time
 import unittest
+from datetime import datetime, timedelta, timezone
 from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -51,6 +52,13 @@ PROMPTS = {
     30010: ("2026-10-21T09:00:00.000Z", "pero tengo deepseek por api, eso sí"),
 }
 DEFAULT_BRIEF_ARGS = ["--host", "mac-local", "--adapter", "opencode", "--model", "zai-coding-plan/glm-5.3-flash"]
+
+
+def sin_avisos():
+    """El ambiente sin la compuerta AGENT_WORK_AVISOS: ninguna prueba de fuentes manda un mensaje
+    real, ni la que inyecta un envío falso ni la que deja correr el avisar de verdad."""
+    return mock.patch.dict(os.environ, {k: v for k, v in os.environ.items() if k != "AGENT_WORK_AVISOS"},
+                           clear=True)
 
 
 class Mac(unittest.TestCase):
@@ -683,6 +691,223 @@ class Perfiles(Mac):
                 self.assertFalse(respuesta["ok"])
                 self.assertIn(campo, respuesta["error"], f"el mensaje no nombra {campo}")
 
+class Fuentes(Mac):
+    """`encargo.py fuentes` (SUA-04, 4.9): cada fuente y la competencia de cada ruta con los días que
+    les quedan, y con --aviso el envío semanal que sale por avisar.py y quema el estado solo cuando
+    el envío contestó que salió."""
+
+    AHORA = datetime(2026, 10, 16, 12, tzinfo=timezone.utc)
+
+    def vence_en(self, dias):
+        return (self.AHORA + timedelta(days=dias)).isoformat().replace("+00:00", "Z")
+
+    def escribir_perfiles(self, fuentes, competencia):
+        ruta = self.checkout / "scripts" / "agent-work" / "contexto" / "perfiles.v1.json"
+        ruta.write_text(json.dumps({
+            "schema": "agent-work.perfiles.v1",
+            "profiles": [{
+                "id": "ingenieria", "purpose": "prueba", "resultContracts": ["ready.v1"],
+                "routes": [{"host": "mac-local", "executor": "opencode", "via": ["task"]},
+                           {"host": "mini-native", "executor": "native", "agentId": "ingenieria", "via": ["turn"]}],
+                "writesSource": True, "sources": fuentes, "competence": competencia,
+            }],
+        }, ensure_ascii=False) + "\n", encoding="utf-8")
+
+    def fuentes(self, *args):
+        with mock.patch.object(encargo.time, "time", return_value=self.AHORA.timestamp()):
+            return self.cli("fuentes", *args)
+
+    def correr_fuentes(self, **kwargs):
+        with sin_avisos():
+            return encargo.fuentes(checkout=self.checkout, state_root=self.state,
+                                   now=self.AHORA.timestamp(), **kwargs)
+
+    def test_lista_fuentes_y_competencia_con_dias(self):
+        self.escribir_perfiles(
+            [{"ref": "G:agents/ingenieria/agent/workshop-skills", "revision": "97d35ab0",
+              "validUntil": self.vence_en(90)},
+             {"ref": "G:agents/implementer/agent/workshop-skills", "revision": "97d35ab0",
+              "validUntil": self.vence_en(10)}],
+            {"mac-local/opencode": {"status": "passed", "validUntil": self.vence_en(90)},
+             "mini-native/native/ingenieria": {"status": "pending", "validUntil": self.vence_en(5)}})
+        code, out, err = self.fuentes()
+        self.assertEqual((code, err), (0, ""))
+        self.assertEqual(len(out.splitlines()), 1, out + err)
+        respuesta = json.loads(out)
+        self.assertEqual(set(respuesta), {"ok", "perfiles", "aviso"})
+        self.assertEqual(respuesta["aviso"], None)
+        self.assertEqual([fila["perfil"] for fila in respuesta["perfiles"]], ["ingenieria"])
+        fila = respuesta["perfiles"][0]
+        self.assertEqual(set(fila), {"perfil", "fuentes", "competencia"})
+        self.assertEqual([(f["ref"], f["revision"], f["validUntil"], f["dias"], f["porVencer"])
+                          for f in fila["fuentes"]], [
+            ("G:agents/ingenieria/agent/workshop-skills", "97d35ab0", self.vence_en(90), 90, False),
+            ("G:agents/implementer/agent/workshop-skills", "97d35ab0", self.vence_en(10), 10, True)])
+        self.assertEqual([(c["ruta"], c["validUntil"], c["dias"], c["porVencer"])
+                          for c in fila["competencia"]], [
+            ("mac-local/opencode", self.vence_en(90), 90, False),
+            ("mini-native/native/ingenieria", self.vence_en(5), 5, True)])
+        self.assertEqual(set(fila["fuentes"][0]), {"ref", "revision", "validUntil", "dias", "porVencer"})
+        self.assertEqual(set(fila["competencia"][0]), {"ruta", "validUntil", "dias", "porVencer"})
+
+    def test_aviso_enviado_quema_el_estado(self):
+        self.escribir_perfiles(
+            [{"ref": "G:agents/ingenieria/agent/workshop-skills", "revision": "97d35ab0",
+              "validUntil": self.vence_en(10)}], {})
+        textos = []
+
+        def enviar(texto, **kwargs):
+            textos.append(texto)
+            return {"enviado": True}
+
+        respuesta = self.correr_fuentes(aviso=True, enviar_aviso=enviar)
+        self.assertEqual(respuesta["aviso"], {"vencen": ["G:agents/ingenieria/agent/workshop-skills"],
+                                              "enviado": True, "ultimoAviso": self.AHORA.timestamp()})
+        self.assertEqual(json.loads((self.state / "fuentes.json").read_text()),
+                         {"schema": "agent-work.fuentes.v1", "ultimoAviso": self.AHORA.timestamp()})
+        self.assertIn("G:agents/ingenieria/agent/workshop-skills", textos[0])
+        self.assertIn("10 días", textos[0])
+        # Pasaron 0 días desde el envío: la corrida inmediata no vuelve a enviar ni re-quema.
+        escrito = (self.state / "fuentes.json").read_bytes()
+        respuesta = self.correr_fuentes(aviso=True, enviar_aviso=enviar)
+        self.assertEqual(respuesta["aviso"], {"vencen": ["G:agents/ingenieria/agent/workshop-skills"],
+                                              "enviado": False, "ultimoAviso": self.AHORA.timestamp()})
+        self.assertEqual(len(textos), 1)
+        self.assertEqual((self.state / "fuentes.json").read_bytes(), escrito)
+
+    def test_aviso_no_enviado_no_quema_y_reintenta(self):
+        self.escribir_perfiles(
+            [{"ref": "G:agents/ingenieria/agent/workshop-skills", "revision": "97d35ab0",
+              "validUntil": self.vence_en(10)}], {})
+        # Sin enviar_aviso inyectado la llamada es a avisar.py de verdad: con la compuerta
+        # apagada contesta que no salió sin correr nada, y no hay quema.
+        primera = self.correr_fuentes(aviso=True)
+        self.assertEqual(primera["aviso"]["vencen"], ["G:agents/ingenieria/agent/workshop-skills"])
+        self.assertIs(primera["aviso"]["enviado"], False)
+        self.assertEqual(primera["aviso"]["causa"], "avisos apagados (AGENT_WORK_AVISOS no es 1)")
+        self.assertIsNone(primera["aviso"]["ultimoAviso"])
+        self.assertFalse((self.state / "fuentes.json").exists())
+        # Sin quema, la corrida de mañana reintenta el envío completo.
+        segunda = self.correr_fuentes(aviso=True)
+        self.assertIs(segunda["aviso"]["enviado"], False)
+        self.assertEqual(segunda["aviso"]["causa"], "avisos apagados (AGENT_WORK_AVISOS no es 1)")
+        self.assertFalse((self.state / "fuentes.json").exists())
+
+    def test_un_envio_que_falla_marca_fuentes_como_fallida(self):
+        # CodeRabbit en #322: con la compuerta encendida y openclaw fallando, el aviso no
+        # salió y diario no puede terminar en 0. La quema sigue sin hacerse (reintenta).
+        self.escribir_perfiles(
+            [{"ref": "G:agents/ingenieria/agent/workshop-skills", "revision": "97d35ab0",
+              "validUntil": self.vence_en(10)}], {})
+
+        def enviar(texto, **_):
+            return {"enviado": False, "causa": "openclaw salió 1: sin red"}
+
+        respuesta = self.correr_fuentes(aviso=True, enviar_aviso=enviar)
+        self.assertIs(respuesta["ok"], False)
+        self.assertEqual(respuesta["aviso"]["causa"], "openclaw salió 1: sin red")
+        self.assertFalse((self.state / "fuentes.json").exists())
+        # Con los avisos apagados no hay fallo: es la corrida a mano de siempre.
+        self.assertIs(self.correr_fuentes(aviso=True)["ok"], True)
+        # Y por la línea de comandos el código de salida no contradice el JSON (DeepSeek F2
+        # en #323).
+        with mock.patch.object(encargo.aviso_mod, "avisar", side_effect=enviar), \
+                mock.patch.object(encargo.time, "time", return_value=self.AHORA.timestamp()):
+            code, out, err = self.cli("fuentes", "--aviso")
+        self.assertEqual(code, 3, out + err)
+        self.assertIs(json.loads(out)["ok"], False)
+
+    def test_menos_de_siete_dias_no_llama_a_avisar(self):
+        viejo = self.AHORA.timestamp() - 3 * 86400
+        (self.state / "fuentes.json").write_text(json.dumps(
+            {"schema": "agent-work.fuentes.v1", "ultimoAviso": viejo}))
+        self.escribir_perfiles(
+            [{"ref": "G:agents/ingenieria/agent/workshop-skills", "revision": "97d35ab0",
+              "validUntil": self.vence_en(10)}], {})
+
+        def enviar(texto, **kwargs):
+            self.fail("pasó menos de una semana del último aviso: no hay envío que hacer")
+
+        respuesta = self.correr_fuentes(aviso=True, enviar_aviso=enviar)
+        self.assertEqual(respuesta["aviso"], {"vencen": ["G:agents/ingenieria/agent/workshop-skills"],
+                                              "enviado": False, "ultimoAviso": viejo})
+        self.assertEqual(json.loads((self.state / "fuentes.json").read_text()),
+                         {"schema": "agent-work.fuentes.v1", "ultimoAviso": viejo})
+
+    def test_la_competencia_por_vencer_sola_tambien_avisa(self):
+        self.escribir_perfiles(
+            [{"ref": "G:agents/ingenieria/agent/workshop-skills", "revision": "97d35ab0",
+              "validUntil": self.vence_en(90)}],
+            {"mac-local/opencode": {"status": "passed", "validUntil": self.vence_en(5)}})
+        textos = []
+
+        def enviar(texto, **kwargs):
+            textos.append(texto)
+            return {"enviado": True}
+
+        respuesta = self.correr_fuentes(aviso=True, enviar_aviso=enviar)
+        self.assertEqual(respuesta["aviso"], {"vencen": ["competencia ingenieria mac-local/opencode"],
+                                              "enviado": True, "ultimoAviso": self.AHORA.timestamp()})
+        self.assertIn("competencia ingenieria mac-local/opencode", textos[0])
+        self.assertIn("5 días", textos[0])
+        self.assertEqual(json.loads((self.state / "fuentes.json").read_text()),
+                         {"schema": "agent-work.fuentes.v1", "ultimoAviso": self.AHORA.timestamp()})
+
+    def test_aviso_quema_el_estado_semanal(self):
+        self.escribir_perfiles(
+            [{"ref": "G:agents/ingenieria/agent/workshop-skills", "revision": "97d35ab0",
+              "validUntil": self.vence_en(10)}],
+            {"mac-local/opencode": {"status": "passed", "validUntil": self.vence_en(90)}})
+        vencen = ["G:agents/ingenieria/agent/workshop-skills"]
+
+        def enviar(texto, **kwargs):
+            return {"enviado": True}
+
+        respuesta = self.correr_fuentes(aviso=True, enviar_aviso=enviar)
+        self.assertEqual(respuesta["aviso"], {"vencen": vencen, "enviado": True,
+                                              "ultimoAviso": self.AHORA.timestamp()})
+        escrito = (self.state / "fuentes.json").read_bytes()
+        respuesta = self.correr_fuentes(aviso=True, enviar_aviso=enviar)
+        self.assertEqual(respuesta["aviso"], {"vencen": vencen, "enviado": False,
+                                              "ultimoAviso": self.AHORA.timestamp()})
+        self.assertEqual((self.state / "fuentes.json").read_bytes(), escrito)
+        (self.state / "fuentes.json").write_text(json.dumps(
+            {"schema": "agent-work.fuentes.v1", "ultimoAviso": self.AHORA.timestamp() - 8 * 86400}))
+        respuesta = self.correr_fuentes(aviso=True, enviar_aviso=enviar)
+        self.assertEqual(respuesta["aviso"], {"vencen": vencen, "enviado": True,
+                                              "ultimoAviso": self.AHORA.timestamp()})
+        self.assertEqual(json.loads((self.state / "fuentes.json").read_text())["ultimoAviso"],
+                         self.AHORA.timestamp())
+        # Sin nada por vencer no hay envío, no hay quema y no nace el archivo.
+        self.escribir_perfiles(
+            [{"ref": "G:agents/ingenieria/agent/workshop-skills", "revision": "97d35ab0",
+              "validUntil": self.vence_en(90)}], {})
+        (self.state / "fuentes.json").unlink()
+        respuesta = self.correr_fuentes(aviso=True, enviar_aviso=enviar)
+        self.assertEqual(respuesta["aviso"], {"vencen": [], "enviado": False, "ultimoAviso": None})
+        self.assertFalse((self.state / "fuentes.json").exists())
+
+    def test_mutacion_marca_sin_el_limite_de_30(self):
+        # Si alguien mueve el umbral de 30 días, esta prueba canta: 31 no va, 29 sí, y sin validUntil nunca.
+        self.escribir_perfiles(
+            [{"ref": "G:agents/a/agent/workshop-skills", "revision": "r", "validUntil": self.vence_en(31)},
+             {"ref": "G:agents/b/agent/workshop-skills", "revision": "r", "validUntil": self.vence_en(29)},
+             {"ref": "G:agents/c/agent/workshop-skills", "revision": "r", "validUntil": None}],
+            {"mac-local/opencode": {"status": "passed", "validUntil": self.vence_en(31)},
+             "mini-native/native/ingenieria": {"status": "pending", "validUntil": self.vence_en(29)}})
+        with sin_avisos():
+            code, out, err = self.fuentes("--aviso")
+        self.assertEqual((code, err), (0, ""))
+        respuesta = json.loads(out)
+        fila = respuesta["perfiles"][0]
+        self.assertEqual([(f["dias"], f["porVencer"]) for f in fila["fuentes"]],
+                         [(31, False), (29, True), (None, False)])
+        self.assertEqual([(c["dias"], c["porVencer"]) for c in fila["competencia"]],
+                         [(31, False), (29, True)])
+        self.assertEqual(respuesta["aviso"]["vencen"],
+                         ["G:agents/b/agent/workshop-skills", "competencia ingenieria mini-native/native/ingenieria"])
+
+
 class Permitir(Mac):
     def test_rebinding_glm_to_another_provider_drops_its_default_and_the_default_grant(self):
         # F1: la línea del default es del proveedor viejo; al re-ligar el permiso el
@@ -927,6 +1152,7 @@ class Sucesion(Mac):
     """SUA-04 (4.3): el estado vive en <state>/sucesion.json y el canario es un banco falso."""
 
     def plan(self, **kwargs):
+        kwargs.setdefault("enviar_aviso", lambda texto, **kw: {"enviado": True})
         return encargo.sucesion(state_root=self.state, checkout=self.checkout,
                                 opencode_bin=self.bin / "opencode", now=1_800_000_000.0, **kwargs)
 
@@ -965,8 +1191,11 @@ class Sucesion(Mac):
         self.assertEqual((entry["actual"], entry["anterior"], entry["estado"]),
                          ("zai-coding-plan/glm-5.4-flash", "zai-coding-plan/glm-5.3-flash", "promovido"))
         self.assertIn("zai-coding-plan/glm-5.4-flash reemplazó a zai-coding-plan/glm-5.3-flash", answer["aviso"])
-        # F4: el aviso de la promoción queda pendiente hasta que G5 lo consuma.
-        self.assertIn("aviso pendiente de G5", answer["aviso"] + answer.get("avisoPendiente", ""))
+        # SUA-04 G5: el aviso sale por avisar.py (aquí, el de juguete que siempre manda):
+        # la línea queda con avisoEnviado y sin avisoPendiente.
+        entry = self.leer()["lines"]["zai-coding-plan/glm-{}-flash"]
+        self.assertTrue(entry.get("avisoEnviado"))
+        self.assertNotIn("avisoPendiente", answer)
         # G2 lo lee: un sucesion.json escrito por G3 pasa succession_actual y preparar lo usa.
         self.beat()
         self.assertEqual(self.preparar()["modelo"], "zai-coding-plan/glm-5.4-flash")
@@ -1131,6 +1360,233 @@ class Sucesion(Mac):
         self.assertTrue(marcador.exists(), "el banco inyectado no corrió")
         entry = self.leer()["lines"]["zai-coding-plan/glm-{}-flash"]
         self.assertEqual((entry["actual"], entry["estado"]), ("zai-coding-plan/glm-5.4-flash", "promovido"))
+
+
+class Diario(Mac):
+    """SUA-04 (4.9): `encargo.py diario`, la pasada que corre el mismo launchd de 4.3: sucesion
+    --aplicar y después fuentes --aviso, cada uno aislado, en una sola línea JSON."""
+
+    AHORA = datetime(2026, 10, 16, 12, tzinfo=timezone.utc)
+
+    def diario(self):
+        with mock.patch.object(encargo.time, "time", return_value=self.AHORA.timestamp()):
+            return self.cli("diario")
+
+    def test_diario_corre_las_dos_y_contesta_una_linea(self):
+        with sin_avisos():
+            code, out, err = self.diario()
+        self.assertEqual((code, err), (0, ""))
+        self.assertEqual(len(out.splitlines()), 1, out + err)
+        respuesta = json.loads(out)
+        self.assertEqual(set(respuesta), {"ok", "sucesion", "fuentes"})
+        self.assertIs(respuesta["ok"], True)
+        # Sin sucesor en la línea de glm, la mitad de sucesion no corre ningún canario.
+        self.assertEqual((respuesta["sucesion"]["ok"], respuesta["sucesion"]["accion"]),
+                         (True, "nada-que-probar"))
+        self.assertIs(respuesta["fuentes"]["ok"], True)
+        # Con las fuentes del fixture (todo vence en 2027-01-14, a 90 días) nada vence: no
+        # hay intento de envío, no hay quema y el aviso queda sin causa. El envío que diario
+        # deja correr es el real, y solo la compuerta del launchd lo enciende.
+        self.assertEqual(respuesta["fuentes"]["aviso"],
+                         {"vencen": [], "enviado": False, "ultimoAviso": None})
+        self.assertFalse((self.state / "fuentes.json").exists())
+
+    def test_diario_un_sucesion_que_lanza_no_impide_fuentes_y_sale_con_el_peor(self):
+        with mock.patch.object(encargo, "sucesion", side_effect=RuntimeError("canario explotó")):
+            code, out, err = self.diario()
+        self.assertEqual(code, 3)
+        self.assertEqual(len(out.splitlines()), 1, out + err)
+        respuesta = json.loads(out)
+        self.assertIs(respuesta["ok"], False)
+        self.assertIs(respuesta["sucesion"]["ok"], False)
+        self.assertIn("canario explotó", respuesta["sucesion"]["causa"])
+        self.assertIs(respuesta["fuentes"]["ok"], True)
+
+    def test_diario_fuentes_que_falla_sale_con_el_peor(self):
+        (self.checkout / "scripts" / "agent-work" / "contexto" / "perfiles.v1.json").write_text("no es json{")
+        code, out, err = self.diario()
+        self.assertEqual(code, 3)
+        self.assertEqual(len(out.splitlines()), 1, out + err)
+        respuesta = json.loads(out)
+        self.assertIs(respuesta["ok"], False)
+        self.assertEqual((respuesta["sucesion"]["ok"], respuesta["sucesion"]["accion"]),
+                         (True, "nada-que-probar"))
+        self.assertIs(respuesta["fuentes"]["ok"], False)
+        self.assertIn("no se pudo leer perfiles.v1.json del checkout", respuesta["fuentes"]["causa"])
+
+
+import sqlite3 as _sqlite3
+
+
+def _hay_zstd():
+    """compression.zstd (Python 3.14+) o el binario zstd: el runner de CI trae otro Python."""
+    try:
+        from compression import zstd  # noqa: F401
+    except ImportError:
+        return shutil.which("zstd") is not None
+    return True
+
+
+def _comprimir(datos):
+    try:
+        from compression import zstd
+    except ImportError:
+        return subprocess.run(["zstd", "-c"], input=datos, capture_output=True, check=True,
+                              timeout=60).stdout
+    return zstd.compress(datos)
+
+
+def _base_telegram(ruta, *, session_key="agent:main:telegram:default:direct:6470689715",
+                   role="user", content="confirmo abrir mistral (mistral, subscription) por favor",
+                   comprimido=False):
+    ruta.parent.mkdir(parents=True, exist_ok=True)
+    ruta.unlink(missing_ok=True)
+    db = _sqlite3.connect(ruta)
+    db.execute("CREATE TABLE session_windows (session_id TEXT, session_key TEXT)")
+    db.execute("CREATE TABLE transcript_events (session_id TEXT, seq INTEGER, event_json TEXT, event_zstd BLOB)")
+    db.execute("INSERT INTO session_windows VALUES ('s-1', ?)", (session_key,))
+    evento = {"type": "message", "timestamp": 1792000000000,
+              "message": {"role": role, "content": content}}
+    if comprimido:
+        # Como en la base real: los eventos grandes van en event_zstd con event_json nulo.
+        db.execute("INSERT INTO transcript_events VALUES ('s-1', 7, NULL, ?)",
+                   (_comprimir(json.dumps(evento).encode()),))
+    else:
+        db.execute("INSERT INTO transcript_events VALUES ('s-1', 7, ?, NULL)", (json.dumps(evento),))
+    db.commit()
+    db.close()
+
+
+class Solicitar(Mac):
+    def test_solicitar_escribe_la_solicitud_y_contesta_la_frase(self):
+        answer = encargo.solicitar("mistral", "mistral", "subscription",
+                                   state_root=self.state, checkout=self.checkout, now=1_800_000_000.0)
+        self.assertEqual(answer["frase"], "confirmo abrir mistral (mistral, subscription)")
+        doc = json.loads((self.state / "solicitudes" / "mistral.json").read_text())
+        self.assertEqual((doc["nombre"], doc["proveedor"], doc["cobro"], doc["frase"]),
+                         ("mistral", "mistral", "subscription", answer["frase"]))
+        # No toca la política.
+        self.assertEqual(self.policy().unreadable, None)
+        self.assertNotIn("mistral", [g.name for g in self.policy().grants])
+
+    def test_solicitar_no_escribe_fuera_de_solicitudes(self):
+        # F1 de DeepSeek en #321: el id armaba la ruta tal cual y ../host pisaba host.json.
+        fuera = self.root / "fuera"
+        for provider in ("../host", str(fuera), "a/b", ""):
+            with self.subTest(provider=provider):
+                answer = encargo.solicitar("mistral", provider, "subscription",
+                                           state_root=self.state, checkout=self.checkout,
+                                           now=1_800_000_000.0)
+                self.assertFalse(answer["ok"])
+                self.assertIn("inválido", answer["causa"])
+        self.assertFalse((self.state / "solicitudes").exists())
+        self.assertFalse((self.state / "host.json").exists())
+        self.assertFalse(fuera.with_suffix(".json").exists())
+
+    def test_solicitar_se_niega_si_el_nombre_es_un_cerrado(self):
+        # F3 de DeepSeek en #321: como permitir, mira el nombre y el id.
+        answer = encargo.solicitar("opencode-go", "otro-id", "subscription",
+                                   state_root=self.state, checkout=self.checkout, now=1_800_000_000.0)
+        self.assertFalse(answer["ok"])
+        self.assertIn("cerrado", answer["causa"])
+        self.assertFalse((self.state / "solicitudes").exists())
+
+    def test_solicitar_se_niega_si_el_id_ya_es_de_otro_permiso(self):
+        # F7 de DeepSeek en #321 (push 2): permitir moriría después con "dos permisos ligan
+        # el id"; la frase que se le pediría a David no se puede aplicar.
+        answer = encargo.solicitar("otro", "zai-coding-plan", "subscription",
+                                   state_root=self.state, checkout=self.checkout, now=1_800_000_000.0)
+        self.assertFalse(answer["ok"])
+        self.assertIn("ya está ligado", answer["causa"])
+        self.assertFalse((self.state / "solicitudes").exists())
+
+    def test_solicitar_se_niega_a_un_cerrado(self):
+        answer = encargo.solicitar("go", "opencode-go", "subscription",
+                                   state_root=self.state, checkout=self.checkout, now=1_800_000_000.0)
+        self.assertFalse(answer["ok"])
+        self.assertIn("cerrado", answer["causa"])
+        self.assertFalse((self.state / "solicitudes").exists())
+
+
+class TelegramCitation(Mac):
+    def fake_ssh(self, argv, entrada=None, timeout=None):
+        # El ssh de juguete corre lo que recibe por stdin donde apunta HOME (zsh si está).
+        import subprocess as _sp
+        pedido = argv[-1].strip("'")
+        # La Mini corre Python 3.9: sin compression.zstd. Un paquete compression que no
+        # importa, por delante de la biblioteca estándar, la imita (F2 de DeepSeek en #321).
+        sin_zstd = self.root / "py39"
+        (sin_zstd / "compression").mkdir(parents=True, exist_ok=True)
+        (sin_zstd / "compression" / "__init__.py").write_text(
+            "raise ImportError('Python 3.9 no trae compression')\n")
+        env = {**os.environ, "HOME": str(self.toy_home), "PYTHONPATH": str(sin_zstd)}
+        hecho = _sp.run([sys.executable, "-", pedido], input=entrada, capture_output=True,
+                        text=True, env=env)
+        return hecho.returncode, hecho.stdout, hecho.stderr
+
+    def setUp(self):
+        super().setUp()
+        self.toy_home = self.root / "mini"
+        _base_telegram(self.toy_home / ".openclaw/agents/main/agent/openclaw-agent.sqlite")
+
+    def permitir_tg(self, **cambios_db):
+        (self.bin / "listing").write_text(LISTING + "mistral/mistral-large\n")
+        _base_telegram(self.toy_home / ".openclaw/agents/main/agent/openclaw-agent.sqlite", **cambios_db)
+        return encargo.permitir(
+            "mistral", provider="mistral", billing="subscription", ref="tg:s-1:7",
+            quote="confirmo abrir mistral (mistral, subscription)",
+            state_root=self.state, checkout=self.checkout, prompts=self.prompts,
+            opencode_bin=self.bin / "opencode", correr=self.fake_ssh)
+
+    def test_pasa_con_la_sesion_del_dueno_y_rol_user(self):
+        row = self.permitir_tg()
+        self.assertNotIsInstance(row, str)
+        policy = self.policy()
+        glm = policy.grant_for("mistral")
+        self.assertEqual(glm.decision.ref, "tg:s-1:7")
+
+    @unittest.skipUnless(_hay_zstd(), "sin compression.zstd ni el binario zstd no hay fila comprimida")
+    def test_pasa_con_el_evento_comprimido(self):
+        # F2 de DeepSeek en #321: ~39% de las filas de main van en event_zstd y la Mini no
+        # descomprime; el evento viaja en base64 y se descomprime en la Mac.
+        row = self.permitir_tg(comprimido=True)
+        self.assertNotIsInstance(row, str, row)
+        self.assertEqual(self.policy().grant_for("mistral").decision.ref, "tg:s-1:7")
+
+    def test_un_seq_de_mas_de_18_digitos_y_una_cita_vacia_se_niegan_limpio(self):
+        # F8 y F9 de DeepSeek en #321 (push 2): el seq cabe en un entero de sqlite, como
+        # PROMPT_REF, y una cita vacía no coteja (en "" cualquier texto la contiene).
+        (self.bin / "listing").write_text(LISTING + "mistral/mistral-large\n")
+        for ref, quote, motivo in (("tg:s-1:" + "9" * 25, "confirmo abrir mistral (mistral, subscription)",
+                                    "no tiene la forma"),
+                                   ("tg:s-1:7", "  ", "la cita está vacía")):
+            with self.subTest(ref=ref, quote=quote):
+                row = encargo.permitir(
+                    "mistral", provider="mistral", billing="subscription", ref=ref, quote=quote,
+                    state_root=self.state, checkout=self.checkout, prompts=self.prompts,
+                    opencode_bin=self.bin / "opencode", correr=self.fake_ssh)
+                self.assertIsInstance(row, str)
+                self.assertIn(motivo, row)
+
+    def test_un_seq_que_no_es_un_numero_ascii_se_niega_limpio(self):
+        # F5 de DeepSeek en #321: "²".isdigit() es verdadero e int("²") revienta.
+        (self.bin / "listing").write_text(LISTING + "mistral/mistral-large\n")
+        row = encargo.permitir(
+            "mistral", provider="mistral", billing="subscription", ref="tg:s-1:\u00b2",
+            quote="confirmo abrir mistral (mistral, subscription)",
+            state_root=self.state, checkout=self.checkout, prompts=self.prompts,
+            opencode_bin=self.bin / "opencode", correr=self.fake_ssh)
+        self.assertIsInstance(row, str)
+        self.assertIn("no tiene la forma", row)
+
+    def test_se_niega_con_otra_sesion_con_assistant_y_con_frase_ausente(self):
+        row = self.permitir_tg(session_key="agent:main:telegram:default:direct:999")
+        self.assertIsInstance(row, str)
+        self.assertIn("no coteja", row)
+        row = self.permitir_tg(role="assistant")
+        self.assertIsInstance(row, str)
+        row = self.permitir_tg(content="otra cosa entirely")
+        self.assertIsInstance(row, str)
 
 
 class Cerrar(Mac):
@@ -1409,15 +1865,14 @@ class ClosedStaysClosed(Mac):
 class PlistDeSucesion(unittest.TestCase):
     def test_el_plist_de_sucesion_trae_argumentos_que_encargo_acepta(self):
         # F9 de #319: --checkout y --state-root son del parser raíz y van antes del
-        # subcomando; después de "sucesion" argparse los rechaza y el launchd no hace nada.
+        # subcomando; después de "diario" argparse los rechaza y el launchd no hace nada.
         import plistlib
         plist = ROOT / "scripts" / "mac" / "ai.goncloud.agent-work-sucesion.plist"
         with plist.open("rb") as archivo:
             argv = plistlib.load(archivo)["ProgramArguments"]
         self.assertTrue(argv[1].endswith("encargo.py"))
         args = encargo._parser().parse_args(argv[2:])
-        self.assertEqual(args.command, "sucesion")
-        self.assertTrue(args.aplicar)
+        self.assertEqual(args.command, "diario")
 
 
 if __name__ == "__main__":

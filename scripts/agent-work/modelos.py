@@ -174,13 +174,13 @@ def _parse_default(entry: dict, provider: "ProviderId | None", where: str) -> "P
     return ProviderDefault(raw["line"], since)
 
 
-def _parse_policy(raw: bytes) -> "tuple[tuple[ProviderGrant, ...], dict[ProviderId, ProviderClosure], str | None] | str":
+def _parse_policy(raw: bytes) -> "tuple[tuple[ProviderGrant, ...], dict[ProviderId, ProviderClosure], str | None, str | None] | str":
     try:
         document = json.loads(raw)
     except (ValueError, RecursionError) as exc:
         return f"no es JSON: {exc}"
-    if not isinstance(document, dict) or not {"schema", "providers", "closed"} <= set(document) <= {"schema", "providers", "closed", "defaultGrant"}:
-        return "el archivo lleva schema, providers, closed y, si hace falta, defaultGrant"
+    if not isinstance(document, dict) or not {"schema", "providers", "closed"} <= set(document) <= {"schema", "providers", "closed", "defaultGrant", "ownerTelegramChat"}:
+        return "el archivo lleva schema, providers, closed y, si hace falta, defaultGrant y ownerTelegramChat"
     if document["schema"] != POLICY_SCHEMA:
         return f"schema desconocido: {document['schema']!r}"
     if not isinstance(document["providers"], list) or not isinstance(document["closed"], list):
@@ -228,12 +228,15 @@ def _parse_policy(raw: bytes) -> "tuple[tuple[ProviderGrant, ...], dict[Provider
         if any(grant.provider == entry["provider"] for grant in grants):
             return f"{entry['provider']} está permitido y cerrado a la vez"
         closed[ProviderId(entry["provider"])] = ProviderClosure(ProviderId(entry["provider"]), decision)
+    owner_chat = document.get("ownerTelegramChat")
+    if owner_chat is not None and not (isinstance(owner_chat, str) and re.fullmatch(r"[0-9]{5,20}", owner_chat)):
+        return f"ownerTelegramChat no es un chat de dígitos: {owner_chat!r}"
     default_grant = document.get("defaultGrant")
     if default_grant is not None:
         named = next((grant for grant in grants if grant.name == default_grant), None)
         if not isinstance(default_grant, str) or named is None or named.default is None:
             return f"defaultGrant no nombra un permiso con default: {default_grant!r}"
-    return tuple(grants), closed, default_grant
+    return tuple(grants), closed, default_grant, owner_chat
 
 
 @dataclass(frozen=True)
@@ -248,6 +251,8 @@ class ProviderPolicy:
     unreadable: str | None
     default_grant: str | None = None
     """El permiso cuyo modelo por omisión usa un encargo sin modelo (SUA-04, 4.2)."""
+    owner_telegram_chat: str | None = None
+    """El chat de Telegram del dueño (SUA-04, 4.8): lo leen los avisos y el cotejo de tg:."""
 
     @staticmethod
     def load(path: Path) -> "ProviderPolicy":
@@ -265,7 +270,7 @@ class ProviderPolicy:
         parsed = _parse_policy(raw)
         if isinstance(parsed, str):
             return ProviderPolicy((), MappingProxyType({}), digest, f"{name}: {parsed}")
-        return ProviderPolicy(parsed[0], MappingProxyType(parsed[1]), digest, None, parsed[2])
+        return ProviderPolicy(parsed[0], MappingProxyType(parsed[1]), digest, None, parsed[2], parsed[3])
 
     def grant_for(self, provider: ProviderId) -> ProviderGrant | None:
         """El permiso cuyo id ligado es ese proveedor. Un permiso sin id nunca sale de aquí."""
@@ -273,7 +278,8 @@ class ProviderPolicy:
 
 
 def policy_document(grants: "tuple[ProviderGrant, ...]", closed: "Mapping[ProviderId, ProviderClosure]",
-                    default_grant: "str | None" = None) -> bytes:
+                    default_grant: "str | None" = None,
+                    owner_telegram_chat: "str | None" = None) -> bytes:
     """El archivo de política en su formato canónico, el único que escriben `permitir` y `cerrar`."""
     def cite(decision: OperatorCitation) -> dict:
         return {"by": decision.by, "on": decision.on, "ref": decision.ref, "quote": decision.quote}
@@ -291,6 +297,7 @@ def policy_document(grants: "tuple[ProviderGrant, ...]", closed: "Mapping[Provid
         "closed": [{"provider": closure.provider, "decision": cite(closure.decision)}
                    for closure in closed.values()],
         **({"defaultGrant": default_grant} if default_grant is not None else {}),
+        **({"ownerTelegramChat": owner_telegram_chat} if owner_telegram_chat is not None else {}),
     }
     return (json.dumps(document, indent=2, ensure_ascii=False) + "\n").encode()
 

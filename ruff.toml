@@ -8,6 +8,8 @@ include = [
     "scripts/agent-work/flota.py",
     "scripts/agent-work/conducta.py",
     "scripts/agent-work/lineas.py",
+    "scripts/agent-work/avisar.py",
+    "scripts/tests/test-agent-work-avisar.py",
     "scripts/agent-work/reporte.py",
     "scripts/tests/test-agent-work-reporte.py",
     "scripts/agent-work/agentes.py",

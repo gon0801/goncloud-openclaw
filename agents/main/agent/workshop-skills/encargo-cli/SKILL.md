@@ -64,6 +64,10 @@ No hay tabla de modelos en esta skill. Qué modelos existen, cuáles están perm
 - Si David pregunta qué modelos o proveedores puede usar por CLI, corre en la Mac `python3 /Users/dn/dev/wt/agent-work-host/scripts/agent-work/encargo.py proveedores`. Imprime una tabla, no JSON. Dile, por cada fila, la `decisión` (`permitido` o `cerrado`), el `cobro` y la `sesión` (`con-sesion` o `sin-sesion`).
 - opencode Go es tu suscripción, la de `main`, y un encargo por CLI nunca la usa: `opencode-go/*` y `opencode/*` están cerrados por orden de David. Si los pide, `preparar` contesta `no-registrar` con su cita. Dile esa `frase` y no busques otra forma de correrlo.
 - Si David te pide permitir o cerrar un proveedor, no lo hagas tú y no edites ningún archivo. Dile que eso lo hace Claude en la Mac con `encargo.py permitir` o `encargo.py cerrar`, que dejan su frase citada y salen como un PR. Tú pides encargos, así que no eres quien los autoriza.
+- Abrir un proveedor nuevo es en tres pasos, y tú nunca corres `permitir`:
+  1. Corre en la Mac `python3 /Users/dn/dev/wt/agent-work-host/scripts/agent-work/encargo.py solicitar <nombre> --proveedor <id> --cobro subscription` (o `per-token`). Contesta una línea JSON con la `frase` exacta y deja la solicitud guardada.
+  2. Dile a David esa `frase`, tal cual, sin cambiarle una palabra.
+  3. Cuando David mande esa frase por Telegram, Claude en la Mac corre `encargo.py permitir <nombre> --proveedor <id> --cobro <cobro> --ref tg:<session_id>:<seq> --cita "<la frase>"`, que coteja su mensaje contra este chat antes de escribir nada. Hasta que eso pase, el proveedor no está abierto: no encargues nada con él.
 
 ## Trampas
 

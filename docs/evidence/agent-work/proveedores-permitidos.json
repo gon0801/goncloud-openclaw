@@ -137,5 +137,6 @@
       }
     }
   ],
-  "defaultGrant": "glm"
+  "defaultGrant": "glm",
+  "ownerTelegramChat": "6470689715"
 }

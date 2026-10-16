@@ -109,7 +109,7 @@ class PolicyFile(Policies):
 
     def test_the_repo_policy_is_already_in_the_format_permitir_writes(self):
         policy = ProviderPolicy.load(POLICY)
-        self.assertEqual(modelos.policy_document(policy.grants, policy.closed, policy.default_grant), POLICY.read_bytes())
+        self.assertEqual(modelos.policy_document(policy.grants, policy.closed, policy.default_grant, policy.owner_telegram_chat), POLICY.read_bytes())
 
     def test_a_grant_without_a_bound_id_never_comes_out_of_grant_for(self):
         # SUA-04 (4.2): un permiso sin id no lleva default, y defaultGrant no lo puede nombrar.
@@ -314,6 +314,14 @@ class Authorize(Policies):
         # Una política que no lo nombra (only_deepseek) no tiene modelo por omisión que correr.
         answer = self.ask(DefaultModel(), policy=self.only_deepseek())
         self.assertIsInstance(answer, modelos.SinModeloPorOmision)
+
+    def test_owner_telegram_chat_is_digits_or_the_policy_does_not_load(self):
+        # SUA-04 (4.8): ownerTelegramChat es el chat del dueño y son solo dígitos.
+        self.assertEqual(self.policy.owner_telegram_chat, "6470689715")
+        self.document["ownerTelegramChat"] = "647o689715"
+        policy = ProviderPolicy.load(self.write())
+        self.assertEqual(policy.grants, ())
+        self.assertIn("ownerTelegramChat", policy.unreadable)
 
     def test_default_validation_closes_the_policy(self):
         # SUA-04 (4.2): la línea es del proveedor del permiso, el since parsea a esa línea y
