@@ -870,6 +870,20 @@ def resultado_claude(identificador, salida):
 
 CLAUDE_FIXTURES = ROOT / "scripts" / "tests" / "fixtures" / "agent-work" / "claude"
 RUN_CLAUDE = "/corrida/enc-1"
+SKILL_LARGA = (
+    "---\nname: poteto-mode\n---\n\n# poteto\n\n"
+    "Bundled skills live at `../<name>/SKILL.md` from this file, so put this file's"
+    " absolute path in every prompt.\n"
+)
+TEXTO_LARGO = (
+    "### Feature\n\n"
+    "**You own the design. Plan, review, verify.** Delegate implementation.\n\n"
+    "1. `how` over the affected subsystem.\n2. `architect`.\n"
+)
+SALIDA_CON_COLA = (
+    SALIDA + '{\n  "decision": "ready.v1",\n  "typedPayload": {},\n'
+    '  "artifactRef": "RESULTADO.md",\n  "digest": "x"\n}\n'
+)
 
 
 def corrida_claude(*, con_lista=False):
@@ -1080,6 +1094,168 @@ class ConductaClaude(unittest.TestCase):
         respuesta = json.loads(out.getvalue())
         self.assertEqual(codigo, 1, respuesta)
         self.assertEqual(respuesta["razones"], ["no hay lista de pasos (todowrite)"])
+
+    def test_el_contenido_del_paquete_que_llego_por_un_tool_result_cuenta_como_lectura(self):
+        # B5a de G7-r6: en el banco real claude leyó la skill y el playbook del
+        # paquete con un cat cuya salida claude persistió y releó con Read del
+        # archivo tool-results; el juez no la vio y dio dos falsos rojos.
+        self.assertEqual(
+            juzgar_con_contenido(corrida_con_contenido()), conducta.Veredicto(True, ())
+        )
+
+    def test_un_stream_sin_ese_contenido_sigue_rojo_por_las_dos_lecturas(self):
+        sin_contenido = juzgar_con_contenido(corrida_con_contenido(con_contenido=False))
+        self.assertEqual(
+            sin_contenido.razones,
+            (
+                SIN_POTETO,
+                f"falta la lectura de {PLAYBOOK} antes del primer cambio",
+            ),
+        )
+
+    def test_el_contenido_que_llega_despues_del_primer_cambio_no_cuenta(self):
+        tarde = juzgar_con_contenido(corrida_con_contenido(con_contenido=False, tarde=True))
+        self.assertEqual(
+            tarde.razones,
+            (
+                SIN_POTETO,
+                f"falta la lectura de {PLAYBOOK} antes del primer cambio",
+            ),
+        )
+
+    def test_la_forma_opencode_no_gana_lecturas_ni_cita_por_contenido(self):
+        veredicto = juzgar_con_contenido(corrida_con_contenido(), forma="opencode")
+        self.assertEqual(
+            veredicto.razones,
+            (
+                SIN_POTETO,
+                f"falta la lectura de {PLAYBOOK} antes del primer cambio",
+                "el resultado no cita la salida de las últimas pruebas",
+            ),
+        )
+
+    def test_la_cita_en_la_forma_claude_alcanza_con_cualquier_linea_de_la_salida(self):
+        # B5b de G7-r6: la última llamada que corre pruebas también armó el
+        # result.json en el mismo Bash, así que las últimas líneas de su salida
+        # son el JSON y el recorte de CITADAS las cita; el resumen del corredor
+        # de pruebas quedó antes y también es salida.
+        veredicto = juzgar_con_contenido(corrida_con_contenido())
+        self.assertNotIn("el resultado no cita la salida de las últimas pruebas", veredicto.razones)
+        sin_lineas = juzgar_con_contenido(corrida_con_contenido(), resultado="Listo, todo bien.")
+        self.assertIn("el resultado no cita la salida de las últimas pruebas", sin_lineas.razones)
+
+    def test_el_trozo_distintivo_salta_el_encabezado_yaml_y_exige_una_linea_larga(self):
+        self.assertEqual(
+            conducta._trozo_distintivo(SKILL_LARGA),
+            "Bundled skills live at `../<name>/SKILL.md` from this file, so put this"
+            " file's absolute path in every prompt.",
+        )
+        self.assertEqual(
+            conducta._trozo_distintivo(TEXTO_LARGO),
+            "**You own the design. Plan, review, verify.** Delegate implementation.",
+        )
+        self.assertEqual(conducta._trozo_distintivo(TEXTO), "")
+
+    def test_el_material_real_del_banco_sale_verde_con_forma_claude(self):
+        # B5 de G7-r6: la corrida claude-ingenieria del banco real (r6) dejó el
+        # modelo limpio y el juez rojo por tres razones falsas. El stream fixture
+        # conserva las llamadas que el juez ve (el cat persistido, el Read del
+        # tool-results con el contenido, la lista TaskCreate, la delegación, el
+        # cambio, las pruebas y el artefacto) con las rutas reales de la corrida.
+        banco = "/private/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/agent-work-banco-xii2e2z9"
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            codigo = conducta.main(
+                [
+                    "--forma",
+                    "claude",
+                    "--eventos",
+                    str(CLAUDE_FIXTURES / "ingenieria-events.jsonl"),
+                    "--playbook",
+                    str(
+                        CLAUDE_FIXTURES
+                        / "contexto"
+                        / "skills"
+                        / "poteto-mode"
+                        / "playbooks"
+                        / "feature.md"
+                    ),
+                    "--resultado",
+                    str(CLAUDE_FIXTURES / "RESULTADO.md"),
+                    "--directorio",
+                    f"{banco}/dev/demo",
+                    "--excluir",
+                    f"{banco}/state/enc-1/runs/"
+                    "e3b5f0b03a2f4ff18c359c2546923b33da0ed6cca174f80990aa9b360718d233",
+                    "--excluir",
+                    f"{banco}/dev/demo/RESULTADO.md",
+                ]
+            )
+        self.assertEqual((codigo, json.loads(out.getvalue())), (0, {"ok": True, "razones": []}))
+
+
+def corrida_con_contenido(*, con_contenido=True, tarde=False):
+    """La forma del incidente del banco real (B5 de G7-r6): el contenido de la
+    skill y del playbook llegó al modelo por la salida de un Bash cat que claude
+    persistió en su archivo tool-results y leyó después con Read (cada línea con
+    su número delante), no por un Read de las rutas del paquete."""
+    contenido = (
+        "1\t---\n2\tname: poteto-mode\n3\t---\n4\t\n5\t# poteto\n6\t\n"
+        "7\tBundled skills live at `../<name>/SKILL.md` from this file, so put this file's"
+        " absolute path in every prompt.\n"
+        "8\t### Feature\n9\t\n"
+        "10\t**You own the design. Plan, review, verify.** Delegate implementation.\n"
+    )
+    pasos = [
+        (
+            "c1",
+            "Bash",
+            {
+                "command": "cat $R/skills/poteto-mode/SKILL.md"
+                " $R/skills/poteto-mode/playbooks/feature.md"
+            },
+            "<persisted-output>\nOutput too large (29.3KB). Full output saved to:"
+            " /Users/dn/.claude/tool-results/x.txt\n",
+        ),
+        (
+            "c2",
+            "Read",
+            {"file_path": "/Users/dn/.claude/tool-results/x.txt"},
+            contenido if con_contenido else "otra cosa\n",
+        ),
+        (
+            "c3",
+            "TaskCreate",
+            {"subject": "1. `how` over the affected subsystem.", "description": "el paso 1"},
+            "Task #1 created successfully\n",
+        ),
+        ("c4", "Task", {"description": "Fix saluda to return hello"}, "ok\n"),
+        ("c5", "Edit", {"file_path": "/repo/demo/saluda.py"}, "saluda.py actualizado\n"),
+        ("c6", "Bash", {"command": "python3 -m unittest test_saluda.py"}, SALIDA_CON_COLA),
+    ]
+    if tarde:
+        pasos.append(
+            ("c9", "Read", {"file_path": "/Users/dn/.claude/tool-results/x.txt"}, contenido)
+        )
+    lineas = []
+    for identificador, nombre, entrada, salida in pasos:
+        lineas.append(llamada_claude(identificador, nombre, **entrada))
+        lineas.append(resultado_claude(identificador, salida))
+    return lineas
+
+
+def juzgar_con_contenido(lineas, resultado="Pruebas: Ran 4 tests in 0.01s, OK.", **extra):
+    return conducta.juzgar(
+        conducta.pasos_claude(lineas),
+        playbook=PLAYBOOK,
+        texto_del_playbook=TEXTO_LARGO,
+        resultado=resultado,
+        textos_de_lectura={
+            "skills/poteto-mode/SKILL.md": SKILL_LARGA,
+            "skills/poteto-mode/playbooks/feature.md": TEXTO_LARGO,
+        },
+        **{"forma": "claude", **extra},
+    )
 
 
 class ExtractorNativo(unittest.TestCase):
