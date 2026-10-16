@@ -316,6 +316,47 @@ else:
         event = self.state_dir / "runs" / "run-1" / "queue" / (receipt["eventId"] + ".json")
         self.assertEqual(json.loads(event.read_text())["kind"], "round.ready")
 
+    def test_contract_verdicts_reach_the_queue_in_the_board_terms(self):
+        # SUA-05 (4.2): la proyección viaja con el veredicto del contrato (approved/changes)
+        # o con el español de una entrega vieja (aprobado/cambios); se aceptan las cuatro
+        # formas y al queue llega la que el tablero valida, aprobado/cambios
+        # (tablero-runbook/progress-event.ts; DeepSeek F1 en #328).
+        for ronda, (entrada, al_queue) in enumerate(
+                (("approved", "aprobado"), ("changes", "cambios"),
+                 ("aprobado", "aprobado"), ("cambios", "cambios")), start=1):
+            with self.subTest(verdict=entrada):
+                self.pending["destination"]["ronda"] = ronda
+                self.pending["result"]["verdict"] = entrada
+                self.pending["eventId"] = event_id("round.verdict", self.pending["destination"])
+                self.pending["projectionDigest"] = projection_digest(self.pending)
+                emitted = []
+                real_run = subprocess.run
+
+                def record_command(command, **kwargs):
+                    emitted.append(command)
+                    return real_run(command, **kwargs)
+
+                with mock.patch("progress_bridge.subprocess.run", side_effect=record_command):
+                    receipt = self.transfer(lambda value: value)
+                # El bridge manda la forma del contrato; el queue la traduce a la del tablero.
+                contrato = {"approved": "approved", "aprobado": "approved",
+                            "changes": "changes", "cambios": "changes"}[entrada]
+                self.assertEqual(emitted[0][emitted[0].index("--verdict") + 1], contrato)
+                event = json.loads((self.state_dir / "runs" / "run-1" / "queue" /
+                                    (receipt["eventId"] + ".json")).read_text())
+                self.assertEqual(event["verdict"], al_queue)
+
+    def test_host_projection_accepts_the_contract_verdict_of_a_new_projection(self):
+        # SUA-05 (4.2): una proyección nueva ya trae el veredicto del contrato; el snapshot
+        # del host sigue siendo la autoridad de la forma y el queue recibe "aprobado", la forma del tablero.
+        restarted, key, _ = self.reported_host()
+        self.pending["result"]["verdict"] = "approved"
+        self.pending["projectionDigest"] = projection_digest(self.pending)
+        receipt = self.transfer_from_host(restarted, key, lambda value: value)
+        event = json.loads((self.state_dir / "runs" / "run-1" / "queue" /
+                            (receipt["eventId"] + ".json")).read_text())
+        self.assertEqual(event["verdict"], "aprobado")
+
     def test_gateway_projection_drain_publishes_once_and_acknowledges(self):
         pending = self.pending.copy()
         class Client:
@@ -647,6 +688,17 @@ else:
         brief.write_text("review")
         artifact = workspace / "review.txt"
         original = self.evidence.read_bytes()
+        if payload and "findingsRef" in payload:
+            # SUA-05 (4.2): el artefacto de un changes válido es un hallazgos.v1; la
+            # evidencia del pending lleva el mismo contenido para que su contentHash case.
+            original = json.dumps({
+                "schema": "hallazgos.v1",
+                "findings": [{"id": "F1", "bloqueante": False, "archivo": "a.py",
+                              "linea": 1, "resumen": "menor"}],
+            }, ensure_ascii=False).encode()
+            self.evidence.write_bytes(original)
+            self.pending["result"]["contentHash"] = hashlib.sha256(original).hexdigest()
+            self.pending["projectionDigest"] = projection_digest(self.pending)
         artifact.write_bytes(original)
         host = Host("host-one", self.root / "host")
         key = OperationKey("host-one", self.pending["taskId"], 1, "instance-one")

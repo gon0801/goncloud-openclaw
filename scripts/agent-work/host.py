@@ -38,6 +38,10 @@ RESULT_BOUND = ("hostId", "taskId", "generation", "instanceId", "producerId", "c
 MAX_ACCEPT_BYTES = 4096
 VERDICTS = ("delivered", "abandoned")
 REVIEW_CONTRACT = "review.v1"
+HALLAZGOS_SCHEMA = "hallazgos.v1"
+HALLAZGO_FIELDS = {"id", "bloqueante", "archivo", "linea", "resumen", "reproduce"}
+"""Lo que el contrato hallazgos.v1 (SUA-05, 4.2) exige: reproduce es la única llave opcional,
+y solo mientras el hallazgo no sea bloqueante — la regla 4 no bloquea sin reproducción."""
 REVIEWER_EPISODE = "reviewer-wrote-source"
 """The invalid-result episode of a reviewer whose run changed the task's real repo (SUA-03, 4.8)."""
 
@@ -281,7 +285,13 @@ def cli_protocol(assignment: dict, *, run: bool = False, state_dir: Path | None 
     if assignment["resultContract"] == "review.v1":
         forma_de_carga = (
             'exactly {"verdict": "approved", "evidenceRef": "<artifactRef>"} or {"verdict": '
-            '"changes", "findingsRef": "<artifactRef>"}, with no other field'
+            '"changes", "findingsRef": "<artifactRef>"}, with no other field. With "changes" the '
+            'artifact file (the one findingsRef names) is exactly {"schema": "hallazgos.v1", '
+            '"findings": [{"id", "bloqueante": bool, "archivo", "linea": int, "resumen", '
+            '"reproduce"}]}, with no other keys, and every finding with "bloqueante" true carries '
+            '"reproduce" (the command that reproduces it); with "approved" the artifact is free '
+            "text with no blocker: no blocking finding and no line starting with BLOQUEANTE or "
+            "BLOCKER"
         )
     elif not escribe:
         forma_de_carga = 'exactly {"evidenceRef": "<artifactRef>"}, with no other field'
@@ -347,6 +357,82 @@ def typed_payload_valido(contrato: str, carga: object) -> bool:
         if carga.get("verdict") == "changes":
             return set(carga) == {"verdict", "findingsRef"} and texto(carga.get("findingsRef"))
     return False
+
+
+def defecto_de_hallazgos(documento: object) -> str | None:
+    """El primer defecto de un documento hallazgos.v1, o None si es válido: objeto con llaves
+    exactas {schema, findings}, findings una lista, y cada hallazgo un objeto con llaves exactas
+    {id, bloqueante, archivo, linea, resumen, reproduce} donde id/archivo/resumen son texto no
+    vacío, bloqueante es bool real (no int), linea es int (no bool) y reproduce es texto no
+    vacío obligatorio cuando el hallazgo es bloqueante y opcional cuando no."""
+    if not isinstance(documento, dict):
+        return "hallazgos.v1 no es un objeto JSON"
+    if set(documento) != {"schema", "findings"}:
+        return "hallazgos.v1 lleva exactamente las llaves schema y findings"
+    if documento["schema"] != HALLAZGOS_SCHEMA:
+        return f"schema no es {HALLAZGOS_SCHEMA}"
+    if not isinstance(documento["findings"], list):
+        return "findings no es una lista"
+    for indice, hallazgo in enumerate(documento["findings"], start=1):
+        if not isinstance(hallazgo, dict):
+            return f"el hallazgo {indice} no es un objeto"
+        if type(hallazgo.get("bloqueante")) is not bool:
+            return f"el hallazgo {indice} trae bloqueante que no es bool"
+        if type(hallazgo.get("linea")) is not int:
+            return f"el hallazgo {indice} trae linea que no es int"
+        for campo in ("id", "archivo", "resumen"):
+            if not isinstance(hallazgo.get(campo), str) or not hallazgo[campo].strip():
+                return f"el hallazgo {indice} trae {campo} vacío o que no es texto"
+        if hallazgo["bloqueante"] and "reproduce" not in hallazgo:
+            return f"el hallazgo {indice} es bloqueante sin reproduce"
+        if "reproduce" in hallazgo and (not isinstance(hallazgo["reproduce"], str)
+                                        or not hallazgo["reproduce"].strip()):
+            return f"el hallazgo {indice} trae reproduce vacío o que no es texto"
+        if set(hallazgo) != (HALLAZGO_FIELDS if "reproduce" in hallazgo
+                             else HALLAZGO_FIELDS - {"reproduce"}):
+            return f"el hallazgo {indice} lleva llaves ajenas al contrato"
+    return None
+
+
+def contenido_rechazado(contrato: str, carga: object, raw: bytes) -> str | None:
+    """El motivo por el que el CONTENIDO del artefacto rompe su contrato (SUA-05, 4.2), o None
+    si pasa: un changes exige un hallazgos.v1 válido (sin él, resultado-invalido) y un approved
+    no puede aprobar con un bloqueante — tipado en su hallazgos.v1 o, como red de seguridad
+    sobre evidencia de texto, en una línea que EMPIEZA con BLOQUEANTE o BLOCKER."""
+    if contrato != REVIEW_CONTRACT or not isinstance(carga, dict):
+        return None
+    try:
+        documento = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, ValueError):
+        documento = None
+    if carga.get("verdict") == "changes":
+        if documento is None:
+            return (f"resultado-invalido: el archivo de findingsRef no parsea "
+                    f"como {HALLAZGOS_SCHEMA}")
+        defecto = defecto_de_hallazgos(documento)
+        if not defecto and not documento["findings"]:
+            # Un changes sin ningún hallazgo no pide nada que corregir (CodeRabbit en #328).
+            defecto = "un changes trae al menos un hallazgo"
+        return f"resultado-invalido: {defecto}" if defecto else None
+    if carga.get("verdict") == "approved":
+        if isinstance(documento, dict) and documento.get("schema") == HALLAZGOS_SCHEMA:
+            # Un hallazgos.v1 mal formado no pasa por approved (CodeRabbit en #328): con
+            # "bloqueante": 1 el bloqueante iba sin tipar y se colaba.
+            defecto = defecto_de_hallazgos(documento)
+            if defecto:
+                return f"resultado-invalido: {defecto}"
+            hallazgos = documento.get("findings")
+            if isinstance(hallazgos, list):
+                for hallazgo in hallazgos:
+                    if isinstance(hallazgo, dict) and hallazgo.get("bloqueante") is True:
+                        return (f"aprobado-con-bloqueante: {hallazgo.get('id')} es bloqueante "
+                                "en la evidencia de un approved")
+            return None
+        for linea in raw.decode("utf-8", errors="replace").splitlines():
+            if linea.startswith(("BLOQUEANTE", "BLOCKER")):
+                return ("aprobado-con-bloqueante: la evidencia trae una línea que "
+                        "empieza con BLOQUEANTE o BLOCKER")
+    return None
 
 
 class Host:
@@ -597,6 +683,12 @@ class Host:
             # grabar cubre el camino donde el snapshot ya existía.
             if not typed_payload_valido(assignment["resultContract"], result["typedPayload"]):
                 raise ValueError(f"typedPayload no cumple {assignment['resultContract']}")
+            # El contenido del artefacto solo se valida en este camino, donde sus bytes se
+            # acaban de leer: el re-check usa solo la forma porque el snapshot existente ya
+            # pasó esta validación antes de grabarse y su digest lo ata a ese resultado.
+            motivo = contenido_rechazado(assignment["resultContract"], result["typedPayload"], raw)
+            if motivo:
+                raise ValueError(motivo)
             self._write_snapshot(snapshot, raw)
             self._snapshot_bytes(snapshot, result["digest"])
         # Después de la revisión del repo del revisor (ReviewWroteSource manda, es el

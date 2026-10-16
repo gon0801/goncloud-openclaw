@@ -5,6 +5,7 @@ import hashlib
 import importlib.util
 import json
 import os
+import re
 from pathlib import Path
 import subprocess
 import sys
@@ -13,6 +14,7 @@ import unittest
 from unittest import mock
 
 
+ROOT = Path(__file__).resolve().parents[2]
 CLI = Path(__file__).resolve().parents[1] / "mac" / "progress-events.py"
 SHA = "a" * 40
 
@@ -141,6 +143,69 @@ else:
         self.assertEqual(evidence["sha"], SHA)
         self.assertEqual(event["verdict"], "aprobado")
         self.assertEqual(event["evidence"]["ref"], "evidence/" + identifier + ".json")
+
+    def test_verdict_is_saved_in_the_board_terms(self):
+        # SUA-05 (4.2) y DeepSeek F1 en #328: el queue acepta las dos formas (la del contrato
+        # review.v1 que manda progress_bridge y la vieja) y guarda la que el tablero valida
+        # (tablero-runbook/progress-event.ts), que es la del registro de siempre.
+        permitidos = set(re.findall(
+            r'raw\.verdict !== "(\w+)"',
+            (ROOT / "tablero-runbook" / "progress-event.ts").read_text(encoding="utf-8")))
+        self.assertEqual(permitidos, {"aprobado", "cambios"})
+        textos = {}
+        for ronda, (argumento, guardado) in enumerate(
+                (("approved", "aprobado"), ("changes", "cambios"),
+                 ("aprobado", "aprobado"), ("cambios", "cambios")), start=1):
+            with self.subTest(verdict=argumento):
+                textos[ronda] = "VEREDICTO " + argumento + " " + SHA + "\n"
+                self.input.write_text(textos[ronda])
+                result = self.cli("record-verdict", "--corrida", "run-1", "--carril", "B3",
+                                  "--intento", "try-1", "--ronda", str(ronda), "--sha", SHA,
+                                  "--verdict", argumento, "--evidence-file", str(self.input))
+                identifier = json.loads(result.stdout)["id"]
+                base = self.state / "runs" / "run-1"
+                event = json.loads((base / "queue" / (identifier + ".json")).read_text())
+                evidence = json.loads((base / "evidence" / (identifier + ".json")).read_text())
+                self.assertEqual(event["verdict"], guardado)
+                self.assertIn(event["verdict"], permitidos)
+                self.assertEqual(evidence["verdict"], guardado)
+        # DeepSeek F2 en #328: reintentar el mismo comando sobre un registro viejo en español
+        # devuelve el recibo, no "ID existente con contenido distinto".
+        self.input.write_text(textos[3])
+        self.cli("record-verdict", "--corrida", "run-1", "--carril", "B3", "--intento", "try-1",
+                 "--ronda", "3", "--sha", SHA, "--verdict", "approved",
+                 "--evidence-file", str(self.input))
+        self.cli("record-verdict", "--corrida", "run-1", "--carril", "B3", "--intento", "try-1",
+                 "--ronda", "3", "--sha", SHA, "--verdict", "aprobado",
+                 "--evidence-file", str(self.input))
+
+    def test_a_changes_verdict_takes_its_hallazgos_v1_as_evidence(self):
+        # DeepSeek F3 en #328: el artefacto de un changes es un hallazgos.v1 (JSON) y ninguna
+        # línea de un JSON empieza con VEREDICTO; la cola lo acepta como evidencia de cambios.
+        hallazgos = {"schema": "hallazgos.v1", "findings": [
+            {"id": "H1", "bloqueante": True, "archivo": "saluda.py", "linea": 2,
+             "resumen": "devuelve hola", "reproduce": "python3 test-saluda.py"}]}
+        self.input.write_text(json.dumps(hallazgos, indent=2) + "\n")
+        result = self.cli("record-verdict", "--corrida", "run-1", "--carril", "B3",
+                          "--intento", "try-1", "--ronda", "7", "--sha", SHA,
+                          "--verdict", "changes", "--evidence-file", str(self.input))
+        identifier = json.loads(result.stdout)["id"]
+        event = json.loads((self.state / "runs" / "run-1" / "queue" / (identifier + ".json")).read_text())
+        self.assertEqual(event["verdict"], "cambios")
+        # Un approved con un hallazgos.v1 sin bloqueantes pasa (DeepSeek F5 en #328); con un
+        # bloqueante, o un JSON que no es hallazgos.v1, no.
+        limpio = {"schema": "hallazgos.v1", "findings": [dict(hallazgos["findings"][0], bloqueante=False)]}
+        self.input.write_text(json.dumps(limpio) + "\n")
+        self.cli("record-verdict", "--corrida", "run-1", "--carril", "B3", "--intento", "try-1",
+                 "--ronda", "9", "--sha", SHA, "--verdict", "approved",
+                 "--evidence-file", str(self.input))
+        for verdict, texto in (("approved", json.dumps(hallazgos)), ("changes", '{"otra": "cosa"}'),
+                               ("changes", json.dumps({"schema": "hallazgos.v1", "findings": []}))):
+            with self.subTest(verdict=verdict):
+                self.input.write_text(texto + "\n")
+                self.cli("record-verdict", "--corrida", "run-1", "--carril", "B3",
+                         "--intento", "try-1", "--ronda", "8", "--sha", SHA,
+                         "--verdict", verdict, "--evidence-file", str(self.input), ok=False)
 
     def test_invalid_identifiers_do_not_escape_state_dir(self):
         self.ready("--carril", "../B3", ok=False)

@@ -29,7 +29,9 @@
 # mismo inventario y mismos pesos dan el mismo reparto en los cinco runners, y por eso la
 # union de los cinco es exactamente la bateria de siempre, con cada entrada una vez. El
 # inventario shell sale del glob scripts/tests/*.sh (un test nuevo entra solo, sin tocar
-# este archivo ni el workflow). Los pesos solo deciden el balance: un peso viejo o ausente
+# este archivo ni el workflow), con una excepcion documentada abajo:
+# test-ci-coverage-contract.sh corre una vez por PR en el job ci-contract, no
+# en los shards. Los pesos solo deciden el balance: un peso viejo o ausente
 # desbalancea, nunca saca una entrada de la union. Un shard invalido (6/5, 1/3, x) sale 2
 # ANTES de correr nada, y un arbol sin pruebas shell sale en rojo en cada shard.
 #
@@ -77,10 +79,17 @@ else
 fi
 
 # --- inventario shell: SOLO el glob manda (Fase 15.1). Nadie mantiene una lista a mano
-# que pueda quedarse corta: un archivo nuevo en scripts/tests/ ya esta en la bateria.
+# que pueda quedarse corta: un archivo nuevo en scripts/tests/ ya esta en la bateria,
+# con UNA excepcion: test-ci-coverage-contract.sh corre una sola vez por PR en el job
+# ci-contract de quality.yml (sin condicion de omision); en este glob correria dos
+# veces, una en un shard y otra en ci-contract. El gate genera su inventario con este
+# MISMO filtro ("Auditar la union de los shards", quality.yml): si los dos filtros
+# divergen, valida-union-shards.sh rebota ruidosamente (la union deja de ser el
+# inventario).
 shell_tests=()
 for t in scripts/tests/*.sh; do
   [ -e "$t" ] || continue
+  case $t in scripts/tests/test-ci-coverage-contract.sh) continue ;; esac
   shell_tests+=("$(basename "$t")")
 done
 node_tests=()

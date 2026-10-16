@@ -152,6 +152,23 @@ def event_id(kind, corrida, carril, intento, ronda):
     return "evt-" + hashlib.sha256(key).hexdigest()[:32]
 
 
+def es_hallazgos(content, sin_bloqueantes=False):
+    """Si la evidencia es un documento hallazgos.v1: un objeto con ese schema y su lista. Un
+    approved puede traer uno sin bloqueantes, como lo acepta el host (DeepSeek F5 en #328)."""
+    try:
+        documento = json.loads(content)
+    except ValueError:
+        return False
+    if not (isinstance(documento, dict) and documento.get("schema") == "hallazgos.v1"
+            and isinstance(documento.get("findings"), list)):
+        return False
+    if not sin_bloqueantes and not documento["findings"]:
+        # Un cambios sin hallazgos no pide nada (CodeRabbit en #328).
+        return False
+    return not sin_bloqueantes or not any(
+        isinstance(h, dict) and h.get("bloqueante") is True for h in documento["findings"])
+
+
 def record(args):
     corrida = check(args.corrida, RUN_RE, "corrida")
     carril = check(args.carril, ID_RE, "carril")
@@ -160,6 +177,12 @@ def record(args):
     if args.ronda < 1:
         raise ValueError("ronda inválida")
     kind = "round.ready" if args.action == "record-ready" else "round.verdict"
+    verdict = None
+    if kind == "round.verdict":
+        # El tablero (tablero-runbook/progress-event.ts) valida aprobado/cambios: la forma del
+        # contrato review.v1 que manda progress_bridge se traduce aquí, en la frontera, y el
+        # registro de siempre no cambia (DeepSeek F1 y F2 en #328).
+        verdict = {"approved": "aprobado", "changes": "cambios"}.get(args.verdict, args.verdict)
     identifier = check(args.event_id or event_id(kind, corrida, carril, intento, args.ronda), ID_RE, "ID")
     raw = Path(args.evidence_file).read_bytes()
     if len(raw) > 1_000_000:
@@ -173,7 +196,12 @@ def record(args):
         raise ValueError("source inválido")
     if not args.historical and kind == "round.ready" and not re.search(r"(?m)^LISTO " + re.escape(sha) + r"(?:\s|$)", content):
         raise ValueError("evidencia LISTO no corresponde al SHA")
-    if not args.historical and kind == "round.verdict" and not re.search(r"(?m)^VEREDICTO(?:\s|$)", content):
+    if (not args.historical and kind == "round.verdict"
+            and not re.search(r"(?m)^VEREDICTO(?:\s|$)", content)
+            and not (verdict == "cambios" and es_hallazgos(content))
+            and not (verdict == "aprobado" and es_hallazgos(content, sin_bloqueantes=True))):
+        # El artefacto de un changes es un hallazgos.v1 (SUA-05, 4.2): es su propia marca,
+        # porque ninguna línea de un JSON puede empezar con VEREDICTO (DeepSeek F3 en #328).
         raise ValueError("falta VEREDICTO en evidencia")
     base = run_dir(args, corrida)
     evidence_path = base / "evidence" / (identifier + ".json")
@@ -189,7 +217,7 @@ def record(args):
         metadata["historical"] = True
         metadata["source"] = args.source
     if kind == "round.verdict":
-        metadata["verdict"] = args.verdict
+        metadata["verdict"] = verdict
     if evidence_path.exists():
         old = json.loads(evidence_path.read_text(encoding="utf-8"))
         if {key: old.get(key) for key in metadata} != metadata:
@@ -204,7 +232,7 @@ def record(args):
              "carril": carril, "intento": intento, "ronda": args.ronda, "sha": sha,
              "evidence": {"ref": f"evidence/{identifier}.json", "sha": hashlib.sha256(evidence_bytes).hexdigest()}}
     if kind == "round.verdict":
-        event["verdict"] = args.verdict
+        event["verdict"] = verdict
     if args.historical:
         event["source"] = "historical:" + args.source
     if args.expected_revision is not None:
@@ -501,7 +529,8 @@ def parser():
         q.add_argument("--historical", action="store_true")
         q.add_argument("--source")
         if action == "record-verdict":
-            q.add_argument("--verdict", choices=("aprobado", "cambios"), required=True)
+            q.add_argument("--verdict", choices=("aprobado", "cambios", "approved", "changes"),
+                           required=True)
     q = sub.add_parser("queue-event")
     q.add_argument("--event-json", required=True)
     q = sub.add_parser("publish")

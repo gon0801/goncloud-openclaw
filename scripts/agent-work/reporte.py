@@ -28,6 +28,81 @@ class Falla(Exception):
     pass
 
 
+HALLAZGOS_SCHEMA = "hallazgos.v1"
+CAMPOS_HALLAZGO = {"id", "bloqueante", "archivo", "linea", "resumen", "reproduce"}
+
+
+def _defecto_de_hallazgos(documento) -> str | None:
+    """El primer defecto de un documento hallazgos.v1, o None si es válido (SUA-05, 4.2)."""
+    if not isinstance(documento, dict):
+        return f"el artefacto no parsea como {HALLAZGOS_SCHEMA}"
+    if set(documento) != {"schema", "findings"} or documento["schema"] != HALLAZGOS_SCHEMA:
+        return f"el artefacto no parsea como {HALLAZGOS_SCHEMA}"
+    if not isinstance(documento["findings"], list):
+        return "findings no es una lista"
+    for indice, hallazgo in enumerate(documento["findings"], start=1):
+        if not isinstance(hallazgo, dict):
+            return f"el hallazgo {indice} no es un objeto"
+        if type(hallazgo.get("bloqueante")) is not bool:
+            return f"el hallazgo {indice} trae bloqueante que no es bool"
+        if type(hallazgo.get("linea")) is not int:
+            return f"el hallazgo {indice} trae linea que no es int"
+        for campo in ("id", "archivo", "resumen"):
+            if not isinstance(hallazgo.get(campo), str) or not hallazgo[campo].strip():
+                return f"el hallazgo {indice} trae {campo} vacío o que no es texto"
+        if hallazgo["bloqueante"] and "reproduce" not in hallazgo:
+            return f"el hallazgo {indice} es bloqueante sin reproduce"
+        if "reproduce" in hallazgo and (
+            not isinstance(hallazgo["reproduce"], str) or not hallazgo["reproduce"].strip()
+        ):
+            return f"el hallazgo {indice} trae reproduce vacío o que no es texto"
+        if set(hallazgo) != (
+            CAMPOS_HALLAZGO if "reproduce" in hallazgo else CAMPOS_HALLAZGO - {"reproduce"}
+        ):
+            return f"el hallazgo {indice} lleva llaves ajenas al contrato"
+    return None
+
+
+def _rechazo_de_artefacto(veredicto: str, ruta: str) -> str | None:
+    """El motivo por el que el CONTENIDO del artefacto rompe review.v1 (SUA-05, 4.2), o None
+    si pasa. Es la misma regla que el host valida al grabar, duplicada aquí en su forma mínima
+    porque este archivo es standalone para la Mini (solo biblioteca estándar): un changes
+    exige un hallazgos.v1 válido y un approved no aprueba con un bloqueante tipado ni con una
+    línea que empieza con BLOQUEANTE o BLOCKER."""
+    raw = Path(ruta).read_bytes()
+    try:
+        documento = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, ValueError):
+        documento = None
+    if veredicto == "changes":
+        if documento is None:
+            return f"resultado-invalido: el artefacto no parsea como {HALLAZGOS_SCHEMA}"
+        defecto = _defecto_de_hallazgos(documento)
+        if not defecto and not documento["findings"]:
+            defecto = "un changes trae al menos un hallazgo"
+        return f"resultado-invalido: {defecto}" if defecto else None
+    if isinstance(documento, dict) and documento.get("schema") == HALLAZGOS_SCHEMA:
+        defecto = _defecto_de_hallazgos(documento)
+        if defecto:
+            return f"resultado-invalido: {defecto}"
+        hallazgos = documento.get("findings")
+        if isinstance(hallazgos, list):
+            for hallazgo in hallazgos:
+                if isinstance(hallazgo, dict) and hallazgo.get("bloqueante") is True:
+                    return (
+                        f"aprobado-con-bloqueante: {hallazgo.get('id')} es bloqueante "
+                        "en la evidencia de un approved"
+                    )
+        return None
+    for linea in raw.decode("utf-8", errors="replace").splitlines():
+        if linea.startswith(("BLOQUEANTE", "BLOCKER")):
+            return (
+                "aprobado-con-bloqueante: la evidencia trae una línea que empieza "
+                "con BLOQUEANTE o BLOCKER"
+            )
+    return None
+
+
 def buscar_instruccion(root: Path, tarea: str) -> tuple[str, bytes]:
     """El (sha, contenido) de la instrucción cuya cabecera trae tarea: <uuid>."""
     if root.is_symlink() or not root.is_dir():
@@ -57,6 +132,9 @@ def armar(root: Path, tarea: str, contrato: str, artefacto: str, veredicto) -> d
     elif contrato == "review.v1":
         if not veredicto:
             raise Falla("review.v1 pide --veredicto approved|changes")
+        rechazo = _rechazo_de_artefacto(veredicto, artefacto)
+        if rechazo:
+            raise Falla(rechazo)
         payload = (
             {"verdict": "approved", "evidenceRef": artefacto}
             if veredicto == "approved"

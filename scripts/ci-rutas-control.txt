@@ -1,0 +1,53 @@
+# Rutas que un checker de la bateria lee como entrada de datos (SUA-05, 4.6).
+#
+# Politica: un cambio que toca una de estas rutas clasifica carril COMPLETO
+# aunque case con la allowlist fast. La razon es de cobertura, no de
+# desconfianza: cada entrada de aqui es DATO de un checker de la bateria, y un
+# cambio del dato tiene que disparar el checker que lo lee. La allowlist no
+# puede expresar la excepcion: sus reglas docs/evidence/**/*.tsv (o *.json,
+# *.jsonl) y .saikit/progress/*.json casan exactamente con estos datos.
+#
+# La lista NO se mantiene a mano: el guard de
+# scripts/tests/test-clasificador-cambio.sh recorre scripts/tests/ buscando
+# literales de ruta del repo que casen la allowlist y exige que cada uno case
+# alguna entrada de aqui; un checker nuevo sobre un archivo del carril rapido
+# pone la bateria en rojo hasta que el archivo entra. Los .md y .txt de
+# docs/evidence/ se quedan en el carril rapido (decision de #325 F6) y no
+# entran. recetas-repos.json entra cuando nazca (H4).
+#
+# Formato (lo consume scripts/clasificar-cambio.sh, igual que la allowlist):
+#   - una ruta o patron por linea; '#' inicia comentario; las lineas vacias
+#     no cuentan;
+#   - el patron casa contra la ruta relativa completa del archivo cambiado;
+#   - '*' casa cualquier cosa que NO cruce '/'; '**/' casa cualquier
+#     profundidad de directorios, INCLUIDA cero.
+#
+# Esta lista es un archivo de CONTROL: cualquier cambio que la toque (igual
+# que scripts/ci-fast-allowlist.txt, scripts/clasificar-cambio.sh o
+# .github/workflows/quality.yml) clasifica completo por regla, sin consultar
+# lista alguna -- la llave no abre su propia puerta en el mismo cambio que la
+# reescribe.
+# Corpus de rendiciones: lo verifica summa-gate/verify-corpus.mjs.
+docs/evidence/corpus-rendiciones.tsv
+# Registros de cierre: los valida scripts/tests/test-progreso-valido.sh.
+.saikit/progress/*.json
+# Evidencia versionada: la revisa scripts/tests/test-evidencia-sin-texto-de-usuario.sh (candado de privacidad).
+docs/evidence/**/*.jsonl
+# Configuracion de agent-work: proveedores de modelos (test-agent-work-modelos/claude/avisar/lineas.py).
+docs/evidence/agent-work/proveedores-permitidos.json
+# Configuracion de agent-work: cobertura que leen modelos, routing, acceptance y el e2e del loop principal.
+docs/evidence/agent-work/coverage.json
+# Configuracion de agent-work: politica de calidad (test-sistema-agentes-contrato.py).
+docs/evidence/agent-work/politica-calidad.json
+# Configuracion de agent-work: limites que leen los e2e de artifact y cutover.
+docs/evidence/agent-work/limits.json
+# Configuracion de agent-work: mapa de runtime (test-agent-work-requester-queue-mapper.sh, acceptance, artifact).
+docs/evidence/agent-work/runtime-map.json
+# Registro del par de aceptacion (test_agent_work_acceptance.py).
+docs/evidence/agent-work/acceptance-pair.json
+# Manifiesto de artefactos (test_agent_work_artifact.py).
+docs/evidence/agent-work/artifact-manifest.json
+# Foto de crons verificada por hash en test-agent-work-routing.py.
+docs/evidence/agent-work/SUA-00-M09b-cron-snapshot.json
+# Inventario del sistema unificado (test-sistema-agentes-contrato.py).
+docs/evidence/sistema-agentes-unificado/SUA-00-inventario.json

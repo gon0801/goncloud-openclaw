@@ -14,10 +14,12 @@ Forma de los datos:
 - Una fecha es un texto ISO 8601 en UTC con sufijo `Z`. `efecto_admisible` recibe `ahora` así.
 
 Orden del veredicto: `schema`, luego las reglas propias del esquema (para meta `id-duplicado`,
-`dependencia-faltante`, `ciclo`, `criterio-faltante`; para excepción `opcion-no-ofrecida`),
-luego `campo-prohibido`. Las reglas
-propias solo corren sobre un documento sin hallazgos `schema`, porque leen su forma sin
-volver a comprobarla.
+`dependencia-faltante`, `ciclo`, `criterio-faltante`, `quality-policy-unknown`; para excepción
+`opcion-no-ofrecida`), luego `campo-prohibido`. Las reglas propias solo corren sobre un
+documento sin hallazgos `schema`, porque leen su forma sin volver a comprobarla.
+`quality-policy-unknown` compara `qualityPolicy.version` contra las `versiones` de
+`docs/evidence/agent-work/politica-calidad.json`; sin esa tabla legible no hay versión
+conocida, como en R sin tabla no se abre una raíz.
 """
 
 from __future__ import annotations
@@ -651,8 +653,31 @@ def _respuesta_fuera_de_opciones(excepcion: dict) -> list[Hallazgo]:
     return [Hallazgo("opcion-no-ofrecida", "response.optionId", detalle)]
 
 
+POLITICA_DE_CALIDAD = (
+    Path(__file__).resolve().parents[2] / "docs/evidence/agent-work/politica-calidad.json"
+)
+
+
+def _politica_de_calidad_desconocida(meta: dict) -> list[Hallazgo]:
+    version = meta["qualityPolicy"]["version"]
+    try:
+        documento = cargar_json(POLITICA_DE_CALIDAD)
+    except (OSError, ValueError) as fallo:
+        detalle = f"no se pudo leer politica-calidad.json: {fallo}"
+    else:
+        versiones = documento.get("versiones") if isinstance(documento, dict) else None
+        if isinstance(versiones, dict) and version in versiones:
+            return []
+        detalle = f"la versión {version} no está en politica-calidad.json"
+    return [Hallazgo("quality-policy-unknown", "qualityPolicy.version", detalle)]
+
+
+def _reglas_de_meta(meta: dict) -> list[Hallazgo]:
+    return [*_reglas_de_plan(meta), *_politica_de_calidad_desconocida(meta)]
+
+
 _REGLAS_PROPIAS: Mapping[str, Callable[[dict], list[Hallazgo]]] = {
-    META: _reglas_de_plan,
+    META: _reglas_de_meta,
     EXCEPCION: _respuesta_fuera_de_opciones,
 }
 

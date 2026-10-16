@@ -13,6 +13,10 @@ import tempfile
 SHA = re.compile(r"[0-9a-f]{40}\Z")
 DIGEST = re.compile(r"[0-9a-f]{64}\Z")
 CLIENT_TIMEOUT = 30
+CONTRACT_VERDICTS = {"approved": "approved", "changes": "changes",
+                     "aprobado": "approved", "cambios": "changes"}
+# Las cuatro formas que se leen (el español es de entregas viejas) y la del contrato que se
+# emite al queue (SUA-05, 4.2): lo viejo se sigue leyendo, pero nunca se graba de nuevo.
 
 
 def canonical(value):
@@ -75,7 +79,7 @@ def transfer_projection(pending, *, host_id, evidence_root, progress_state_dir,
         raise ValueError("tipo de proyección inválido")
     if not isinstance(result.get("sha"), str) or not SHA.fullmatch(result["sha"]):
         raise ValueError("SHA de proyección inválido")
-    if kind == "verdict" and result.get("verdict") not in ("aprobado", "cambios"):
+    if kind == "verdict" and result.get("verdict") not in CONTRACT_VERDICTS:
         raise ValueError("veredicto inválido")
     if not isinstance(result.get("contentHash"), str) or not DIGEST.fullmatch(result["contentHash"]):
         raise ValueError("hash de evidencia inválido")
@@ -97,7 +101,7 @@ def transfer_projection(pending, *, host_id, evidence_root, progress_state_dir,
     command.extend(("--ronda", str(destination["ronda"]), "--sha", result["sha"],
                     "--event-id", pending["eventId"]))
     if kind == "verdict":
-        command.extend(("--verdict", result["verdict"]))
+        command.extend(("--verdict", CONTRACT_VERDICTS[result["verdict"]]))
     with tempfile.TemporaryDirectory(prefix="agent-work-projection-") as private:
         snapshot = Path(private) / "evidence.txt"
         with snapshot.open("xb") as stream:
@@ -148,7 +152,7 @@ def transfer_host_projection(pending, *, host, operation_key, progress_state_dir
     if projected.get("kind") == "ready":
         expected_payload = {"evidenceRef": projected.get("evidenceRef")}
     elif projected.get("kind") == "verdict":
-        verdict = {"aprobado": "approved", "cambios": "changes"}.get(projected.get("verdict"))
+        verdict = CONTRACT_VERDICTS.get(projected.get("verdict"))
         if verdict is None:
             raise ValueError("veredicto de proyección inválido")
         reference_field = "evidenceRef" if verdict == "approved" else "findingsRef"

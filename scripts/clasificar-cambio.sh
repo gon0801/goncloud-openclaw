@@ -13,6 +13,9 @@
 #   --head       extremo nuevo: head del PR o `after` del push.
 #   --allowlist  allowlist fast (default: ci-fast-allowlist.txt junto a este
 #                script; en CI siempre se usa la versionada del repo).
+#                La lista de rutas de control (ci-rutas-control.txt, junto a
+#                este script) no es parametro: el clasificador siempre usa la
+#                versionada del repo.
 #
 # Salida:
 #   stdout        UNA linea: `fast` o `completo`. Es el contrato visible.
@@ -27,20 +30,26 @@
 #      imposible, diff que falla, estado de diff no soportado, linea con forma
 #      inesperada, ruta fuera de contrato) tambien es exit 0 con veredicto
 #      `completo`: es una seleccion, no un error.
-#   2  error de uso o de herramienta (args, allowlist ilegible, no es un repo
-#      git). Sin veredicto: el job del workflow muere rojo y el gate no
-#      autoriza ninguna omision. El fail-closed de "la clasificacion no
-#      existe" vive en el gate, no aca.
+#   2  error de uso o de herramienta (args, allowlist o lista de rutas de
+#      control ilegible, no es un repo git). Sin veredicto: el job del
+#      workflow muere rojo y el gate no autoriza ninguna omision. El
+#      fail-closed de "la clasificacion no existe" vive en el gate, no aca.
 #
 # Reglas de la politica que este script garantiza:
 #   - clasifica POR ARCHIVOS contra la allowlist versionada; nunca por titulo,
 #     etiqueta o declaracion. La extension .md por si sola no es fast: hay
 #     documentos que controlan comportamiento y no estan enumerados.
 #   - la llave no abre su propia puerta: tocar scripts/ci-fast-allowlist.txt,
-#     scripts/clasificar-cambio.sh o .github/workflows/quality.yml clasifica
-#     completo SIN consultar la allowlist (el mismo cambio que reescribe la
-#     llave no puede usarla para abrirse la puerta del fast). La ruta del
-#     workflow la marca este script por nombre, no leyendolo: es config de CI.
+#     scripts/ci-rutas-control.txt, scripts/clasificar-cambio.sh o
+#     .github/workflows/quality.yml clasifica completo SIN consultar la
+#     allowlist (el mismo cambio que reescribe la llave no puede usarla para
+#     abrirse la puerta del fast). La ruta del workflow la marca este script
+#     por nombre, no leyendolo: es config de CI.
+#   - las rutas que un checker de la bateria lee como dato (la lista en datos
+#     scripts/ci-rutas-control.txt: el corpus de rendiciones, los registros de
+#     progreso, la evidencia .jsonl y los datos de agent-work) clasifican
+#     completo ANTES de consultar la allowlist aunque casen con ella: cambiar
+#     el dato tiene que disparar el checker que lo lee.
 #   - renombres: origen Y destino deben ser fast para que el cambio sea fast.
 #   - symlinks, gitlinks (submodulos) y cualquier modo no regular son
 #     completo: en --name-status se ven como A/T y la allowlist no mira modos.
@@ -78,6 +87,11 @@ done
 # moria despues ADENTRO con exit 1 sin veredicto; el contrato de la cabecera
 # promete exit 2 aca, el error de herramienta que deja el job rojo.
 [ -f "$ALLOWLIST" ] && [ -r "$ALLOWLIST" ] || { echo "FAIL: no se puede leer la allowlist: $ALLOWLIST" >&2; exit 2; }
+# Misma barrera para la lista de rutas de control: ruta_es_control la consulta
+# antes de la allowlist, y sin ella no hay contrato que consultar. Exit 2, el
+# job muere rojo.
+RUTAS_CONTROL=$SCRIPT_DIR/ci-rutas-control.txt
+[ -f "$RUTAS_CONTROL" ] && [ -r "$RUTAS_CONTROL" ] || { echo "FAIL: no se puede leer la lista de rutas de control: $RUTAS_CONTROL" >&2; exit 2; }
 git rev-parse --git-dir >/dev/null 2>&1 || {
   echo "FAIL: no estoy dentro de un repo git (corre desde el clon que se clasifica)" >&2; exit 2;
 }
@@ -121,26 +135,34 @@ patron_casa() { # <ruta> <patron>: 0 si la ruta casa con el patron completo
   [[ $ruta =~ ^$re$ ]]
 }
 
-ruta_es_fast() { # <ruta>: 0 si ALGUNA regla de la allowlist casa con la ruta
-  local ruta=$1 patron
+ruta_casa_en_archivo() { # <ruta> <archivo de reglas>: 0 si ALGUNA regla casa con la ruta
+  local ruta=$1 archivo=$2 patron
   while IFS= read -r patron || [ -n "$patron" ]; do
     patron=${patron#${patron%%[![:space:]]*}}   # sangria inicial
     patron=${patron%${patron##*[![:space:]]}}   # espacio final
     case $patron in ''|'#'*) continue ;; esac
     patron_casa "$ruta" "$patron" && return 0
-  done < "$ALLOWLIST"
+  done < "$archivo"
   return 1
 }
 
-# Archivos que controlan la clasificacion misma (la llave y sus cerraduras).
-# Cualquier cambio que los toca clasifica completo ANTES de consultar la
-# allowlist: ese mismo cambio pudo reescribirla (p.ej. a '**'), y la llave no
-# puede autorizar la puerta del fast en el mismo cambio que la cambia.
+ruta_es_fast() { # <ruta>: 0 si ALGUNA regla de la allowlist casa con la ruta
+  ruta_casa_en_archivo "$1" "$ALLOWLIST"
+}
+
+# Archivos que controlan la clasificacion misma (la llave y sus cerraduras):
+# los fijos del case y la lista en datos $RUTAS_CONTROL (rutas que un checker
+# de la bateria lee como entrada; la consulta es ANTES de la allowlist y con
+# patron_casa, el mismo motor de la allowlist). Cualquier cambio que los toca
+# clasifica completo ANTES de consultar la allowlist: ese mismo cambio pudo
+# reescribirla (p.ej. a '**'), y la llave no puede autorizar la puerta del
+# fast en el mismo cambio que la cambia. La lista misma entra por nombre en
+# el case: tampoco abre su propia puerta.
 ruta_es_control() { # <ruta>: 0 si la ruta controla la clasificacion
   case $1 in
-    scripts/ci-fast-allowlist.txt|scripts/clasificar-cambio.sh|.github/workflows/quality.yml) return 0 ;;
+    scripts/ci-fast-allowlist.txt|scripts/ci-rutas-control.txt|scripts/clasificar-cambio.sh|.github/workflows/quality.yml) return 0 ;;
   esac
-  return 1
+  ruta_casa_en_archivo "$1" "$RUTAS_CONTROL"
 }
 
 # Symlinks (120000), gitlinks (160000) y modos desconocidos JAMAS son fast:

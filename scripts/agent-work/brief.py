@@ -120,12 +120,23 @@ def protocol_section(root, tarea, contrato):
     forma y su digest, y un modelo no lo arma a mano; reporte.py lo arma. Va después de la
     sección del perfil y delante de la prosa, dentro del digest de la instrucción."""
     veredicto = " --veredicto approved|changes" if contrato == "review.v1" else ""
+    forma = (
+        'Con --veredicto changes tu artefacto es exactamente un JSON {"schema": '
+        '"hallazgos.v1", "findings": [{"id", "bloqueante": bool, "archivo", "linea": int, '
+        '"resumen", "reproduce"}]}, sin otras llaves, y cada hallazgo con "bloqueante" true '
+        'lleva "reproduce" (el comando que lo reproduce); con approved es texto libre sin '
+        "bloqueantes: ningún hallazgo bloqueante y ninguna línea que empiece con BLOQUEANTE "
+        "o BLOCKER.\n\n"
+        if contrato == "review.v1"
+        else ""
+    )
     return ("<!-- protocolo inicio -->\n"
             "## Cómo reportar tu resultado\n\n"
             f"Deja tu artefacto en tu workspace, en un archivo cuyo nombre lleve esta tarea: {tarea}.\n"
             "Cuando termines, corre exactamente:\n\n"
             f"python3 ~/.local/share/agent-work/reporte.py --root {root} --tarea {tarea} "
             f"--contrato {contrato} --artefacto <ruta absoluta de tu artefacto>{veredicto}\n\n"
+            f"{forma}"
             'y pásale a managed_tasks_report exactamente {"result": <la salida de ese comando>}, '
             "sin cambiarle nada. Si el comando sale con error, dilo tal cual: no armes el resultado a mano.\n"
             "<!-- protocolo fin -->\n").encode()
