@@ -192,7 +192,7 @@ printf '%s' "$s5" | grep -qF 'cero bloqueantes adjudicados abiertos' \
 viejo=$(printf '%s' "$s5" | grep -inE 'con comentarios accionables no es' || true)
 [ -z "$viejo" ] || fail "$DOC: la seccion 5 volvio a tratar cualquier comentario como revision no aprobada: $viejo"
 s6=$(seccion 6)
-for regla in 'Con CI y CodeRabbit aprobados y los bloqueantes resueltos' 'cualquier agente Claw o CLI ejecuta `python3 scripts/agent-work/merge.py mergear <PR> --sha <head>`' 'devuelve el faltan y no mergea' 'No se requiere orden adicional, recibo del lead ni tabla de preaprobaciones'; do
+for regla in 'Con CI y CodeRabbit aprobados y los bloqueantes resueltos' 'cualquier agente Claw o CLI ejecuta `python3 /Users/dn/dev/wt/agent-work-host/scripts/agent-work/merge.py mergear <PR> --sha <head> --repo <owner/repo>`' 'devuelve el faltan y no mergea' 'No se requiere orden adicional, recibo del lead ni tabla de preaprobaciones'; do
   printf '%s' "$s6" | grep -qF "$regla" || fail "$DOC: falta la regla de merge: $regla"
 done
 s7=$(seccion 7)
@@ -254,7 +254,7 @@ echo "ok (3e): auditoria antes del primer push; correccion local al mismo PR"
 # vivos no las nombran. Los runbooks de fases cerradas conservan la suya como
 # historia fechada y quedan fuera de este barrido; el loop las conserva solo
 # dentro de sus lineas Medido:, que cuentan por que salieron.
-for file in docs/runbooks/*.md; do
+for file in docs/runbooks/*.md agents/*/agent/workshop-skills/*/SKILL.md; do
   case "$file" in *autopilot-fase*) continue ;; esac
   vieja=$(grep -v '^Medido:' "$file" | grep -in -E 'cross-review|-Excluir|-Desde|rondas? cruzada|APPROVE lead' || true)
   [ -z "$vieja" ] || fail "$file: volvio un mecanismo retirado (cruzada/-Excluir/-Desde/APPROVE lead): $vieja"

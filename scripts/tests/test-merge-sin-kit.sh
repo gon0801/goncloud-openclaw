@@ -25,6 +25,6 @@ grep -qF 'Con el kit apagado, lo anterior no aplica: `main` encarga el cierre' a
   || fail 'saikit-merge-route no manda al cierre sin kit'
 grep -qF 'The kit is off since 2026-09-27, so skip steps 3 to 5' agents/main/agent/workshop-skills/post-merge-closure/SKILL.md \
   || fail 'post-merge-closure todavia despliega el hook'
-grep -qF 'cualquier agente Claw o CLI ejecuta `python3 scripts/agent-work/merge.py mergear <PR> --sha <head>`' docs/runbooks/loop-autopilot.md \
+grep -qF 'cualquier agente Claw o CLI ejecuta `python3 /Users/dn/dev/wt/agent-work-host/scripts/agent-work/merge.py mergear <PR> --sha <head> --repo <owner/repo>`' docs/runbooks/loop-autopilot.md \
   || fail 'loop-autopilot.md §6 ya no tiene la regla a la que apuntan las skills'
 echo 'PASS: cierre de PR sin el kit'

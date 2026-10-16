@@ -28,7 +28,7 @@ OpenClaw; su rama del bloque es `feat/agent-work-integration` en
   (#115), un archivo excluido por tamaño baja la cobertura a `partial`, y G fija
   ese sha en sus workflows (#329).
 - **El merge es un comando con compuertas, no una orden a mano.**
-  `scripts/agent-work/merge.py` (H4, PR #330) trae `listo`, `mergear` y
+  `scripts/agent-work/merge.py` (H4, #330) trae `listo`, `mergear` y
   `reintentar <PR> --sha <head>`: draft y head exacto, checks verdes de ese SHA,
   CodeRabbit (un `rate limited` pasa con aviso, decisión del 2026-09-25), la
   evidencia del bot firmada por `github-actions[bot]` con su `completion` del
@@ -56,8 +56,8 @@ OpenClaw; su rama del bloque es `feat/agent-work-integration` en
 | Verificar | Estado | Prueba |
 |---|---|---|
 | Código cero con texto `BLOCKER` no aprueba | **Cumplido** (H2, #328). `approved` con `hallazgos.v1` bloqueante y con línea `BLOCKER` salen `aprobado-con-bloqueante`. | `test-agent-work-reporte.py`, `test-agent-work-host.py` |
-| Evidencia de otro head falla | **Cumplido en H4; pendiente de merge** (PR #330). Comentario del bot con la marca de otro SHA: `evidencia-de-otro-head`. | `test-agent-work-merge.py` |
-| Comentario de bot sin check-run falla | **Cumplido en H4; pendiente de merge** (PR #330). Los mismos marcadores escritos por otra cuenta, sin marca de completitud o con la forma legada: no listo. | `test-agent-work-merge.py` |
+| Evidencia de otro head falla | **Cumplido** (H4, #330). Comentario del bot con la marca de otro SHA: `evidencia-de-otro-head`. | `test-agent-work-merge.py` |
+| Comentario de bot sin check-run falla | **Cumplido** (H4, #330). Los mismos marcadores escritos por otra cuenta, sin marca de completitud o con la forma legada: no listo. | `test-agent-work-merge.py` |
 | Un bloqueante nuevo en cada ronda no reinicia límites | **Cumplido** (H1, #328): en R, tres rondas con hallazgos distintos dejan la lista acumulada y el contador sigue; la paridad fija las mismas versiones en los dos lados. | Prueba de `managed-root` en R (`c7a58a6b`); `test-sistema-agentes-contrato.py` (paridad con `ROOT_QUALITY_POLICIES`) |
 | Activar otra política sin la decisión de David falla | **Cumplido** (H1, #328): `activa` distinta sin `decision` nueva falla, y `contrato.py` rechaza una versión que no está (`quality-policy-unknown`). | `test-sistema-agentes-contrato.py` |
 | Ningún paso pide revisión a un segundo modelo | **Cumplido** (H6, esta rebanada): `segundoModelo: false` en la política y candado que veda la cruzada en los runbooks vivos (solo dentro de sus líneas `Medido:`). Ninguna SKILL administrada la nombra. | `test-loop-autopilot.sh` (bloques 3-r1 y 3f) |
@@ -81,7 +81,7 @@ OpenClaw; su rama del bloque es `feat/agent-work-integration` en
 - **La ventana viva del bloque, el 2026-10-16**: #325 mergeado 12:18Z; banco
   `hallazgos.v1` verde 13:16Z; #115 mergeado 15:55Z y #329 mergeado 16:19Z (H3 en
   los dos repos); host vivo en `78ce9e70` desde 14:02Z; `feat/agent-work-integration`
-  adelantada a `c7a58a6b` (16:26Z); H4 quedó en PR #330 (abierto) y H6 en su rama.
+  adelantada a `c7a58a6b` (16:26Z); #330 (H4) mergeado como `560497f2`; H6 en #331.
 
 ## Los PR
 
@@ -91,8 +91,8 @@ OpenClaw; su rama del bloque es `feat/agent-work-integration` en
 | #328 | `78ce9e70` | H1, H2 y H5: política de calidad, veredicto con forma, carril rápido y unión de shards |
 | goncloud-pr-review #115 | `cc7edd90` | H3 en el repo del bot: el recorte por tamaño degrada la marca a `partial` |
 | #329 | `7755ae54` | H3 en G: el sha del bot fijado en los workflows |
-| #330 (abierto) | — | H4: `merge.py` con sus compuertas, recetas por repo y reintento |
-| H6 (rama `sua/05-h6`) | — | Runbook, SKILLs, contratos, filas y este recibo; PR por abrir |
+| #330 | `560497f2` | H4: `merge.py` con sus compuertas, recetas por repo y reintento |
+| #331 | — | H6: runbook, SKILLs, contratos, filas y este recibo |
 
 En R, `feat/agent-work-integration` lleva el lado de H1 (`findingsRefs` acumulados
 y su prueba) hasta `c7a58a6b`, respaldada. Implementó GLM 5.3 Flash (H125, H3-pin,
@@ -101,11 +101,6 @@ banco con `hallazgos.v1`, M-25 y la ventana viva.
 
 ## Lo que queda abierto
 
-- **H4** (`merge.py`) está en PR #330 sin merge: hasta que entre, ningún comando
-  `merge.py` existe en `main` y los textos que lo nombran (runbook, SKILLs,
-  contratos) apuntan a un archivo que llega con ese PR.
-- **H6** (esta rebanada) vive en la rama `sua/05-h6` sin PR; el PR lo abre el
-  coordinador.
 - El **aviso a David** del cierre del bloque lo manda el coordinador.
 - Las filas `SUA-05/*` de
   [followups.md](../agent-work/followups.md): la fila `SUA-02/raíz muda` pide

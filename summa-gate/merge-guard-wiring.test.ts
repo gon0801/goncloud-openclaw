@@ -26,7 +26,12 @@ before(() => {
   } catch {
     // missing or not a symlink: nothing to repair
   }
-  if (!existsSync(link)) symlinkSync(openclawRoot, link);
+  try {
+    if (!existsSync(link)) symlinkSync(openclawRoot, link);
+  } catch (err) {
+    // otro archivo de prueba lo creo entre el existsSync y el symlinkSync
+    if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
+  }
 });
 
   // El enlace persiste a proposito: node --test corre estos archivos en procesos

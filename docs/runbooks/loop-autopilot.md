@@ -125,7 +125,7 @@ Medido: 2026-09-16, PR #48 se mergeó con el check de CodeRabbit en verde y trec
 
 ## 6. Merge del PR
 
-Con CI y CodeRabbit aprobados y los bloqueantes resueltos, cualquier agente Claw o CLI ejecuta `python3 scripts/agent-work/merge.py mergear <PR> --sha <head>`. El comando verifica sus compuertas sobre ese SHA —no draft, head exacto, checks verdes, CodeRabbit, la evidencia del bot con su `completion` y cada hallazgo abierto descartado o adjudicado— y solo entonces hace el squash; si algo falta, devuelve el faltan y no mergea. Un job de infraestructura caído se re-corre una vez con `python3 scripts/agent-work/merge.py reintentar <PR> --sha <head>`; la segunda caída es un fallo de verdad. No se requiere orden adicional, recibo del lead ni tabla de preaprobaciones. Confirma `MERGED` y el SHA integrado.
+Con CI y CodeRabbit aprobados y los bloqueantes resueltos, cualquier agente Claw o CLI ejecuta `python3 /Users/dn/dev/wt/agent-work-host/scripts/agent-work/merge.py mergear <PR> --sha <head> --repo <owner/repo>` si el repo tiene receta en `docs/evidence/agent-work/recetas-repos.json` (goncloud-openclaw, goncloud-pr-review, goncloud-hermes); siempre con la ruta absoluta y el `--repo`, porque sin él `merge.py` mira el PR de ese número en goncloud-openclaw. En un repo sin receta, `gh pr merge <PR> --squash --match-head-commit <SHA>` después de leer a mano los checks y los bots. El comando verifica sus compuertas sobre ese SHA —no draft, head exacto, checks verdes, CodeRabbit, la evidencia del bot con su `completion` y cada hallazgo abierto descartado o adjudicado— y solo entonces hace el squash; si algo falta, devuelve el faltan y no mergea. Un job de infraestructura caído se re-corre una vez con `python3 /Users/dn/dev/wt/agent-work-host/scripts/agent-work/merge.py reintentar <PR> --sha <head> --repo <owner/repo>`; la segunda caída es un fallo de verdad. No se requiere orden adicional, recibo del lead ni tabla de preaprobaciones. Confirma `MERGED` y el SHA integrado.
 
 ---
 
@@ -222,7 +222,7 @@ Aplican en toda fase. El runbook de fase agrega las suyas y no repite estas.
 | Un implementador muere o calla 30 minutos sin mensaje de cuota | Se relanza una vez con el mismo encargo. A la segunda, atorado y declarado. |
 | El implementador hizo push o abrió el PR solo | No se castiga ni se rehace: se verifica igual y se anota como desvío de proceso. |
 | Un archivo fuera de la tabla del carril | Se descarta antes del push con un commit propio. Nunca se pushea sin declararlo. |
-| El PR no puede mergearse | Corrige lo que `merge.py` nombra en su `faltan` (checks, conflictos, hallazgos sin adjudicar) y vuelve a ejecutar `merge.py mergear <PR> --sha <head>`. |
+| El PR no puede mergearse | Corrige lo que `merge.py` nombra en su `faltan` (checks, conflictos, hallazgos sin adjudicar) y vuelve a ejecutar `merge.py mergear <PR> --sha <head> --repo <owner/repo>` (§6). |
 | Lo único que detiene toda la corrida | Perder acceso a GitHub o a la Mac, o un gateway que no responde tras un reinicio. Todo lo demás detiene un carril y deja evidencia. |
 
 Medido: 2026-09-15 y 16, corrida de la Fase 6: cada fila de esta tabla es una situación que ocurrió al menos una vez esa noche y se resolvió a mano o se declaró.
