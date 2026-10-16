@@ -545,8 +545,8 @@ def _quema_el_aviso(vencen: list, state_root: Path, now: float, *, enviar_aviso=
     respuesta = {"vencen": [entrada for entrada, _ in vencen],
                  "enviado": False, "ultimoAviso": ultimo}
     if vencen and (ultimo is None or now - ultimo >= AVISO_EVERY_SECONDS):
-        lineas = [f"- {entrada} ({dias} días)" for entrada, dias in vencen]
-        texto = "fuentes por vencer:\n" + "\n".join(lineas)
+        renglones = [f"- {entrada} ({dias} días)" for entrada, dias in vencen]
+        texto = "fuentes por vencer:\n" + "\n".join(renglones)
         envio = (enviar_aviso or aviso_mod.avisar)(texto, policy=policy, openclaw_bin=openclaw_bin)
         if envio.get("enviado"):
             contenido = json.dumps({"schema": FUENTES_SCHEMA, "ultimoAviso": now},
