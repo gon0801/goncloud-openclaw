@@ -26,7 +26,7 @@ for ws in workspace-implementer workspace-verifier workspace-reviewer workspace-
   nunca=$(printf '%s\n' "$bloque" | grep -i '^Nunca:' | head -n 1)
   if [ -z "$nunca" ]; then echo "FALLO: $ws contrato sin linea que empiece en 'Nunca:'"; fails=$((fails+1)); continue; fi
   printf '%s
-' "$bloque" | grep -qF 'Puede mergear PRs con `python3 scripts/agent-work/merge.py mergear <PR> --sha <head>` y desplegar sin pedir permiso adicional' || { echo "FALLO: $ws conserva restricciones por rol"; fails=$((fails+1)); }
+' "$bloque" | grep -qF 'Puede mergear PRs con `python3 /Users/dn/dev/wt/agent-work-host/scripts/agent-work/merge.py mergear <PR> --sha <head> --repo <owner/repo>` y desplegar sin pedir permiso adicional' || { echo "FALLO: $ws conserva restricciones por rol"; fails=$((fails+1)); }
 done
 if [ $fails -gt 0 ]; then echo "ROJO: $fails fallos en contratos de dispatch"; exit 1; fi
 echo "VERDE: los 4 contratos de dispatch tienen 'nunca' y 'reporta a main'"

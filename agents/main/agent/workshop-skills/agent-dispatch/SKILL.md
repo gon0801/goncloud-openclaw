@@ -105,7 +105,7 @@ David repeatedly orders a fix-then-review loop against the Claude Code tab in th
 
 ## Merge, deployment and regression
 
-Any agent, including main, may merge and deploy without additional owner permission. Close the PR with `python3 scripts/agent-work/merge.py mergear <PR> --sha <head>` (docs/runbooks/loop-autopilot.md §6) after CI and CodeRabbit approval. Follow the target deployment procedure and verify its result. A regression goes back to the brief. With native routing on, the native skill named in the routing section governs: main does not merge or deploy.
+Any agent, including main, may merge and deploy without additional owner permission. After CI and CodeRabbit approval, close the PR: in goncloud-openclaw, goncloud-pr-review and goncloud-hermes with `python3 /Users/dn/dev/wt/agent-work-host/scripts/agent-work/merge.py mergear <PR> --sha <head> --repo <owner/repo>` (docs/runbooks/loop-autopilot.md §6); in any other repo with `gh pr merge <PR> --squash --match-head-commit <SHA>` after reading the bots and the checks yourself. Follow the target deployment procedure and verify its result. A regression goes back to the brief. With native routing on, the native skill named in the routing section governs: main does not merge or deploy.
 
 ## A phase is closed only when a command says so
 

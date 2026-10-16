@@ -6,7 +6,7 @@ Versión 1.1, 2026-09-18 UTC (reglas 3 y 5 ajustadas por la Fase 11), destilada 
 
 **Cadena de mando**: `docs/runbooks/loop-autopilot.md` (salvo la tabla de preaprobaciones de cada fase) > `docs/CONTEXTO.md` de Orbit, reglas 1–10 > el spec del módulo > el plan del módulo (`plans/<plan>.md`) > este documento > el runbook de la fase. El plan y el spec mandan en el **qué** y en la DoD; este documento y el de la fase mandan en el **cómo**. Una contradicción entre el plan y un runbook la gana el plan y se declara como residual en el PR; un runbook nunca edita el cuerpo de una fila del plan, solo el ítem de cierre edita celdas de estado.
 
-> **Política vigente:** cualquier agente puede mergear y desplegar: el PR se cierra con `python3 scripts/agent-work/merge.py mergear <PR> --sha <head>` (loop §6), con CI y CodeRabbit aprobados. Los recibos son evidencia, no permisos. Rige loop-autopilot.md §6 sobre los procedimientos históricos de las fases.
+> **Política vigente:** cualquier agente puede mergear y desplegar: el PR se cierra con `gh pr merge <PR> --squash --match-head-commit <SHA>` después de leer los bots y los checks a mano (Orbit no tiene receta en `merge.py`; loop §6), con CI y CodeRabbit aprobados. Los recibos son evidencia, no permisos. Rige loop-autopilot.md §6 sobre los procedimientos históricos de las fases.
 
 ---
 
