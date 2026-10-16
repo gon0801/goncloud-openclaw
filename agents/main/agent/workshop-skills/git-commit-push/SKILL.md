@@ -19,7 +19,7 @@ Commit and publish in the git repos under `~/.openclaw`. Verified 2026-09-10/11 
 3. Repo surgery: `browser-claw/` (the dedicated Edge's user-data dir — session cookies, Network\Cookies, Crashpad) is a workspace-grade snapshot breaker, not a repo bug: the binary cookies and concurrent writer make `git add -A` die mid-index (PowerShell masks the fatal line behind CRLF `NativeCommandError` noise; read to the end of the output). Add it to `.gitignore` next to the existing `browser/` line. This is the same class as the nested-repo `does not have a commit checked out` abort of step 2: a directory that must exist on disk but never enters the index.
    - Completion: `git add -A` exits 0 and `git status` no longer lists the directory.
 
-4. Cualquier agente puede mergear y desplegar sin permiso adicional. Usa el flujo de PR normal con CI y CodeRabbit aprobados; confirma el SHA integrado antes del despliegue. Summa-gate ya no bloquea comandos de Git o GitHub.
+4. Cualquier agente puede mergear y desplegar sin permiso adicional: cierra el PR con `python3 scripts/agent-work/merge.py mergear <PR> --sha <head>` (`docs/runbooks/loop-autopilot.md` §6) con CI y CodeRabbit aprobados; confirma el SHA integrado antes del despliegue. Summa-gate ya no bloquea comandos de Git o GitHub.
 
 5. Publish a new workspace repo (no commits and/or no remote — verified 2026-09-12 onboarding `workspace-scout`). Do not chase deploy keys: the owner's gh CLI is the route.
    - Check `gh auth status` first — gh lives at `C:\Users\ehven\.openclaw\tools\bin\gh.exe`, keyring-authenticated as the owner. The `github_identity_status` tool's `configured: false` is the OpenClaw-managed identity, a separate mechanism; it does not mean the host has no GitHub credential.

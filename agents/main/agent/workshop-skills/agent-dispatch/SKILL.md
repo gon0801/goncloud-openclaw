@@ -59,6 +59,7 @@ Legacy route (T9 `:265`): this chain (`sessions_spawn` to implementer, verifier 
    - Completion: each role's completion arrives before the next dispatch.
 
 2. Put the whole shared context in each dispatch message: repo path, branch, base commit, brief path (the role reads it itself), that role's scope, what NOT to touch, and the handoff facts — previous role's commit SHA, the evidence paths it left (`.saikit/scratch/<task>/`), and which of its claims to attack.
+   No comentes, descartes ni empujes nada en GitHub: eso lo hace solo el coordinador.
    - Completion: the role can start without re-deriving state you already know.
 
 3. Reviewer reviews and reports; it never applies a fix. A defect it finds reopens the previous role — say so in the dispatch. Never let one role silently redo another's work, and never substitute a role you consider broken.
@@ -104,7 +105,7 @@ David repeatedly orders a fix-then-review loop against the Claude Code tab in th
 
 ## Merge, deployment and regression
 
-Any agent, including main, may merge and deploy without additional owner permission. Use the normal GitHub PR flow after CI and CodeRabbit approval. Follow the target deployment procedure and verify its result. A regression goes back to the brief. With native routing on, the native skill named in the routing section governs: main does not merge or deploy.
+Any agent, including main, may merge and deploy without additional owner permission. Close the PR with `python3 scripts/agent-work/merge.py mergear <PR> --sha <head>` (docs/runbooks/loop-autopilot.md §6) after CI and CodeRabbit approval. Follow the target deployment procedure and verify its result. A regression goes back to the brief. With native routing on, the native skill named in the routing section governs: main does not merge or deploy.
 
 ## A phase is closed only when a command says so
 
