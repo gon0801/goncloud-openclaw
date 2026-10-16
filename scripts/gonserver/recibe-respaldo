@@ -6,13 +6,14 @@
 # y los datos por stdin; aquí no hay shell ni otro comando posible.
 #
 #   openclaw  openclaw-backup-AAAAMMDD.tar.gz y openclaw-extras-AAAAMMDD.tar.gz
-#             en $RECIBE_BASE/openclaw, se guardan los 7 más nuevos de cada prefijo.
-#   hermes    hermes-backup-AAAAMMDD.tar.gz en $RECIBE_BASE/hermes (7), y el nombre viejo
+#             en $RECIBE_BASE/openclaw, se guardan los 2 más nuevos de cada prefijo.
+#   hermes    hermes-backup-AAAAMMDD.tar.gz en $RECIBE_BASE/hermes (2), y el nombre viejo
 #             claw-backup-AAAAMMDD.tar.gz en $RECIBE_BASE/claw (8) para que el script
 #             anterior de la PC siga funcionando hasta que lo reemplacen.
 #
-# La fecha del nombre tiene que caer entre hoy-60 y hoy+1 según el reloj del servidor:
-# la poda guarda los más nuevos por nombre, así que siete nombres con fecha futura
+# La fecha del nombre tiene que caer entre hoy-60 y hoy según el reloj del servidor (UTC,
+# adelante de la Mini y la PC, así que un cliente sano nunca manda una fecha futura):
+# la poda guarda los más nuevos por nombre, así que unos cuantos nombres con fecha futura
 # borrarían todas las copias reales y se quedarían para siempre.
 #
 # Cada subida tiene tope de RECIBE_MAX_BYTES (20 GiB): el disco de respaldos es
@@ -34,8 +35,8 @@ D8='[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]'
 # shellcheck disable=SC2254  # $D8 es un patrón, no un literal
 case "$familia:$nombre" in
   openclaw:openclaw-backup-$D8.tar.gz | openclaw:openclaw-extras-$D8.tar.gz)
-    dir="$BASE/openclaw"; guardar=7 ;;
-  hermes:hermes-backup-$D8.tar.gz) dir="$BASE/hermes"; guardar=7 ;;
+    dir="$BASE/openclaw"; guardar=2 ;;
+  hermes:hermes-backup-$D8.tar.gz) dir="$BASE/hermes"; guardar=2 ;;
   hermes:claw-backup-$D8.tar.gz) dir="$BASE/claw"; guardar=8 ;;
   *) echo "ERROR: nombre invalido para la familia '$familia'" >&2; exit 2 ;;
 esac
@@ -49,9 +50,9 @@ dia() {
   echo $((365 * y + y / 4 - y / 100 + y / 400 + (153 * (m - 3) + 2) / 5 + d))
 }
 fecha="${nombre##*-}"; fecha="${fecha%.tar.gz}"
-hoy=$(dia "${RECIBE_HOY:-$(date +%Y%m%d)}"); n=$(dia "$fecha")
-if [ "$n" -gt $((hoy + 1)) ] || [ "$n" -lt $((hoy - 60)) ]; then
-  echo "ERROR: fecha fuera de rango en '$nombre' (se aceptan de hoy-60 a hoy+1)" >&2; exit 2
+hoy=$(dia "${RECIBE_HOY:-$(date -u +%Y%m%d)}"); n=$(dia "$fecha")
+if [ "$n" -gt "$hoy" ] || [ "$n" -lt $((hoy - 60)) ]; then
+  echo "ERROR: fecha fuera de rango en '$nombre' (se aceptan de hoy-60 a hoy)" >&2; exit 2
 fi
 
 mkdir -p "$dir"

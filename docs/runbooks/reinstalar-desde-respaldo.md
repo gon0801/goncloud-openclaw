@@ -8,7 +8,7 @@ Este runbook cubre el respaldo diario de la Mac mini donde corre el gateway de O
 
 | Archivo | Contenido | En gonserver | En la Mini |
 |---|---|---|---|
-| `openclaw-backup-AAAAMMDD.tar.gz` | `openclaw backup create --verify`: todo `~/.openclaw` (configuración, `state/openclaw.sqlite`, agentes, `credentials/`, `.env`, perfil del navegador `browser/claw`) | `/mnt/data/backups/openclaw/`, los 7 más nuevos | `~/respaldo-completo/`, los 2 más nuevos |
+| `openclaw-backup-AAAAMMDD.tar.gz` | `openclaw backup create --verify`: todo `~/.openclaw` (configuración, `state/openclaw.sqlite`, agentes, `credentials/`, `.env`, perfil del navegador `browser/claw`) | `/mnt/data/backups/openclaw/`, los 2 más nuevos | `~/respaldo-completo/`, los 2 más nuevos |
 | `openclaw-extras-AAAAMMDD.tar.gz` | Lo que vive fuera de `~/.openclaw`. Requeridos: `~/Library/LaunchAgents/ai.openclaw.*.plist` (al menos uno), `~/goncloud-autoupdate/`, `~/.ssh/`, `~/.zshrc` y el script instalado. Opcionales: `~/Library/LaunchAgents/ai.goncloud.*.plist`, `~/.claude/`, `~/.claude.json`, `~/.openclaw-state/` y `~/.local/bin/` | igual | igual |
 
 Dentro del archivo de extras, `Users/gon/respaldo-completo/RESPALDO-EXTRAS.txt` trae la salida de `openclaw --version` y `node --version` de ese día, y lo que faltaba. Si falta un requerido, la corrida falla y avisa, pero igual sube lo que hay. Si falta un opcional, solo queda anotado (`~/.openclaw-state/` no existía en la Mini el 2026-10-15).
@@ -18,10 +18,11 @@ Lo que **no** está en el respaldo y hay que rehacer a mano:
 - El llavero de macOS. Ahí viven el inicio de sesión del CLI `claude` y la llave con la que Chrome cifra las cookies, así que las sesiones del perfil `claw` del navegador (Seller Central .com y .com.mx, Flex, Gmail) no sobreviven a una Mac nueva.
 - Los `node_modules` de los plugins y los enlaces de skills generados. OpenClaw los avisa al restaurar.
 - Las credenciales de canales con estado de ratchet (WhatsApp) pueden pedir volver a vincular.
+- Las copias viejas de instalaciones anteriores. Desde el 2026-10-15, `~/.openclaw/respaldos` es un enlace a `~/openclaw-respaldos-viejos` (5.6 GB): el respaldo nativo guarda el enlace pero no sigue su destino (medido: 0 entradas de `respaldos/` y el archivo bajó de 3.9 GB a 1.0 GB). Los instaladores que escriben en `~/.openclaw/respaldos/` siguen funcionando. En una Mac nueva el enlace queda colgando; crea la carpeta con `mkdir ~/openclaw-respaldos-viejos` si algún instalador la necesita.
 
 Cada subida tiene 3 intentos de hasta 30 minutos, alternando WireGuard (`10.13.13.1`) y Tailscale (`100.127.167.103`). El receptor contesta el sha256 de lo que guardó y el script lo compara con el local. Si algo falla, el script avisa por Telegram a David (`openclaw message send`). Si todo sale bien, no avisa. El detalle queda en `~/Library/Logs/goncloud/respaldo-completo.log`. Si la corrida recibe SIGTERM (bootout de launchd o apagado de la Mac), borra su temporal y avisa. Si muere sin limpiar, la corrida siguiente borra los `~/respaldo-completo/.tmp.*` que queden.
 
-El receptor rechaza un nombre cuya fecha no cae entre hoy-60 y hoy+1 según el reloj de gonserver (sale 2), una subida de más de 20 GiB (sale 4) y un día más viejo que los que se guardan, que la poda quitaría al instante (sale 5). En los tres casos no escribe nada.
+El receptor rechaza un nombre cuya fecha no cae entre hoy-60 y hoy según el reloj de gonserver (UTC; con dos copias, una fecha futura por un reloj mal puesto borraría una buena) (sale 2), una subida de más de 20 GiB (sale 4) y un día más viejo que los que se guardan, que la poda quitaría al instante (sale 5). En los tres casos no escribe nada.
 
 En gonserver, `vigila-respaldos` revisa todos los días a las 09:00 que `openclaw-backup`, `openclaw-extras` y `hermes-backup` tengan un archivo de menos de 36 h que pese al menos la mitad del anterior. Si no, avisa por Telegram con el bot de Orbit. Las 09:00 son de la zona horaria de gonserver (`timedatectl | grep 'Time zone'`), no de la Mini.
 
@@ -87,7 +88,7 @@ Se hace una vez, como root en gonserver, desde una copia de este repo. La cuenta
 
    Cada una tiene que mostrar al menos una huella. Si una muestra una línea `ED25519`, su huella tiene que ser la de gonserver.
 
-5. Comprueba el receptor desde la Mini con un archivo de prueba con la fecha de hoy. El receptor rechaza fechas viejas, y un nombre viejo como `20000101` quedaría fuera de los 7 más nuevos. Antes, desde la MacBook, comprueba que todavía no hay extras de hoy, porque la prueba los reemplazaría. Usa la misma fecha que imprime `date +%Y%m%d` en la Mini:
+5. Comprueba el receptor desde la Mini con un archivo de prueba con la fecha de hoy. El receptor rechaza fechas viejas, y un nombre viejo como `20000101` quedaría fuera de los 2 más nuevos. Antes, desde la MacBook, comprueba que todavía no hay extras de hoy, porque la prueba los reemplazaría. Usa la misma fecha que imprime `date +%Y%m%d` en la Mini:
 
    ```sh
    F=AAAAMMDD
@@ -124,7 +125,7 @@ launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/ai.goncloud.respaldo-com
 launchctl kickstart gui/$(id -u)/ai.goncloud.respaldo-completo
 ```
 
-La corrida tarda unos 12 minutos: unos 2,5 minutos para `backup create` (medido el 2026-10-15: 143 s, 3,9 GB) y unos 8 minutos de subida a ~63 Mbps. Termina bien cuando la última línea del log dice `terminado sin fallas` y gonserver tiene los dos archivos del día:
+La corrida tarda unos 4 minutos: alrededor de 1 minuto para `backup create` (medido el 2026-10-15 con `respaldos` fuera: 64 s, 1.0 GB) y unos 2 minutos de subida a ~63 Mbps. Termina bien cuando la última línea del log dice `terminado sin fallas` y gonserver tiene los dos archivos del día:
 
 ```sh
 tail -5 ~/Library/Logs/goncloud/respaldo-completo.log
