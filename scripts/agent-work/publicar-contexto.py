@@ -615,7 +615,14 @@ def aplicar_en_la_mini(publicacion: Path, home: Path, agentes_json: Path | None)
         nuevos_bloques[identificador] = sha256hex(bloques[identificador])
 
     vivos = {agente["id"] for agente in agentes}
-    for identificador in sorted((set(estado["bloques"]) | set(estado["workspaces"])) - vivos):
+    traidos = (
+        {p.stem for p in (publicacion / "bloques").glob("*.md")}
+        if (publicacion / "bloques").is_dir()
+        else set()
+    )
+    for identificador in sorted(
+        (set(estado["bloques"]) | set(estado["workspaces"])) - vivos - traidos
+    ):
         # El retiro (SUA-04, 4.5): un agente que ya no está en la lista viva sale del estado
         # con su respaldo, como una skill que sale del manifiesto. Su bloque en disco no se
         # toca: el workspace ya no es de este publicador. La reversa lo devuelve al estado.

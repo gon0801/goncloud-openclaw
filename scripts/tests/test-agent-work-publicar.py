@@ -288,6 +288,9 @@ class PublicadorNativo(unittest.TestCase):
         sin_pers.write_text(
             json.dumps([a for a in self.agentes if a["id"] != "pers"]) + "\n", encoding="utf-8"
         )
+        # La publicación de la generación 2 ya no trae el bloque de pers: se armó sin él,
+        # como la arma la mitad Mac cuando la lista viva ya no lo trae.
+        self.agentes = [a for a in self.agentes if a["id"] != "pers"]
         self.armar_generacion(2)
         self.publicar("leer", agentes_json=sin_pers)
         codigo, salida = self.publicar("aplicar", agentes_json=sin_pers)
