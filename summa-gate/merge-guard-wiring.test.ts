@@ -7,7 +7,7 @@
  * no contra el runtime real de OpenClaw; el SDK se stubbea igual que en el resto de tests.
  */
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, rmSync, symlinkSync } from "node:fs";
+import { existsSync, mkdirSync, symlinkSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { after, before, describe, it } from "node:test";
@@ -28,13 +28,10 @@ before(() => {
   }
 });
 
-after(() => {
-  try {
-    rmSync(join(dirname(fileURLToPath(import.meta.url)), "node_modules", "openclaw"), { force: true });
-  } catch {
-    // ignore
-  }
-});
+  // El enlace persiste a proposito: node --test corre estos archivos en procesos
+  // concurrentes y otros importan index.ts; borrarlo en after() deja el modulo
+  // inresoluble para ellos y vuelve la bateria un sorteo. node_modules/ esta en
+  // .gitignore.
 
 type OnReg = { event: string; handler: (event: unknown, ctx: unknown) => unknown; opts?: unknown };
 

@@ -180,13 +180,10 @@ describe("plugin smoke import", () => {
     }
   });
 
-  after(() => {
-    try {
-      rmSync(link, { force: true });
-    } catch {
-      // ignore
-    }
-  });
+  // El enlace persiste a proposito: otros archivos de prueba (adversary-confinamiento,
+  // diagnostic-guard-*, merge-guard-wiring) importan index.ts en procesos propios y
+  // concurrentes de node --test; borrarlo en after() hacia el modulo inresoluble y la
+  // bateria un sorteo. node_modules/ esta en .gitignore.
 
   it("default export exposes register", async () => {
     const mod = await import("./index.ts");
