@@ -1,6 +1,6 @@
 # SUA-06, seguimiento y panel: diseño y corte en rebanadas
 
-Fecha: 2026-10-16. Estado: diseño propuesto, sin código. Lo escribió el coordinador (Claude). Lo revisa el implementador asignado antes de implementar: no es autor de este documento. **Tiene una decisión pendiente de David** (§8): qué panel, después del ensayo de LobsterBoard.
+Fecha: 2026-10-16. Estado: diseño propuesto, sin código. Lo escribió el coordinador (Claude). Lo revisa el implementador asignado antes de implementar: no es autor de este documento. El panel lo decidió David el 2026-10-16, después del ensayo de LobsterBoard: la opción A del §8, una página en el gateway.
 
 Bases leídas: G `origin/main` `7755ae54`, R `feat/agent-work-integration` en `c7a58a6b` (la Mini corre `7b3db54226bf`), y LobsterBoard `7e47255` (v0.8.6) en el ensayo M-26. La hoja de terreno del coordinador está en `~/.local/state/sua-loop/prep/sua06-terreno.md`, y el resultado del ensayo en `~/.local/state/sua-loop/mediciones/m26-lobsterboard/RESULTADO.md`, con sus capturas.
 
@@ -38,11 +38,11 @@ Documentos que manda este diseño y que no cambia:
 
 | Paso | Qué falta |
 |---|---|
-| 1. LobsterBoard original | Hecho como medición (M-26). Falta guardar la evidencia en el repo y la decisión de David (§8). |
+| 1. LobsterBoard original | Hecho como medición (M-26) y decidido por David (§8). Falta guardar la evidencia en el repo. |
 | 2. Proyectar desde recibos nativos | El derivador `snapshot → proyeccion.v1`, con declarado/observado/aceptado/desconocido, la evidencia y la próxima comprobación por unidad. |
 | 3. Avisos y panel sobre el mismo snapshot | El emisor de las raíces: una pasada lee el snapshot, deriva la proyección, decide avisos (consolidado y excepciones) y guarda el checkpoint después del envío confirmado. |
 | 4. Allowlist, escape, límites y autenticación | La vista de solo lectura de la proyección, con esas cuatro cosas, en el panel que elija David. |
-| 5. Ajustes ligados a faltantes | Depende de §8. |
+| 5. Ajustes ligados a faltantes | LobsterBoard no se adopta (§8); el ajuste es la página nueva del plugin. |
 
 ## 3. Quién es dueño de cada cosa
 
@@ -51,7 +51,7 @@ Documentos que manda este diseño y que no cambia:
 | El snapshot de una raíz | R | Ya existe (`managedTasks.root.read`). |
 | El derivador `snapshot → proyeccion.v1` | G, función pura | El contrato vive en G y el derivador se prueba sin gateway. R no cambia. |
 | El emisor de avisos de raíces | El host de cada máquina | La Mac ya tiene un emisor, el host de encargos (plan, paso 3). La Mini lo corre como cron nativo de claw, sin modelo (SUA-02: el reloj vive en el scheduler nativo). |
-| El panel | Lo decide David (§8) | Es el paso 5 del bloque. |
+| El panel | El plugin `tablero-runbook` del gateway | Decisión de David del 2026-10-16 (§8, opción A). |
 
 ## 4. El diseño elegido
 
@@ -85,7 +85,7 @@ En la Mac, el host de encargos llama a la pasada en su bucle, como hoy a `Progre
 
 ### 4.4 La vista de solo lectura
 
-Cualquiera que sea el panel (§8), la vista de la proyección cumple con lo mismo: solo lee `proyecciones/<rootId>.json`, escapa todo texto (sin `innerHTML` con datos), no tiene URLs salvo las del propio panel, recorta largos, muestra la frescura (generada hace X; pasado `staleAfterMs` sale "vieja" en gris) y muestra vacío, error y sin conexión como estados con nombre. No tiene acciones: las acciones siguen en las entradas autenticadas que existen.
+Una página nueva del plugin `tablero-runbook`, `/runbook/tablero/raices` (la lista) y `/runbook/tablero/raices/<rootId>` (una raíz), con la misma autenticación del gateway que las rutas que ya tiene. Responsiva: se prueba en 390×844 y en escritorio. Lee las proyecciones que deja el emisor del host del gateway (la Mini). La vista de la proyección cumple con lo mismo: solo lee `proyecciones/<rootId>.json`, escapa todo texto (sin `innerHTML` con datos), no tiene URLs salvo las del propio panel, recorta largos, muestra la frescura (generada hace X; pasado `staleAfterMs` sale "vieja" en gris) y muestra vacío, error y sin conexión como estados con nombre. No tiene acciones: las acciones siguen en las entradas autenticadas que existen.
 
 ## 5. Cómo se prueba
 
@@ -107,10 +107,10 @@ Cualquiera que sea el panel (§8), la vista de la proyección cumple con lo mism
 | P1 | 4.1, el derivador, con sus fixtures y la prueba del contrato. | — |
 | P2 | 4.2, el emisor y su checkpoint, en la Mac (host) y la Mini (cron nativo apagado hasta SUA-09O). | P1 |
 | P3 | 4.3, el ruido de las colas desconocidas. | — |
-| P4 | 4.4, la vista, en el panel que elija David. | P1, §8 |
+| P4 | 4.4, la página del plugin `tablero-runbook`, con sus capturas de escritorio y celular. | P1, P2 |
 | P5 | La evidencia de M-26 en el repo (`docs/evidence/sistema-agentes-unificado/SUA-06-lobsterboard.md` y sus capturas), el recibo `SUA-06.md` y las filas. | P1 a P4 |
 
-P1, P3 y la evidencia de M-26 van en paralelo. P4 espera la decisión.
+P1, P3 y la evidencia de M-26 van en paralelo; P4 sale cuando P1 y P2 están.
 
 ## 7. Lo que no entra en SUA-06
 
@@ -119,7 +119,7 @@ P1, P3 y la evidencia de M-26 van en paralelo. P4 espera la decisión.
 - Instalar LobsterBoard en la Mini o en cualquier host: no muestra datos de claw y lee archivos de credenciales; si David lo quiere igual, se decide en §8 con su encierro.
 - Hermes (SUA-07).
 
-## 8. Decisión pendiente de David: el panel
+## 8. La decisión de David: el panel
 
 El paso 5 del bloque dice que, si LobsterBoard pide una reescritura amplia, la UI se detiene y se le presentan alternativas a David, sin sustituirla sola. M-26 muestra que LobsterBoard original no muestra datos de claw y no sirve en el celular. Las alternativas:
 
@@ -130,4 +130,4 @@ El paso 5 del bloque dice que, si LobsterBoard pide una reescritura amplia, la U
 | C | LobsterBoard con un puente REST propio (lo que pide su `WIDGETS-STATUS.md:36`) para que sus widgets de OpenClaw lean los datos de verdad. | Un servicio nuevo que traduce OpenClaw a REST, y los widgets de LobsterBoard igual no conocen raíces, unidades ni excepciones; además sigue sin servir en el celular. |
 | D | Sin panel: solo los avisos de 4.2 por Telegram. | Lo más barato. No cumple I15 (panel en móvil y escritorio) y deja el paso 4 sin entrega. |
 
-Mientras David decide, P1, P2, P3 y la evidencia de M-26 avanzan, porque no dependen del panel.
+**David eligió la opción A el 2026-10-16**, a la pregunta del coordinador después de M-26 ("Página en el gateway"). LobsterBoard no se adopta y no se instala.
