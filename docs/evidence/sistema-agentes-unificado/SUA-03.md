@@ -31,6 +31,10 @@ generación de contexto y su evidencia. `certified` solo es verdadero en las dos
 CLI. La sesión adoptada por el operador salió de `routes`: su fila quedó en
 `migration` como retirada, en el formato de las filas que ya había.
 
+Esto se aparta de la redacción del diseño (4.5), que daba la entrega y la conducta
+nativas por certificadas: no se certifican porque M-17c no salió verde completa, y
+lo decidió el coordinador.
+
 ## Los PR
 
 | PR | SHA de merge | Qué trajo |
@@ -39,27 +43,37 @@ CLI. La sesión adoptada por el operador salió de `routes`: su fila quedó en
 | #307 | `e5efd03e` | G5a: conducta nativa, extractor de la Mini y pendientes de G4 |
 | #308 | `8c7b4835` | G5b: typedPayload validado en el host, banco como main y Minor de #307 |
 | #309 | `f3143690` | G5c: M-16 completa y generación 1 de la ruta por CLI certificada |
-| #312 | `7295d49e` | G5d: generación 2 (adaptación nativa) certificada y pendientes de #309 |
+| #312 | `7295d49e` | G5d: generación 2 (adaptación nativa) certificada en las dos rutas CLI y pendientes de #309 |
 | #313 | `d7c0fab5` | G5e: medición nativa con herramientas de tool_search |
 
 ## Las mediciones
 
-Todas en SUA-03-mediciones.md.
+Cada una apunta a su archivo: las de la ruta por CLI están en
+SUA-03-mediciones.md, y las nativas viven en sus fixtures y sus pruebas.
 
-- **M-13** (sección M-13): la ruta por CLI con el paquete, antes de certificar
-  generación alguna.
-- **M-15** (control nativo): el control sin paquete, en rojo.
-- **M-16, generación 1** (sección M-16): diez casos en dos corridas (corrida 5 +
-  corrida 8), verde.
-- **M-16, generación 2** (sección M-16, generación 2): diez casos en dos corridas,
-  verde.
+- **M-13** (SUA-03-mediciones.md, sección M-13): la ruta por CLI con el paquete,
+  antes de certificar generación alguna.
+- **M-15** (control nativo): el control sin paquete, en rojo. Su fixture es
+  `scripts/tests/fixtures/conducta/m15-control.jsonl` y su prueba es
+  `test_the_real_m15_control_is_red_for_the_missing_native_poteto_read` en
+  `test-agent-work-conducta.py`.
+- **M-16, generación 1** (SUA-03-mediciones.md, sección M-16): diez casos en dos
+  corridas (corrida 5 + corrida 8), verde.
+- **M-16, generación 2** (SUA-03-mediciones.md, sección M-16, generación 2): diez
+  casos en dos corridas, verde.
 - **M-17** (generación 1): dos sondas rojas. Leían poteto, pero no el playbook ni
-  `progress_card`. Eso motivó la generación 2.
+  `progress_card`. Eso motivó la generación 2. Sus fixtures son
+  `scripts/tests/fixtures/conducta/m17a-ingenieria-nativo.jsonl` y
+  `m17b-ingenieria-nativo.jsonl`, y su prueba es
+  `test_the_real_m17_probes_are_red_for_the_playbook_they_never_read` en
+  `test-agent-work-conducta.py`.
 - **M-17c** (generación 2): lee poteto, poteto-openclaw y
   `playbooks/bug-fix.md`, busca `progress_card` con `tool_search` y la usa, y el
   hijo corre y cita las pruebas. Su única razón roja es el paso 1 resumido, que el
   coordinador aceptó y quedó anotado. Su fixture es
-  `scripts/tests/fixtures/conducta/m17c-ingenieria-nativo.jsonl`.
+  `scripts/tests/fixtures/conducta/m17c-ingenieria-nativo.jsonl` y su prueba es
+  `test_the_real_m17c_run_is_red_only_for_the_summarized_first_step` en
+  `test-agent-work-conducta.py`.
 
 ## Las sondas de competencia nativas
 

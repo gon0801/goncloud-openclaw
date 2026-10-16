@@ -373,7 +373,7 @@ class AgentsRouting(unittest.TestCase):
         }
         # El único cron de la foto que delega: su mensaje despacha a otro agente, así que no lleva la razón de su clase.
         delegating = {
-            "seguimiento-yours-virtually-miercoles": "cron de negocio de un solo disparo (2026-10-14): conserva horario y función; despacha al agente mail con sessions_spawn, la ruta nativa que sigue fuera del perímetro gestionado (migration, route:native-subagent)",
+            "seguimiento-yours-virtually-miercoles": "cron de negocio de un solo disparo (2026-10-14): conserva horario y función; despacha al agente mail con sessions_spawn, la ruta nativa que sigue fuera del perímetro gestionado (migration, route:native-child)",
         }
         cron_jobs = self.coverage["cronJobs"]
         self.assertEqual(cron_jobs["snapshot"], "docs/evidence/agent-work/SUA-00-M09b-cron-snapshot.json")
