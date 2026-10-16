@@ -824,6 +824,87 @@ class BriefHelper(unittest.TestCase):
         self.assertIn('{"result": <la salida de ese comando>}', protocolo)
         self.assertIn(tarea, protocolo)
 
+    def test_the_review_protocol_names_the_findings_shape_and_ready_stays_clean(self):
+        # B1 de SUA05-H125: reporte.py valida el artefacto de una revisión; el protocolo que
+        # el revisor lee tiene que nombrar esa forma y la regla del approved. El de ready.v1
+        # no trae nada de hallazgos.
+        revision = brief.protocol_section(self.root, "t-1", "review.v1").decode()
+        for palabra in (
+            "hallazgos.v1",
+            "bloqueante",
+            "reproduce",
+            "BLOQUEANTE",
+            "BLOCKER",
+        ):
+            self.assertIn(palabra, revision)
+        self.assertNotIn(
+            "hallazgos.v1",
+            brief.protocol_section(self.root, "t-1", "ready.v1").decode(),
+        )
+
+    def test_an_artifact_built_from_the_review_protocol_text_passes_reporte(self):
+        # B1 de SUA05-H125, extremo a extremo: quien sigue SOLO el protocolo del brief de una
+        # revisión arma un artefacto que reporte.py acepta con exit 0.
+        done = self.run_helper("--agente", "adversary", "--contrato", "review.v1")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        digest = json.loads(done.stdout)["instructionRef"]["ref"].removeprefix("artifact:")
+        text = (self.root / digest).read_bytes().decode()
+        tarea = re.search(r"^tarea: ([0-9a-f-]{36})$", text, re.MULTILINE).group(1)
+        protocolo = text[text.index("<!-- protocolo inicio") : text.index("<!-- protocolo fin")]
+        self.assertIn("hallazgos.v1", protocolo)
+        for campo in ("id", "bloqueante", "archivo", "linea", "resumen", "reproduce"):
+            self.assertIn(f'"{campo}"', protocolo)
+        artefacto = self.tmp / f"hallazgos-{tarea}.json"
+        artefacto.write_text(
+            json.dumps(
+                {
+                    "schema": "hallazgos.v1",
+                    "findings": [
+                        {
+                            "id": "F1",
+                            "bloqueante": True,
+                            "archivo": "saluda.py",
+                            "linea": 3,
+                            "resumen": "saluda() devuelve adiós en vez de hello",
+                            "reproduce": "python3 test-saluda.py",
+                        }
+                    ],
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+        reporte = subprocess.run(
+            [
+                sys.executable,
+                "-I",
+                str(ROOT / "scripts/agent-work/reporte.py"),
+                "--root",
+                str(self.root),
+                "--tarea",
+                tarea,
+                "--contrato",
+                "review.v1",
+                "--artefacto",
+                str(artefacto),
+                "--veredicto",
+                "changes",
+            ],
+            capture_output=True,
+            text=True,
+            cwd=self.tmp,
+        )
+        self.assertEqual(reporte.returncode, 0, reporte.stderr)
+        result = json.loads(reporte.stdout)
+        self.assertEqual(result["payload"], {"verdict": "changes", "findingsRef": str(artefacto)})
+        canonico = json.dumps(
+            result["payload"], ensure_ascii=False, sort_keys=True, separators=(",", ":")
+        )
+        self.assertEqual(
+            result["digest"], "sha256:" + hashlib.sha256(canonico.encode()).hexdigest()
+        )
+        self.assertEqual(result["observedRevision"]["digest"], f"sha256:{digest}")
+
     def test_brief_refuses_an_agent_without_its_contract_or_with_a_host(self):
         for args, message in (
             (("--perfil", "meli", "--perfiles", str(self.PERFILES), "--agente", "meli"),

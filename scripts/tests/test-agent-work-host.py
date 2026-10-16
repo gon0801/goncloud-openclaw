@@ -318,6 +318,34 @@ class HostReceipts(unittest.TestCase):
                 self.assertIn(esperado, forma)
                 self.assertNotIn(prohibido, forma)
 
+    def test_the_review_protocol_tells_the_cli_the_shape_of_the_findings_artifact(self):
+        # B1 de SUA05-H125: el host rechaza un changes cuyo artefacto no es un hallazgos.v1
+        # y un approved con bloqueantes; la instrucción de entrega tiene que decirle ambas
+        # reglas al CLI, o escribe markdown y su resultado no se graba.
+        asignacion = {
+            "capability": "c",
+            "hostId": "mac-test",
+            "taskId": "task-1",
+            "generation": 2,
+            "instanceId": "instance-1",
+            "claimId": "claim-1",
+            "producerId": "adversary",
+            "resultContract": "review.v1",
+            "inputRevision": {"kind": "code", "repository": "repo", "sha": "a" * 40},
+        }
+        forma = host.cli_protocol(asignacion)["fill"]["typedPayload"]
+        for palabra in (
+            "hallazgos.v1",
+            "bloqueante",
+            "reproduce",
+            "linea",
+            "BLOQUEANTE",
+            "BLOCKER",
+        ):
+            self.assertIn(palabra, forma)
+        self.assertIn('"changes"', forma)
+        self.assertIn("no blocking finding", forma)
+
     def test_a_cli_result_with_extra_fields_reaches_the_runtime_with_only_its_schema(self):
         # Live canary 2026-10-11: GLM copied claimId into result.v1, and R's strict schema refused the report.
         operation = replace(self.operation, adapter_id="opencode")

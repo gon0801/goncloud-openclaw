@@ -285,7 +285,13 @@ def cli_protocol(assignment: dict, *, run: bool = False, state_dir: Path | None 
     if assignment["resultContract"] == "review.v1":
         forma_de_carga = (
             'exactly {"verdict": "approved", "evidenceRef": "<artifactRef>"} or {"verdict": '
-            '"changes", "findingsRef": "<artifactRef>"}, with no other field'
+            '"changes", "findingsRef": "<artifactRef>"}, with no other field. With "changes" the '
+            'artifact file (the one findingsRef names) is exactly {"schema": "hallazgos.v1", '
+            '"findings": [{"id", "bloqueante": bool, "archivo", "linea": int, "resumen", '
+            '"reproduce"}]}, with no other keys, and every finding with "bloqueante" true carries '
+            '"reproduce" (the command that reproduces it); with "approved" the artifact is free '
+            "text with no blocker: no blocking finding and no line starting with BLOQUEANTE or "
+            "BLOCKER"
         )
     elif not escribe:
         forma_de_carga = 'exactly {"evidenceRef": "<artifactRef>"}, with no other field'
