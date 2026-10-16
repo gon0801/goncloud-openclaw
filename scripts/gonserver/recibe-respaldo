@@ -50,7 +50,7 @@ dia() {
   echo $((365 * y + y / 4 - y / 100 + y / 400 + (153 * (m - 3) + 2) / 5 + d))
 }
 fecha="${nombre##*-}"; fecha="${fecha%.tar.gz}"
-hoy=$(dia "${RECIBE_HOY:-$(date +%Y%m%d)}"); n=$(dia "$fecha")
+hoy=$(dia "${RECIBE_HOY:-$(date -u +%Y%m%d)}"); n=$(dia "$fecha")
 if [ "$n" -gt "$hoy" ] || [ "$n" -lt $((hoy - 60)) ]; then
   echo "ERROR: fecha fuera de rango en '$nombre' (se aceptan de hoy-60 a hoy)" >&2; exit 2
 fi
