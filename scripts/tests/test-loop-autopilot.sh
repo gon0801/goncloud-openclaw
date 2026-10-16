@@ -249,17 +249,19 @@ printf '%s' "$s3" | grep -qF 'permanece abierto' \
   || fail "$DOC: el paso 7 no manda mantener el PR abierto durante la correccion local"
 echo "ok (3e): auditoria antes del primer push; correccion local al mismo PR"
 
-# (3f) La cruzada de quality-kit salio del flujo (decision del dueno, 2026-10-12):
-# los runbooks vivos no la nombran. Los runbooks de fases cerradas conservan la
-# suya como historia fechada y quedan fuera de este barrido; el loop la conserva
-# solo dentro de sus lineas Medido:, que cuentan por que salio.
-for file in "$DOC" "$BASE" docs/runbooks/base-summonaikit.md docs/runbooks/base-orbit.md docs/runbooks/camino-feliz-producto.md; do
-  vieja=$(grep -v '^Medido:' "$file" | grep -in 'cross-review' || true)
-  [ -z "$vieja" ] || fail "$file: volvio la cruzada de quality-kit: $vieja"
+# (3f) La cruzada de quality-kit y su maquinaria (APPROVE lead, -Excluir,
+# -Desde) salieron del flujo (decision del dueno, 2026-10-12): los runbooks
+# vivos no las nombran. Los runbooks de fases cerradas conservan la suya como
+# historia fechada y quedan fuera de este barrido; el loop las conserva solo
+# dentro de sus lineas Medido:, que cuentan por que salieron.
+for file in docs/runbooks/*.md; do
+  case "$file" in *autopilot-fase*) continue ;; esac
+  vieja=$(grep -v '^Medido:' "$file" | grep -in -E 'cross-review|-Excluir|-Desde|rondas? cruzada|APPROVE lead' || true)
+  [ -z "$vieja" ] || fail "$file: volvio un mecanismo retirado (cruzada/-Excluir/-Desde/APPROVE lead): $vieja"
 done
 grep -qF 'La cruzada local de quality-kit salió del flujo' "$DOC" \
   || fail "$DOC: falta el Medido que fecha la salida de la cruzada"
-echo "ok (3f): los runbooks vivos no nombran la cruzada; su salida queda fechada en Medido"
+echo "ok (3f): los runbooks vivos no nombran la cruzada ni su maquinaria; su salida queda fechada en Medido"
 
 # (4) La fila del lead no nombra ningún modelo. Es la regla central del documento.
 hit=$(lead_nombra_modelo < "$DOC")
