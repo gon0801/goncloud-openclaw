@@ -42,7 +42,10 @@ def descubrir(perfiles: dict, vivos: list, requesters=()) -> list:
     vivos_ids = {a["id"] for a in vivos}
     filas = []
     for agente_id in sorted(vivos_ids):
-        if agente_id in requesters:
+        # El salto de solicitante vale solo para quien no es trabajador: requesters trae
+        # también a ingenieria, reviewer y los demás con perfil, y esos se clasifican
+        # como cualquiera (B1). Hoy el único solicitante que no es trabajador es main.
+        if agente_id in requesters and agente_id not in con_perfil and agente_id not in sin_perfil:
             continue
         if agente_id in con_perfil:
             filas.append({"agentId": agente_id, "estado": "con-perfil", "perfiles": con_perfil[agente_id]})
@@ -51,8 +54,7 @@ def descubrir(perfiles: dict, vivos: list, requesters=()) -> list:
         else:
             filas.append({"agentId": agente_id, "estado": "alta-sin-registrar"})
     for agente_id in sorted((set(con_perfil) | sin_perfil) - vivos_ids):
-        if agente_id not in requesters:
-            filas.append({"agentId": agente_id, "estado": "retirado"})
+        filas.append({"agentId": agente_id, "estado": "retirado"})
     for perfil in perfiles.get("profiles", ()):
         for ruta in perfil.get("routes", ()):
             if ruta.get("agentId") and ruta["agentId"] not in vivos_ids:
@@ -69,17 +71,6 @@ def _ssh(mini: str):
                                    capture_output=True, text=True, timeout=TIMEOUT_SSH)
         except subprocess.TimeoutExpired:
             return 1, "", f"ssh no contestó en {TIMEOUT_SSH}s"
-        return hecho.returncode, hecho.stdout, hecho.stderr
-    return correr
-
-
-def _local():
-    def correr(argv, entrada=None):
-        orden = [str(Path(a).expanduser()) if isinstance(a, str) and a.startswith("~/") else a for a in argv]
-        try:
-            hecho = subprocess.run(orden, input=entrada, capture_output=True, text=True, timeout=TIMEOUT_SSH)
-        except subprocess.TimeoutExpired:
-            return 1, "", f"el comando local no contestó en {TIMEOUT_SSH}s"
         return hecho.returncode, hecho.stdout, hecho.stderr
     return correr
 

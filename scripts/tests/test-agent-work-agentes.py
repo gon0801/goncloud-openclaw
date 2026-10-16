@@ -37,6 +37,16 @@ class Descubrir(unittest.TestCase):
         incompletos = [f for f in filas(viva) if f["estado"] == "perfil-incompleto"]
         self.assertEqual([(f["perfil"], f["agentId"]) for f in incompletos], [("ingenieria", "fantasma")])
 
+    def test_un_solicitante_que_tambien_es_trabajador_se_clasifica(self):
+        # B1: requesters trae también a trabajadores (ingenieria, reviewer...). El salto de
+        # solicitante vale solo para quien no tiene perfil ni está en agents (hoy main).
+        viva = [{"id": "main"}, {"id": "ingenieria"}]
+        filas = agentes.descubrir(PERFILES, viva, requesters=("main", "ingenieria", "reviewer"))
+        por_id = {f["agentId"]: f for f in filas if "perfil" not in f}
+        self.assertEqual(por_id["ingenieria"]["estado"], "con-perfil")
+        self.assertEqual(por_id["reviewer"]["estado"], "retirado")
+        self.assertNotIn("main", por_id)
+
     def test_retirado(self):
         viva = [{"id": "main"}, {"id": "ingenieria"}]
         # La fila del agente (sin "perfil") dice retirado; la de su perfil dice perfil-incompleto.

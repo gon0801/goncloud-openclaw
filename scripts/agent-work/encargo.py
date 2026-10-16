@@ -443,13 +443,14 @@ def _valida_perfiles(documento: object) -> dict:
 
 
 def perfiles(checkout: Path, mini: str | None = None, correr=None) -> dict:
-    """`encargo.py perfiles [--mini [user@host]]`. Solo lectura: los perfiles del checkout en una
+    """`encargo.py perfiles [--mini user@host]`. Solo lectura: los perfiles del checkout en una
     línea, para que quien pide vea qué especialidades existen, qué rutas las atienden y qué
     agentes siguen sin perfil (SUA-03, 4.4).
 
-    Con --mini suma los estados de 4.5 contra la lista viva (alta-sin-registrar, retirado y
-    perfil-incompleto, con su frase): por ssh si trae user@host, o con el openclaw local si va
-    solo, que es como lo corre main en la Mini. Sin --mini, la salida de hoy."""
+    Con --mini user@host suma los estados de 4.5 contra la lista viva (alta-sin-registrar,
+    retirado y perfil-incompleto, con su frase), por ssh. main corre encargo.py en la Mac
+    (skill encargo-cli), así que --mini sin host leería la lista de la Mac, que no es la de
+    la Mini: por eso el host es obligatorio (B2). Sin --mini, la salida de hoy."""
     documento = _valida_perfiles(contexto.leer_json(Path(checkout) / CONTEXTO_DIR / "perfiles.v1.json"))
     filas = []
     for perfil in documento["profiles"]:
@@ -467,7 +468,7 @@ def perfiles(checkout: Path, mini: str | None = None, correr=None) -> dict:
     if mini is not None:
         import agentes as agentes_mod
         if correr is None:
-            correr = agentes_mod._ssh(mini) if mini != "local" else agentes_mod._local()
+            correr = agentes_mod._ssh(mini)
         vivos = agentes_mod.lista_viva(mini, correr)
         coverage = contexto.leer_json(Path(checkout) / COVERAGE_FILE)
         estados = agentes_mod.descubrir(documento, vivos, coverage.get("requesters", ()))
@@ -846,8 +847,8 @@ def _parser() -> argparse.ArgumentParser:
     state = commands.add_parser("estado", help="el latido del host de encargos, o lo que corrió una tarea")
     state.add_argument("--tarea", metavar="TASKID")
     perfiles_cmd = commands.add_parser("perfiles", help="los perfiles del checkout y los agentes sin perfil, en una línea JSON")
-    perfiles_cmd.add_argument("--mini", nargs="?", const="local", default=None,
-                              help="suma alta-sin-registrar, retirado y perfil-incompleto contra la lista viva: user@host por ssh, o solo --mini en la Mini")
+    perfiles_cmd.add_argument("--mini", default=None, metavar="user@host",
+                              help="suma alta-sin-registrar, retirado y perfil-incompleto contra la lista viva de la Mini, por ssh")
     listing = commands.add_parser("proveedores", help="qué proveedores pueden correr, cómo cobran y qué falta")
     listing.add_argument("--refrescar", action="store_true", help="pide a opencode que vuelva a bajar su lista")
     allow = commands.add_parser("permitir", help="escribe un permiso, un filtro o el id de un permiso que existe")

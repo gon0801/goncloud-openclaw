@@ -504,11 +504,18 @@ class Perfiles(Mac):
             return 0, json.dumps(viva), ""
         respuesta = encargo.perfiles(checkout=self.checkout, mini="u@h", correr=fake)
         self.assertEqual(respuesta["estados"]["alta-sin-registrar"]["agentes"], ["nuevo"])
-        # reviewer es también un solicitante de coverage.json: no es trabajador ni retirado aquí.
-        self.assertIn("amazon", respuesta["estados"]["retirado"]["agentes"])
-        self.assertIn({"perfil": "amazon", "agentId": "amazon"},
+        # B1: reviewer es solicitante y también trabajador con perfil: su retiro se ve.
+        self.assertIn("reviewer", respuesta["estados"]["retirado"]["agentes"])
+        self.assertIn({"perfil": "revision", "agentId": "reviewer"},
                       respuesta["estados"]["perfil-incompleto"]["perfiles"])
         self.assertNotIn("estados", encargo.perfiles(checkout=self.checkout))
+
+    def test_perfiles_mini_without_a_host_is_a_usage_error(self):
+        # B2: main corre encargo.py en la Mac, así que --mini sin user@host leería la lista
+        # de la Mac, que no es la de la Mini: es error de uso, no una lista local.
+        with self.assertRaises(SystemExit) as stopped:
+            self.cli("perfiles", "--mini")
+        self.assertEqual(stopped.exception.code, 2)
 
     def test_an_unreadable_profiles_file_is_an_error_and_not_a_traceback(self):
         (self.checkout / "scripts" / "agent-work" / "contexto" / "perfiles.v1.json").write_text("{")
