@@ -13,7 +13,7 @@ from pathlib import Path
 from contexto import digest_de_perfil
 from contracts import OperationKey, RunDir, SessionRecord, operation_id
 from modelos import ModelId, ProviderPolicy
-from sesion import model_in_use, read_events
+from sesion import adaptador
 from spool import atomic_json
 
 SCHEMA = "sistema-agentes.flota.v1"
@@ -34,6 +34,10 @@ def requested_model(record: SessionRecord) -> str | None:
     argv = _json(record.argv)
     if isinstance(argv, list) and "-m" in argv[:-1]:
         return argv[argv.index("-m") + 1]
+    if isinstance(argv, list) and "--model" in argv[:-1]:
+        # claude recibió el id sin el prefijo del proveedor (4.7).
+        nombre = argv[argv.index("--model") + 1]
+        return nombre if "/" in nombre else f"anthropic/{nombre}"
     return None
 
 
@@ -55,9 +59,13 @@ def documento(assignment: dict, *, state_dir: Path, policy: ProviderPolicy) -> d
         isinstance(manifest, dict) and isinstance(profile, dict) and isinstance(launched, dict)
     ):
         return None
-    events = read_events(record.path)
+    adapter_id = (
+        assignment.get("adapterId") if isinstance(assignment.get("adapterId"), str) else "opencode"
+    )
+    el_adaptador = adaptador(adapter_id if adapter_id in ("opencode", "claude") else "opencode")
+    events = el_adaptador.leer_eventos(record.path)
     asked = requested_model(record)
-    used, reason = model_in_use(events, asked)
+    used, reason = el_adaptador.modelo_en_uso(events, asked)
     parsed = ModelId.parse(asked) if asked else None
     grant = policy.grant_for(parsed.provider) if isinstance(parsed, ModelId) else None
     children = []
@@ -88,7 +96,9 @@ def documento(assignment: dict, *, state_dir: Path, policy: ProviderPolicy) -> d
         "attempt": key.generation,
         "specialist": specialist,
         "host": key.host_id,
-        "executor": EXECUTOR,
+        # La ruta de claude es un CLI como la de opencode, pero no es opencode:
+        # su executor en flota.v1 es "cli" (4.7).
+        "executor": "cli" if adapter_id == "claude" else EXECUTOR,
         "accountRef": grant.name if grant else None,
         "model": {"id": used} if used else {"id": None, "reason": reason},
         "generation": generation,

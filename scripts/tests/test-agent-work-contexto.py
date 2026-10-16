@@ -370,7 +370,15 @@ class Perfiles(unittest.TestCase):
                 self.assertTrue(set(p["skills"]) <= en_el_paquete)
                 self.assertTrue(p["sources"] and all(f["validUntil"] for f in p["sources"]))
                 for runtime, herramientas in p["requiredTools"].items():
-                    self.assertEqual("edit" in herramientas, p["writesSource"], runtime)
+                    # En claude la edición se llama Edit/Write (SUA-04, 4.7): la
+                    # coherencia es la misma, con los nombres de ese runtime.
+                    edita = any(h in herramientas for h in ("edit", "Edit", "Write"))
+                    self.assertEqual(edita, p["writesSource"], runtime)
+                requeridas = p["requiredTools"]
+                if "todowrite" in requeridas.get("opencode", ()):
+                    # B4 de G7-r5 (M-24 punto 5): la lista de claude es TaskCreate;
+                    # TodoWrite no existe en 2.1.301.
+                    self.assertIn("TaskCreate", requeridas.get("claude", ()), p["id"])
                 agentes += [r["agentId"] for r in p["routes"] if r["agentId"]]
         # Each native agent has one default profile, the one the AGENTS.md block names.
         self.assertEqual(len(agentes), len(set(agentes)))

@@ -88,6 +88,12 @@ class Mac(unittest.TestCase):
         self.bin.mkdir()
         (self.bin / "opencode").write_text(OPENCODE_DOUBLE)
         (self.bin / "opencode").chmod(0o755)
+        # El doble de claude contesta la versión certificada (DeepSeek F1 en #324): sin él
+        # las pruebas de la ruta claude dependían del claude instalado en la máquina, y en
+        # el runner de CI, que no lo tiene, la ruta salía no certificada.
+        (self.bin / "claude").write_text(
+            '#!/bin/sh\ncase "$*" in --version) echo "2.1.301 (Claude Code)";; *) exit 64;; esac\n')
+        (self.bin / "claude").chmod(0o755)
         (self.bin / "version").write_text("1.18.35\n")
         (self.bin / "listing").write_text(LISTING)
         self.repo = self.root / "dev" / "demo"
@@ -109,7 +115,8 @@ class Mac(unittest.TestCase):
         out, err = io.StringIO(), io.StringIO()
         with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
             code = encargo.main(["--checkout", str(self.checkout), "--state-root", str(self.state),
-                                 "--opencode", str(self.bin / "opencode"), "--workspace-root", str(self.root / "dev"),
+                                 "--opencode", str(self.bin / "opencode"), "--claude", str(self.bin / "claude"),
+                                 "--workspace-root", str(self.root / "dev"),
                                  *args], prompts=self.prompts)
         return code, out.getvalue(), err.getvalue()
 
@@ -152,7 +159,9 @@ class Proveedores(Mac):
         self.assertEqual([(row.name, row.provider, row.decision, row.billing, row.session, row.listed_models,
                            row.permitted_models, row.cited) for row in rows], [
             ("glm", "zai-coding-plan", "permitido", "subscription", "con-sesion", 7, 7, "David 2026-10-03 P9830"),
-            ("claude", "anthropic", "permitido", "subscription", "sin-sesion", 0, 0, "David 2026-10-12 P10868"),
+            # SUA-04 G7: con la ruta claude en coverage, anthropic lista los alias de
+            # esa ruta (fable, opus, sonnet) y su sesión es la de claude.
+            ("claude", "anthropic", "permitido", "subscription", "con-sesion", 3, 3, "David 2026-10-12 P10868"),
             ("grok", "xai", "permitido", "subscription", "con-sesion", 13, 13, "David 2026-10-12 P10868"),
             ("gpt", "openai", "permitido", "subscription", "con-sesion", 24, 24, "David 2026-10-12 P10867"),
             ("muse", "meta", "permitido", "subscription", "con-sesion", 6, 6, "David 2026-10-12 P10867"),
@@ -263,7 +272,6 @@ class Preparar(Mac):
 
     def test_each_request_david_can_make_is_judged_before_the_route_and_the_host(self):
         for words, causa, pieces in (
-            ("claude opus", "proveedor-sin-sesion", ["claude", "no entra por opencode", "B22-S5"]),
             ("opencode-go/deepseek-v4-pro", "proveedor-no-permitido", ["«open code go es solamente para main»"]),
             ("zai/glm-5.3", "proveedor-no-permitido", ["zai está cerrado para encargos"]),
             ("zai-coding-plan/no-existe", "modelo-no-existe", ["zai-coding-plan/no-existe no existe"]),
@@ -277,7 +285,23 @@ class Preparar(Mac):
                                  (False, causa, "no-registrar", []))
                 for piece in pieces:
                     self.assertIn(piece, answer["frase"])
-        self.assertNotIn("auth login", self.preparar("--modelo", "claude opus")["frase"])
+        # SUA-04 G7: "claude opus" ya no contesta proveedor-sin-sesion (la frase de
+        # B22-S5): la ruta claude existe, está certificada (banco de G7) y el modelo
+        # entra por sus alias. Sin latido del host, lo que falta es el host.
+        sin_host = self.preparar("--modelo", "claude opus")
+        self.assertEqual(sin_host["causa"], "sin-host")
+        self.assertNotIn("auth login", sin_host["frase"])
+
+    def test_claude_opus_elige_el_adaptador_claude(self):
+        # SUA-04 (4.7): anthropic va por el adaptador claude y brief.py lo recibe así.
+        self.beat(canary=True)
+        answer = self.preparar("--modelo", "claude opus")
+        self.assertTrue(answer["ok"], answer)
+        self.assertEqual(answer["modelo"], "anthropic/opus")
+        self.assertEqual(
+            answer["briefArgs"],
+            ["--host", "mac-local", "--adapter", "claude", "--model", "anthropic/opus"],
+        )
 
     def test_a_grant_without_its_id_says_login_and_binding_are_missing(self):
         self.edit_policy(lambda doc: doc["providers"][5].update(provider=None))
@@ -442,13 +466,20 @@ class Preparar(Mac):
         self.assertIn("777 Mon Oct 12 18:00:00 2026 sleep 300", blocked["frase"])
 
     def test_a_login_david_just_made_is_seen_without_waiting_for_the_cache_to_age(self):
-        self.assertEqual(self.preparar("--modelo", "claude opus")["causa"], "proveedor-sin-sesion")
+        # SUA-04 G7: el caso ya no es "claude opus" (hoy entra por la ruta claude,
+        # no por la sesión de opencode); es un modelo de un permiso con sesión que
+        # opencode todavía no listaba cuando se guardó el catálogo.
+        self.assertEqual(
+            self.preparar("--modelo", "kimi-code-plan-cn/kimi-nuevo")["causa"], "modelo-no-existe"
+        )
         cache = self.state / "catalogo.json"
         stale = json.loads(cache.read_text())
         stale["listedAt"] -= 120
         cache.write_text(json.dumps(stale))
-        (self.bin / "listing").write_text(LISTING + "anthropic/claude-opus-5-5\n")
-        self.assertEqual(self.preparar("--modelo", "claude opus")["causa"], "sin-host")
+        (self.bin / "listing").write_text(LISTING + "kimi-code-plan-cn/kimi-nuevo\n")
+        self.assertEqual(
+            self.preparar("--modelo", "kimi-code-plan-cn/kimi-nuevo")["causa"], "sin-host"
+        )
         self.assertEqual(self.argv_log(), ["--version", "models", "--version", "--version", "models"])
 
     def test_a_new_cli_version_relists_and_closes_the_repos_certified_route(self):

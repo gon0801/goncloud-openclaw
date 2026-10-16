@@ -363,6 +363,22 @@ class Catalog:
         return frozenset(model for model in self.models if model.provider == provider)
 
 
+CLAUDE_ALIASES = ("fable", "opus", "sonnet")
+"""Los ids admitidos de la ruta claude (SUA-04, 4.7): no hay `claude models`, así que
+el catálogo de anthropic sale de los alias que `claude --model` acepta (su --help: un
+alias como sonnet/opus o el nombre completo). Decisión de G7: la lista corta de alias,
+no nombres completos inventados. M-21 midió que `opus`/`sonnet` corren con el plan Max."""
+
+
+def catalogo_claude(cli_version: str, *, listed_at: float) -> Catalog:
+    """El catálogo de la ruta claude: los alias de anthropic con la versión de su CLI."""
+    return Catalog(
+        cli_version,
+        frozenset(ModelId(ProviderId("anthropic"), alias) for alias in CLAUDE_ALIASES),
+        listed_at,
+    )
+
+
 class CatalogUnavailable(RuntimeError):
     """opencode no contestó su versión o su lista de modelos."""
 
@@ -676,8 +692,16 @@ def _outside_grant(models: "tuple[ModelId, ...]", policy: ProviderPolicy) -> Mod
 def _by_name(request: ByName, policy: ProviderPolicy, catalog: Catalog) -> "ModelId | Refusal":
     words = tuple(request.words.lower().split())
     permitted = _admitted(policy, catalog)
-    matching = tuple(model for model in sorted(catalog.models, key=str)
-                     if words and all(word in str(model).lower() for word in words))
+
+    def nombra_al_modelo(model: ModelId) -> bool:
+        # El nombre del permiso también nombra a sus modelos ("claude opus" es el opus
+        # de anthropic): sin esto, pedir por el nombre que David usa no encontraría
+        # ningún id, porque el id no lleva ese nombre.
+        grant = policy.grant_for(model.provider)
+        pajar = f"{grant.name if grant else ''} {model}".lower()
+        return bool(words) and all(word in pajar for word in words)
+
+    matching = tuple(model for model in sorted(catalog.models, key=str) if nombra_al_modelo(model))
     candidates = tuple(model for model in matching if model in permitted)
     if len(candidates) == 1:
         return candidates[0]

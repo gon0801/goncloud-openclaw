@@ -47,6 +47,15 @@
           "task",
           "todowrite"
         ],
+        "claude": [
+          "Read",
+          "Edit",
+          "Write",
+          "Bash",
+          "Skill",
+          "Task",
+          "TaskCreate"
+        ],
         "openclaw": [
           "read",
           "edit",
@@ -132,6 +141,13 @@
           "task",
           "todowrite"
         ],
+        "claude": [
+          "Read",
+          "Bash",
+          "Skill",
+          "Task",
+          "TaskCreate"
+        ],
         "openclaw": [
           "read",
           "exec",
@@ -207,6 +223,13 @@
           "task",
           "todowrite"
         ],
+        "claude": [
+          "Read",
+          "Bash",
+          "Skill",
+          "Task",
+          "TaskCreate"
+        ],
         "openclaw": [
           "read",
           "exec",
@@ -277,6 +300,13 @@
           "task",
           "todowrite"
         ],
+        "claude": [
+          "Read",
+          "Bash",
+          "Skill",
+          "Task",
+          "TaskCreate"
+        ],
         "openclaw": [
           "read",
           "exec",
@@ -345,6 +375,13 @@
           "skill",
           "task",
           "todowrite"
+        ],
+        "claude": [
+          "Read",
+          "Bash",
+          "Skill",
+          "Task",
+          "TaskCreate"
         ],
         "openclaw": [
           "read",
