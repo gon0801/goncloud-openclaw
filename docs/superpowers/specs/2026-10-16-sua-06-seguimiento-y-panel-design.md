@@ -93,9 +93,9 @@ En la Mac, el host de encargos llama a la pasada en su bucle, como hoy a `Progre
 
 Primero el plugin (es lo que pide la fila B16 de `followups.md`): `runbook.progress.get` contesta una razón propia, `sin-registro`, cuando no hay registro ni documento legado de esa corrida, distinta de `desconocida`, que se queda para el candado vencido y el registro ilegible (`index.ts:318-326`, `progress-store.ts:44-74`). El plugin se publica en el gateway de la Mini como cualquier cambio de `tablero-runbook`.
 
-Hay un tercer caso (F6 de #332): la corrida que solo tiene documento legado (`progress/c/<id>.json`, que `runbook.progress.set` sigue escribiendo, `index.ts:277-284`). Hoy `get` contesta `ok: true` sin `revision` y `progress-events.py:118` lanza la misma línea de ruido. El plugin contesta para ella `sin-revision-administrada`: sin registro administrado no hay `expectedRevision` contra el que mandar eventos, así que tampoco se puede publicar.
+Hay un tercer caso (F6 de #332): la corrida que solo tiene documento legado (`progress/c/<id>.json`, que `runbook.progress.set` sigue escribiendo, `index.ts:277-284`). Hoy `get` contesta `ok: true` sin `revision`, y `progress-events.py:118` lanza la misma línea de ruido. Esa respuesta **no se cambia**: otros consumidores dependen de su `ok: true` (F8 de #332). Lo reconoce el cliente: `ok: true` sin `revision` es "sin revisión administrada". Esa cola **no se archiva**, porque un `run.opened` o un import posterior la vuelve publicable (F9): se queda en `queue/`, y el cliente escribe la línea en el log una sola vez por cambio de estado (deja un marcador `runs/<c>/.sin-revision` y no la repite mientras siga igual).
 
-Después, `progress-events.py publish` archiva la cola de una corrida (la mueve a `archivo-<fecha>/` con una línea en el log) cuando `get` contesta `sin-registro` o `sin-revision-administrada`. Con `desconocida` hace lo de hoy: deja la cola y la pasada siguiente reintenta, porque puede ser una corrida viva con el candado ocupado. No hace falta contar pasadas: la razón ya es inequívoca. Esto cierra la fila B16.
+Después, `progress-events.py publish` archiva la cola de una corrida (la mueve a `archivo-<fecha>/` con una línea en el log) solo cuando `get` contesta `sin-registro`. Con `desconocida` hace lo de hoy: deja la cola y la pasada siguiente reintenta, porque puede ser una corrida viva con el candado ocupado. No hace falta contar pasadas: la razón ya es inequívoca. Esto cierra la fila B16.
 
 ### 4.4 La vista de solo lectura
 
@@ -115,7 +115,7 @@ Una página nueva del plugin `tablero-runbook`, `/runbook/tablero/raices` (la li
 | Rutas maliciosas (I17) | `/runbook/tablero/raices/..%2F..%2Fx` y un `rootId` con `/` contestan 400 y no leen nada fuera de `raicesDir`. |
 | `nextCheckAt` siempre definido | `derivar` con una unidad viva, una con excepción abierta (con y sin su `exceptionId` en `notados`) y una cerrada: los valores esperados, ninguno `null`. |
 | Un emisor por máquina | Dos pasadas a la vez sobre el mismo `<dir>`: una se salta por el candado y David recibe un solo aviso. |
-| Colas de corridas desconocidas | `get` con `sin-registro` o con `sin-revision-administrada` (solo documento legado) archiva la cola; con `desconocida` (candado o registro ilegible) la deja y reintenta. |
+| Colas de corridas desconocidas | `get` con `sin-registro` archiva la cola; `ok: true` sin `revision` (solo documento legado) la deja y escribe una línea por cambio de estado, no una por pasada; con `desconocida` (candado o registro ilegible) la deja y reintenta. Los consumidores de `get` (`tablero-trabajo.sh`, las rutas) siguen viendo `ok: true` para el documento legado. |
 | Teclado, móvil, error, offline, vacío | En el panel elegido (§8): capturas de escritorio y celular de cada estado, como en M-26. |
 | Sin OpenGrokBot | Un grep de candado: ninguna rebanada lo instala ni lo nombra fuera de texto histórico. |
 
@@ -126,11 +126,11 @@ Una página nueva del plugin `tablero-runbook`, `/runbook/tablero/raices` (la li
 | P0 | 4.1b, `managedTasks.root.list` en R, con su prueba y la compuerta de R. | — |
 | P1 | 4.1, el derivador, con sus fixtures y la prueba del contrato. | — |
 | P2 | 4.2, el emisor y su checkpoint (con el `messageId` de `avisar`), en la Mac (host) y la Mini (cron nativo de comando, sin efecto hasta SUA-09O). | P0, P1 |
-| P3 | 4.3: la razón `sin-registro` en el plugin (y su publicación en el gateway), y el archivado en `progress-events.py`. | — |
+| P3 | 4.3: la razón `sin-registro` en el plugin (y su publicación en el gateway), el archivado con esa razón y el caso del documento legado en `progress-events.py`. | — |
 | P4 | 4.4, la página del plugin `tablero-runbook`, con sus capturas de escritorio y celular. | P1, P2 |
 | P5 | La evidencia de M-26 en el repo (`docs/evidence/sistema-agentes-unificado/SUA-06-lobsterboard.md` y sus capturas), el recibo `SUA-06.md` y las filas. | P1 a P4 |
 
-P0, P1, P3 y la evidencia de M-26 van en paralelo; P4 sale cuando P1 y P2 están.
+P0, P1 y P3 van en paralelo; P4 sale cuando P1 y P2 están. La evidencia de M-26 puede ir antes, en su propio PR; P5 junta el recibo al final.
 
 ## 7. Lo que no entra en SUA-06
 
