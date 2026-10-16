@@ -54,6 +54,13 @@ PROMPTS = {
 DEFAULT_BRIEF_ARGS = ["--host", "mac-local", "--adapter", "opencode", "--model", "zai-coding-plan/glm-5.3-flash"]
 
 
+def sin_avisos():
+    """El ambiente sin la compuerta AGENT_WORK_AVISOS: ninguna prueba de fuentes manda un mensaje
+    real, ni la que inyecta un envío falso ni la que deja correr el avisar de verdad."""
+    return mock.patch.dict(os.environ, {k: v for k, v in os.environ.items() if k != "AGENT_WORK_AVISOS"},
+                           clear=True)
+
+
 class Mac(unittest.TestCase):
     def setUp(self):
         temp = tempfile.TemporaryDirectory()
@@ -662,7 +669,8 @@ class Perfiles(Mac):
 
 class Fuentes(Mac):
     """`encargo.py fuentes` (SUA-04, 4.9): cada fuente y la competencia de cada ruta con los días que
-    les quedan, y con --aviso el estado semanal que se quema una vez por semana."""
+    les quedan, y con --aviso el envío semanal que sale por avisar.py y quema el estado solo cuando
+    el envío contestó que salió."""
 
     AHORA = datetime(2026, 10, 16, 12, tzinfo=timezone.utc)
 
@@ -684,6 +692,11 @@ class Fuentes(Mac):
     def fuentes(self, *args):
         with mock.patch.object(encargo.time, "time", return_value=self.AHORA.timestamp()):
             return self.cli("fuentes", *args)
+
+    def correr_fuentes(self, **kwargs):
+        with sin_avisos():
+            return encargo.fuentes(checkout=self.checkout, state_root=self.state,
+                                   now=self.AHORA.timestamp(), **kwargs)
 
     def test_lista_fuentes_y_competencia_con_dias(self):
         self.escribir_perfiles(
@@ -713,38 +726,117 @@ class Fuentes(Mac):
         self.assertEqual(set(fila["fuentes"][0]), {"ref", "revision", "validUntil", "dias", "porVencer"})
         self.assertEqual(set(fila["competencia"][0]), {"ruta", "validUntil", "dias", "porVencer"})
 
+    def test_aviso_enviado_quema_el_estado(self):
+        self.escribir_perfiles(
+            [{"ref": "G:agents/ingenieria/agent/workshop-skills", "revision": "97d35ab0",
+              "validUntil": self.vence_en(10)}], {})
+        textos = []
+
+        def enviar(texto, **kwargs):
+            textos.append(texto)
+            return {"enviado": True}
+
+        respuesta = self.correr_fuentes(aviso=True, enviar_aviso=enviar)
+        self.assertEqual(respuesta["aviso"], {"vencen": ["G:agents/ingenieria/agent/workshop-skills"],
+                                              "enviado": True, "ultimoAviso": self.AHORA.timestamp()})
+        self.assertEqual(json.loads((self.state / "fuentes.json").read_text()),
+                         {"schema": "agent-work.fuentes.v1", "ultimoAviso": self.AHORA.timestamp()})
+        self.assertIn("G:agents/ingenieria/agent/workshop-skills", textos[0])
+        self.assertIn("10 días", textos[0])
+        # Pasaron 0 días desde el envío: la corrida inmediata no vuelve a enviar ni re-quema.
+        escrito = (self.state / "fuentes.json").read_bytes()
+        respuesta = self.correr_fuentes(aviso=True, enviar_aviso=enviar)
+        self.assertEqual(respuesta["aviso"], {"vencen": ["G:agents/ingenieria/agent/workshop-skills"],
+                                              "enviado": False, "ultimoAviso": self.AHORA.timestamp()})
+        self.assertEqual(len(textos), 1)
+        self.assertEqual((self.state / "fuentes.json").read_bytes(), escrito)
+
+    def test_aviso_no_enviado_no_quema_y_reintenta(self):
+        self.escribir_perfiles(
+            [{"ref": "G:agents/ingenieria/agent/workshop-skills", "revision": "97d35ab0",
+              "validUntil": self.vence_en(10)}], {})
+        # Sin enviar_aviso inyectado la llamada es a avisar.py de verdad: con la compuerta
+        # apagada contesta que no salió sin correr nada, y no hay quema.
+        primera = self.correr_fuentes(aviso=True)
+        self.assertEqual(primera["aviso"]["vencen"], ["G:agents/ingenieria/agent/workshop-skills"])
+        self.assertIs(primera["aviso"]["enviado"], False)
+        self.assertEqual(primera["aviso"]["causa"], "avisos apagados (AGENT_WORK_AVISOS no es 1)")
+        self.assertIsNone(primera["aviso"]["ultimoAviso"])
+        self.assertFalse((self.state / "fuentes.json").exists())
+        # Sin quema, la corrida de mañana reintenta el envío completo.
+        segunda = self.correr_fuentes(aviso=True)
+        self.assertIs(segunda["aviso"]["enviado"], False)
+        self.assertEqual(segunda["aviso"]["causa"], "avisos apagados (AGENT_WORK_AVISOS no es 1)")
+        self.assertFalse((self.state / "fuentes.json").exists())
+
+    def test_menos_de_siete_dias_no_llama_a_avisar(self):
+        viejo = self.AHORA.timestamp() - 3 * 86400
+        (self.state / "fuentes.json").write_text(json.dumps(
+            {"schema": "agent-work.fuentes.v1", "ultimoAviso": viejo}))
+        self.escribir_perfiles(
+            [{"ref": "G:agents/ingenieria/agent/workshop-skills", "revision": "97d35ab0",
+              "validUntil": self.vence_en(10)}], {})
+
+        def enviar(texto, **kwargs):
+            self.fail("pasó menos de una semana del último aviso: no hay envío que hacer")
+
+        respuesta = self.correr_fuentes(aviso=True, enviar_aviso=enviar)
+        self.assertEqual(respuesta["aviso"], {"vencen": ["G:agents/ingenieria/agent/workshop-skills"],
+                                              "enviado": False, "ultimoAviso": viejo})
+        self.assertEqual(json.loads((self.state / "fuentes.json").read_text()),
+                         {"schema": "agent-work.fuentes.v1", "ultimoAviso": viejo})
+
+    def test_la_competencia_por_vencer_sola_tambien_avisa(self):
+        self.escribir_perfiles(
+            [{"ref": "G:agents/ingenieria/agent/workshop-skills", "revision": "97d35ab0",
+              "validUntil": self.vence_en(90)}],
+            {"mac-local/opencode": {"status": "passed", "validUntil": self.vence_en(5)}})
+        textos = []
+
+        def enviar(texto, **kwargs):
+            textos.append(texto)
+            return {"enviado": True}
+
+        respuesta = self.correr_fuentes(aviso=True, enviar_aviso=enviar)
+        self.assertEqual(respuesta["aviso"], {"vencen": ["competencia ingenieria mac-local/opencode"],
+                                              "enviado": True, "ultimoAviso": self.AHORA.timestamp()})
+        self.assertIn("competencia ingenieria mac-local/opencode", textos[0])
+        self.assertIn("5 días", textos[0])
+        self.assertEqual(json.loads((self.state / "fuentes.json").read_text()),
+                         {"schema": "agent-work.fuentes.v1", "ultimoAviso": self.AHORA.timestamp()})
+
     def test_aviso_quema_el_estado_semanal(self):
         self.escribir_perfiles(
             [{"ref": "G:agents/ingenieria/agent/workshop-skills", "revision": "97d35ab0",
               "validUntil": self.vence_en(10)}],
             {"mac-local/opencode": {"status": "passed", "validUntil": self.vence_en(90)}})
-        code, out, err = self.fuentes("--aviso")
-        self.assertEqual((code, err), (0, ""))
-        aviso = json.loads(out)["aviso"]
-        self.assertEqual((aviso["vencen"], aviso["avisadoHoy"], aviso["ultimoAviso"]),
-                         (["G:agents/ingenieria/agent/workshop-skills"], True, self.AHORA.timestamp()))
-        estado = json.loads((self.state / "fuentes.json").read_text())
-        self.assertEqual(estado, {"schema": "agent-work.fuentes.v1", "ultimoAviso": self.AHORA.timestamp()})
-        written = (self.state / "fuentes.json").read_bytes()
-        code, out, err = self.fuentes("--aviso")
-        aviso = json.loads(out)["aviso"]
-        self.assertEqual((aviso["avisadoHoy"], aviso["ultimoAviso"]), (False, self.AHORA.timestamp()))
-        self.assertEqual((self.state / "fuentes.json").read_bytes(), written)
+        vencen = ["G:agents/ingenieria/agent/workshop-skills"]
+
+        def enviar(texto, **kwargs):
+            return {"enviado": True}
+
+        respuesta = self.correr_fuentes(aviso=True, enviar_aviso=enviar)
+        self.assertEqual(respuesta["aviso"], {"vencen": vencen, "enviado": True,
+                                              "ultimoAviso": self.AHORA.timestamp()})
+        escrito = (self.state / "fuentes.json").read_bytes()
+        respuesta = self.correr_fuentes(aviso=True, enviar_aviso=enviar)
+        self.assertEqual(respuesta["aviso"], {"vencen": vencen, "enviado": False,
+                                              "ultimoAviso": self.AHORA.timestamp()})
+        self.assertEqual((self.state / "fuentes.json").read_bytes(), escrito)
         (self.state / "fuentes.json").write_text(json.dumps(
             {"schema": "agent-work.fuentes.v1", "ultimoAviso": self.AHORA.timestamp() - 8 * 86400}))
-        code, out, err = self.fuentes("--aviso")
-        aviso = json.loads(out)["aviso"]
-        self.assertEqual((aviso["avisadoHoy"], aviso["ultimoAviso"]), (True, self.AHORA.timestamp()))
+        respuesta = self.correr_fuentes(aviso=True, enviar_aviso=enviar)
+        self.assertEqual(respuesta["aviso"], {"vencen": vencen, "enviado": True,
+                                              "ultimoAviso": self.AHORA.timestamp()})
         self.assertEqual(json.loads((self.state / "fuentes.json").read_text())["ultimoAviso"],
                          self.AHORA.timestamp())
-        # Sin nada por vencer no hay quema y no nace el archivo.
+        # Sin nada por vencer no hay envío, no hay quema y no nace el archivo.
         self.escribir_perfiles(
             [{"ref": "G:agents/ingenieria/agent/workshop-skills", "revision": "97d35ab0",
               "validUntil": self.vence_en(90)}], {})
         (self.state / "fuentes.json").unlink()
-        code, out, err = self.fuentes("--aviso")
-        aviso = json.loads(out)["aviso"]
-        self.assertEqual((aviso["vencen"], aviso["avisadoHoy"], aviso["ultimoAviso"]), ([], False, None))
+        respuesta = self.correr_fuentes(aviso=True, enviar_aviso=enviar)
+        self.assertEqual(respuesta["aviso"], {"vencen": [], "enviado": False, "ultimoAviso": None})
         self.assertFalse((self.state / "fuentes.json").exists())
 
     def test_mutacion_marca_sin_el_limite_de_30(self):
@@ -752,22 +844,20 @@ class Fuentes(Mac):
         self.escribir_perfiles(
             [{"ref": "G:agents/a/agent/workshop-skills", "revision": "r", "validUntil": self.vence_en(31)},
              {"ref": "G:agents/b/agent/workshop-skills", "revision": "r", "validUntil": self.vence_en(29)},
-             {"ref": "G:agents/c/agent/workshop-skills", "revision": "r", "validUntil": None}], {})
-        code, out, err = self.fuentes("--aviso")
+             {"ref": "G:agents/c/agent/workshop-skills", "revision": "r", "validUntil": None}],
+            {"mac-local/opencode": {"status": "passed", "validUntil": self.vence_en(31)},
+             "mini-native/native/ingenieria": {"status": "pending", "validUntil": self.vence_en(29)}})
+        with sin_avisos():
+            code, out, err = self.fuentes("--aviso")
         self.assertEqual((code, err), (0, ""))
         respuesta = json.loads(out)
         fila = respuesta["perfiles"][0]
         self.assertEqual([(f["dias"], f["porVencer"]) for f in fila["fuentes"]],
                          [(31, False), (29, True), (None, False)])
-        self.assertEqual(respuesta["aviso"]["vencen"], ["G:agents/b/agent/workshop-skills"])
-
-    def test_la_salida_diga_aviso_pendiente_de_g5(self):
-        self.escribir_perfiles(
-            [{"ref": "G:agents/ingenieria/agent/workshop-skills", "revision": "97d35ab0",
-              "validUntil": self.vence_en(10)}], {})
-        code, out, err = self.fuentes("--aviso")
-        self.assertEqual((code, err), (0, ""))
-        self.assertEqual(json.loads(out)["aviso"]["avisoPendiente"], "aviso pendiente de G5")
+        self.assertEqual([(c["dias"], c["porVencer"]) for c in fila["competencia"]],
+                         [(31, False), (29, True)])
+        self.assertEqual(respuesta["aviso"]["vencen"],
+                         ["G:agents/b/agent/workshop-skills", "competencia ingenieria mini-native/native/ingenieria"])
 
 
 class Permitir(Mac):
@@ -1235,7 +1325,8 @@ class Diario(Mac):
             return self.cli("diario")
 
     def test_diario_corre_las_dos_y_contesta_una_linea(self):
-        code, out, err = self.diario()
+        with sin_avisos():
+            code, out, err = self.diario()
         self.assertEqual((code, err), (0, ""))
         self.assertEqual(len(out.splitlines()), 1, out + err)
         respuesta = json.loads(out)
@@ -1245,12 +1336,11 @@ class Diario(Mac):
         self.assertEqual((respuesta["sucesion"]["ok"], respuesta["sucesion"]["accion"]),
                          (True, "nada-que-probar"))
         self.assertIs(respuesta["fuentes"]["ok"], True)
-        # El aviso tal como lo deja fuentes HOY (G5 cableará el envío): con las fuentes del
-        # fixture (todo vence en 2027-01-14, a 90 días) nada vence, no hay quema y queda el
-        # pendiente de G5.
+        # Con las fuentes del fixture (todo vence en 2027-01-14, a 90 días) nada vence: no
+        # hay intento de envío, no hay quema y el aviso queda sin causa. El envío que diario
+        # deja correr es el real, y solo la compuerta del launchd lo enciende.
         self.assertEqual(respuesta["fuentes"]["aviso"],
-                         {"vencen": [], "avisadoHoy": False, "ultimoAviso": None,
-                          "avisoPendiente": "aviso pendiente de G5"})
+                         {"vencen": [], "enviado": False, "ultimoAviso": None})
         self.assertFalse((self.state / "fuentes.json").exists())
 
     def test_diario_un_sucesion_que_lanza_no_impide_fuentes_y_sale_con_el_peor(self):

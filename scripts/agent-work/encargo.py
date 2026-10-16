@@ -513,9 +513,9 @@ def perfiles(checkout: Path, mini: str | None = None, correr=None) -> dict:
 
 
 AVISO_EVERY_SECONDS = 7 * 86400
-"""El aviso de fuentes por vencer se quema una vez por semana: lo corre el launchd diario de 4.3."""
+"""El aviso de lo que va por vencer se intenta una vez por semana: lo corre el launchd de 4.3. Solo
+se quema cuando el envío salió, así que una semana sin envío se reintenta cada corrida."""
 POR_VENCER_DIAS = 30
-AVISO_PENDIENTE = "aviso pendiente de G5"
 FUENTES_SCHEMA = "agent-work.fuentes.v1"
 
 
@@ -528,10 +528,13 @@ def _cuenta(valid_until: str | None, ahora: datetime) -> dict:
     return {"validUntil": valid_until, "dias": dias, "porVencer": dias < POR_VENCER_DIAS}
 
 
-def _quema_el_aviso(vencen: list, state_root: Path, now: float) -> dict:
-    """El estado semanal del aviso en `<state_root>/fuentes.json`. Si hay fuentes por vencer y pasó
-    una semana desde el último aviso, quema `ultimoAviso=now`: escritura atómica y sin candado
-    porque el único escritor es el launchd diario."""
+def _quema_el_aviso(vencen: list, state_root: Path, now: float, *, enviar_aviso=None,
+                    policy=None, openclaw_bin: Path = OPENCLAW_BIN) -> dict:
+    """El estado semanal del aviso en `<state_root>/fuentes.json`. Si hay algo por vencer y pasó una
+    semana desde el último aviso, manda la lista con avisar.py y quema `ultimoAviso=now` solo cuando
+    el envío salió: sin quema, la corrida de mañana reintenta. "causa" va solo cuando hubo intento y
+    el envío contestó que no salió. Escritura atómica y sin candado porque el único escritor es el
+    launchd diario."""
     path = Path(state_root) / "fuentes.json"
     try:
         estado = contexto.leer_json(path)
@@ -539,28 +542,39 @@ def _quema_el_aviso(vencen: list, state_root: Path, now: float) -> dict:
         estado = None
     ultimo = estado.get("ultimoAviso") if isinstance(estado, dict) else None
     ultimo = ultimo if isinstance(ultimo, (int, float)) else None
-    avisado_hoy = False
+    respuesta = {"vencen": [entrada for entrada, _ in vencen],
+                 "enviado": False, "ultimoAviso": ultimo}
     if vencen and (ultimo is None or now - ultimo >= AVISO_EVERY_SECONDS):
-        contenido = json.dumps({"schema": FUENTES_SCHEMA, "ultimoAviso": now}, ensure_ascii=False)
-        descriptor, pending = tempfile.mkstemp(prefix=".fuentes-", dir=path.parent)
-        try:
-            with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
-                stream.write(contenido)
-                stream.flush()
-                os.fsync(stream.fileno())
-            os.replace(pending, path)
-        finally:
-            if os.path.exists(pending):
-                os.unlink(pending)
-        ultimo, avisado_hoy = now, True
-    return {"vencen": vencen, "avisadoHoy": avisado_hoy, "ultimoAviso": ultimo,
-            "avisoPendiente": AVISO_PENDIENTE}
+        lineas = [f"- {entrada} ({dias} días)" for entrada, dias in vencen]
+        texto = "fuentes por vencer:\n" + "\n".join(lineas)
+        envio = (enviar_aviso or aviso_mod.avisar)(texto, policy=policy, openclaw_bin=openclaw_bin)
+        if envio.get("enviado"):
+            contenido = json.dumps({"schema": FUENTES_SCHEMA, "ultimoAviso": now},
+                                   ensure_ascii=False)
+            descriptor, pending = tempfile.mkstemp(prefix=".fuentes-", dir=path.parent)
+            try:
+                with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
+                    stream.write(contenido)
+                    stream.flush()
+                    os.fsync(stream.fileno())
+                os.replace(pending, path)
+            finally:
+                if os.path.exists(pending):
+                    os.unlink(pending)
+            respuesta.update(enviado=True, ultimoAviso=now)
+        else:
+            respuesta["causa"] = envio.get("causa", "no salió")
+    return respuesta
 
 
-def fuentes(checkout: Path, state_root: Path, *, aviso: bool = False, now: float) -> dict:
+def fuentes(checkout: Path, state_root: Path, *, aviso: bool = False, now: float,
+            enviar_aviso=None, policy: ProviderPolicy | None = None,
+            openclaw_bin: Path = OPENCLAW_BIN) -> dict:
     """`encargo.py fuentes [--aviso]`. Cada perfil con sus fuentes y la competencia de sus rutas,
     con los días que les quedan y cuáles van por vencer (SUA-04, 4.9). Con --aviso suma el estado
-    semanal del aviso y lo quema cuando toca: G5 manda el aviso a David con la lista."""
+    semanal: lo que vence (las fuentes y la competencia juntas, ordenadas) se manda por Telegram
+    con avisar.py y el estado se quema solo cuando el envío salió. La política y el openclaw son
+    los mismos que usa sucesion para avisar; `diario` y la línea de comandos dejan el envío real."""
     try:
         documento = _valida_perfiles(
             contexto.leer_json(Path(checkout) / CONTEXTO_DIR / "perfiles.v1.json"))
@@ -574,7 +588,7 @@ def fuentes(checkout: Path, state_root: Path, *, aviso: bool = False, now: float
         for fuente in perfil.get("sources") or ():
             cuenta = _cuenta(fuente.get("validUntil"), ahora)
             if cuenta["porVencer"]:
-                vencen.append(fuente["ref"])
+                vencen.append((fuente["ref"], cuenta["dias"]))
             fuentes_del_perfil.append(
                 {"ref": fuente["ref"], "revision": fuente["revision"], **cuenta})
         competencia = []
@@ -582,12 +596,19 @@ def fuentes(checkout: Path, state_root: Path, *, aviso: bool = False, now: float
             clave = contexto.clave_de_ruta(ruta)
             dato = perfil["competence"].get(clave)
             if dato is not None:
-                competencia.append({"ruta": clave, **_cuenta(dato.get("validUntil"), ahora)})
+                cuenta = _cuenta(dato.get("validUntil"), ahora)
+                if cuenta["porVencer"]:
+                    vencen.append((f"competencia {perfil['id']} {clave}", cuenta["dias"]))
+                competencia.append({"ruta": clave, **cuenta})
         filas.append({"perfil": perfil["id"], "fuentes": fuentes_del_perfil,
                       "competencia": competencia})
     respuesta = {"ok": True, "perfiles": filas, "aviso": None}
     if aviso:
-        respuesta["aviso"] = _quema_el_aviso(sorted(vencen), state_root, now)
+        if policy is None:
+            policy = ProviderPolicy.load(Path(checkout) / POLICY_FILE)
+        respuesta["aviso"] = _quema_el_aviso(sorted(vencen), state_root, now,
+                                              enviar_aviso=enviar_aviso, policy=policy,
+                                              openclaw_bin=openclaw_bin)
     return respuesta
 
 
