@@ -246,6 +246,7 @@ def respalda_carpeta(origen: Path, respaldo: Path) -> None:
     copia a medias nunca deje el respaldo roto ni a medias."""
     copia = Path(tempfile.mkdtemp(dir=str(respaldo.parent), prefix="." + respaldo.name + "."))
     viejo = None
+    conservar_viejo = False
     try:
         shutil.copytree(origen, copia / "nueva")
         viejo = None
@@ -257,13 +258,18 @@ def respalda_carpeta(origen: Path, respaldo: Path) -> None:
         os.replace(copia / "nueva", respaldo)
     except BaseException:
         if viejo is not None and (viejo / "vieja").exists() and not respaldo.exists():
-            os.replace(viejo / "vieja", respaldo)
+            try:
+                os.replace(viejo / "vieja", respaldo)
+            except BaseException:
+                # Devolver lo apartado también falló: no se borra, porque es lo
+                # único que queda del respaldo, y el error que sale es el original.
+                conservar_viejo = True
         raise
     finally:
         # El temporal que quede (una copia fallida, o el wrapper que ya se vació) es
         # basura puntual: se limpia sin fallar; el respaldo anterior no se tocó.
         shutil.rmtree(copia, ignore_errors=True)
-        if viejo is not None:
+        if viejo is not None and not conservar_viejo:
             shutil.rmtree(viejo, ignore_errors=True)
 
 

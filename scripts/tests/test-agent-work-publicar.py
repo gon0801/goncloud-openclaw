@@ -983,6 +983,34 @@ class PublicadorNativo(unittest.TestCase):
         self.assertEqual((destino / "SKILL.md").read_bytes(), b"de antes\n")
         self.assertEqual([p.name for p in destino.parent.iterdir()], ["poteto-mode"])
 
+    def test_a_failed_restore_keeps_what_was_set_aside_and_raises_the_first_error(self):
+        # B1 de G5d: si también falla devolver lo apartado, no se borra lo
+        # apartado y se propaga el error original, no el de la devolución.
+        origen = self.tmp / "origen-b1"
+        (origen / "intern").mkdir(parents=True)
+        (origen / "SKILL.md").write_text("nueva\n", encoding="utf-8")
+        destino = self.tmp / "respaldos" / "poteto-mode"
+        destino.mkdir(parents=True)
+        (destino / "SKILL.md").write_text("de antes\n", encoding="utf-8")
+        reemplazo_real = os.replace
+        llamadas = []
+
+        def reemplazo_que_falla_desde_la_segunda(fuente, meta, **kwargs):
+            llamadas.append(1)
+            if len(llamadas) == 2:
+                raise OSError("replace final roto")
+            if len(llamadas) == 3:
+                raise OSError("devolución rota")
+            return reemplazo_real(fuente, meta, **kwargs)
+
+        with mock.patch.object(self.armador.os, "replace", reemplazo_que_falla_desde_la_segunda):
+            with self.assertRaises(OSError) as atrapado:
+                self.armador.respalda_carpeta(origen, destino)
+        self.assertEqual(str(atrapado.exception), "replace final roto")
+        apartados = [p for p in destino.parent.iterdir() if p.name.startswith(".viejo-")]
+        self.assertEqual(len(apartados), 1)
+        self.assertEqual((apartados[0] / "vieja" / "SKILL.md").read_bytes(), b"de antes\n")
+
     def test_two_reverts_in_a_row_do_not_invent_a_conflict(self):
         # C1a (R1 del veredicto r3): una edición del dueño fuera del bloque entre la gen 2
         # y la gen 3 que pasó por --leer no conflicta la segunda reversa.

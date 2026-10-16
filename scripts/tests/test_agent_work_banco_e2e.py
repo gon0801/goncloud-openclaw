@@ -273,6 +273,55 @@ class Briefs(unittest.TestCase):
             "incidente:deadline",
         )
 
+    def test_clean_slot_fails_when_processes_survive_the_kill(self):
+        # B2 de G5d: si tras el KILL el grupo sigue con procesos, el caso falla
+        # en vez de salir OK y saltar los siguientes en silencio.
+        from types import SimpleNamespace
+        from unittest import mock
+
+        banco = BancoE2E.__new__(BancoE2E)
+        banco.socket = "banco-falso"
+        banco.slot = SimpleNamespace(boundary=lambda: (SimpleNamespace(pid=4321),))
+        with mock.patch("subprocess.run", return_value=SimpleNamespace(stdout="")):
+            with mock.patch.object(
+                sys.modules[__name__], "matar_procesos_del_slot", return_value=(4321,)
+            ):
+                with self.assertRaises(AssertionError) as atrapado:
+                    banco.clean_slot()
+        self.assertIn("el caso dejó procesos vivos en el slot: 4321", str(atrapado.exception))
+
+    def test_guardar_caso_replaces_a_previous_copy_wholesale(self):
+        # B6 de G5d: si el destino ya existe, se reemplaza entero; nada de la
+        # corrida anterior queda mezclado con la nueva.
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            raiz = tmp / "caso"
+            (raiz / "repo").mkdir(parents=True)
+            (raiz / "repo" / "saluda.py").write_text("nuevo\n")
+            destino = tmp / "guardados" / "test_x"
+            (destino / "repo").mkdir(parents=True)
+            (destino / "repo" / "saluda.py").write_text("viejo\n")
+            (destino / "de-la-anterior.md").write_text("resto\n")
+            guardar_caso(raiz, destino)
+            self.assertEqual((destino / "repo" / "saluda.py").read_text(), "nuevo\n")
+            self.assertFalse((destino / "de-la-anterior.md").exists())
+
+    def test_provenance_names_both_files_with_a_line(self):
+        # B7 de G5d: la procedencia de la exploración positiva nombra saluda.py
+        # y test-saluda.py, cada uno junto a un número de línea.
+        self.assertTrue(
+            nombra_procedencia(
+                "saluda.py:2 devuelve hola\ntest-saluda.py, línea 5 espera hello\n"))
+        self.assertFalse(nombra_procedencia("saluda.py devuelve hola\ntest-saluda.py espera hello\n"))
+        self.assertFalse(nombra_procedencia("saluda.py:2 devuelve hola\nla prueba espera hello\n"))
+
+    def test_the_expected_generation_comes_from_the_current_manifest(self):
+        # G5d-r3: assert_package_and_flota espera la generación del manifiesto
+        # vigente, no un literal: con la generación 2 falló contra flota.json.
+        manifiesto = contexto.leer_json(contexto.MANIFIESTO)
+        self.assertEqual(generacion_esperada(), manifiesto["generation"])
+        self.assertEqual(manifiesto["generation"], 2)
+
     def test_artifact_path_reads_what_the_host_recorded(self):
         # E: el inspect de R devuelve artifactRef como artifact:<sha256>; la ruta real es
         # la que el host grabó en results/<op>.json.
@@ -292,6 +341,22 @@ class Briefs(unittest.TestCase):
 
 def sha256(data):
     return hashlib.sha256(data).hexdigest()
+
+
+def generacion_esperada() -> int:
+    """La generación que flota.json tiene que anotar: la del manifiesto vigente,
+    leída del paquete, nunca un literal (con la 2, el literal 1 hizo fallar dos
+    casos buenos del banco)."""
+    return contexto.leer_json(contexto.MANIFIESTO)["generation"]
+
+
+def nombra_procedencia(hallazgos: str) -> bool:
+    """La procedencia que pide el brief de exploración (B7 de G5d): saluda.py y
+    test-saluda.py, cada uno nombrado junto a un número de línea."""
+    return all(
+        re.search(rf"{re.escape(nombre)}[^0-9]{{0,20}}\d+", hallazgos)
+        for nombre in ("saluda.py", "test-saluda.py")
+    )
 
 
 def desenlace_de(snapshot: dict) -> str:
@@ -316,6 +381,8 @@ def guardar_caso(raiz: Path, destino: Path) -> Path:
                 fuera.add(nombre)
         return fuera
 
+    if destino.exists():
+        shutil.rmtree(destino)
     shutil.copytree(raiz, destino, ignore=ignora, dirs_exist_ok=True)
     return destino
 
@@ -454,6 +521,14 @@ class BancoE2E(unittest.TestCase):
         deadline = time.monotonic() + 5
         while self.slot.boundary() and time.monotonic() < deadline:
             time.sleep(0.05)
+        restantes = self.slot.boundary()
+        if restantes:
+            # B2 de G5d: un caso que deja procesos vivos no sale OK en silencio
+            # mientras los siguientes se saltan por el grupo ocupado.
+            self.fail(
+                "el caso dejó procesos vivos en el slot: "
+                + ",".join(str(proceso.pid) for proceso in restantes)
+            )
 
     def reached(self, predicate, seconds, what):
         value = wait_for(predicate, seconds)
@@ -560,7 +635,7 @@ class BancoE2E(unittest.TestCase):
         flota_doc = self.reached(lambda: run.fleet if run.fleet.exists() else None, 120,
                                  "el host nunca escribió flota.json")
         document = json.loads(flota_doc.read_text())
-        self.assertEqual((document["specialist"], document["generation"]), (specialist, 1))
+        self.assertEqual((document["specialist"], document["generation"]), (specialist, generacion_esperada()))
         self.assertIsNotNone(document["model"]["id"], f"flota sin modelo usado: {document['model']}")
         self.assertTrue(document["permissions"], "flota sin permisos medidos")
         self.assertEqual(document["attestations"][0], {"what": "poteto", "digest": digests["poteto"]})
@@ -692,6 +767,10 @@ class BancoE2E(unittest.TestCase):
         hallazgos = artefacto.read_text(encoding="utf-8")
         self.assertIn("hola", hallazgos, "el artefacto no nombra lo que saluda devuelve")
         self.assertIn("hello", hallazgos, "el artefacto no nombra lo que la prueba espera")
+        self.assertTrue(
+            nombra_procedencia(hallazgos),
+            "el artefacto no nombra saluda.py y test-saluda.py con su línea",
+        )
         self.assert_run_that_writes_nothing(task_id, "exploracion")
         print(f"BANCO_E2E case=exploracion-positiva task={task_id} resultado=grabado", flush=True)
 

@@ -415,6 +415,32 @@ class Conducta(unittest.TestCase):
             ),
         )
 
+    def test_steps_out_of_order_inside_a_single_element_are_red(self):
+        # B5 de G5d: el orden también cuenta dentro de un mismo elemento: uno
+        # que trae el paso 2 y después el 1 no empieza con el paso 1.
+        filas = [
+            herramienta("read", filePath=f"{RUN}/contexto/skills/poteto-mode/SKILL.md"),
+            herramienta("read", filePath=f"{RUN}/{PLAYBOOK}"),
+            herramienta(
+                "todowrite",
+                todos=[
+                    {
+                        "content": "2. `architect` for parallel design exploration. "
+                        "1. `how` over the affected subsystem."
+                    }
+                ],
+            ),
+            herramienta("edit", filePath="/repo/calc.py", oldString="-", newString="+"),
+            herramienta("bash", command="python3 -m unittest test_calc.py", output=SALIDA),
+        ]
+        self.assertEqual(
+            juzgar(filas).razones,
+            (
+                "la primera lista no empieza con el primer paso del playbook: "
+                "'`how` over the affected subsystem.'",
+            ),
+        )
+
     def test_the_real_m16b_control_stays_red_for_the_missing_package_read(self):
         # El control cargó poteto-mode desde ~/.agents/skills (el global): no cuenta.
         with tempfile.TemporaryDirectory() as tmp:
@@ -620,6 +646,58 @@ class ConductaNativa(unittest.TestCase):
         respuesta = json.loads(out.getvalue())
         self.assertFalse(respuesta["ok"])
         self.assertEqual(respuesta["razones"][0], SIN_POTETO_NATIVO)
+
+    def test_the_real_m17_probes_are_red_for_the_playbook_they_never_read(self):
+        # B de SUA03-G5d: las dos sondas nativas reales (M-17 y su repetición)
+        # quedan fijadas con sus razones exactas; ninguna leyó el playbook ni
+        # abrió lista, que es lo que la generación 2 viene a cambiar.
+        casos = (
+            (
+                "m17a-ingenieria-nativo.jsonl",
+                "Ran 4 tests in 0.000s\n\nOK\n",
+                [
+                    "falta la lectura de skills/poteto-mode/playbooks/feature.md "
+                    "antes del primer cambio",
+                    "no hay lista de pasos (todowrite)",
+                ],
+            ),
+            (
+                "m17b-ingenieria-nativo.jsonl",
+                "cualquier cosa\n",
+                [
+                    "falta la lectura de skills/poteto-mode/playbooks/feature.md "
+                    "antes del primer cambio",
+                    "no hay lista de pasos (todowrite)",
+                    "el resultado no cita la salida de las últimas pruebas",
+                ],
+            ),
+        )
+        for fixture, resultado_texto, razones_esperadas in casos:
+            with self.subTest(fixture=fixture):
+                with tempfile.TemporaryDirectory() as tmp:
+                    tmp = Path(tmp)
+                    libro = tmp / "skills" / "poteto-mode" / "playbooks" / "feature.md"
+                    libro.parent.mkdir(parents=True)
+                    shutil.copy(FIXTURAS / "m16b-feature.md", libro)
+                    (tmp / "resultado.md").write_text(resultado_texto, encoding="utf-8")
+                    out = io.StringIO()
+                    with contextlib.redirect_stdout(out):
+                        codigo = conducta.main(
+                            [
+                                "--forma",
+                                "openclaw",
+                                "--eventos",
+                                str(FIXTURAS / fixture),
+                                "--playbook",
+                                str(libro),
+                                "--resultado",
+                                str(tmp / "resultado.md"),
+                            ]
+                        )
+                self.assertEqual(codigo, 1)
+                respuesta = json.loads(out.getvalue())
+                self.assertFalse(respuesta["ok"])
+                self.assertEqual(respuesta["razones"], razones_esperadas)
 
     def test_a_native_run_whose_child_tests_after_the_change_follows_poteto(self):
         padre, hijo = "agent:x:turno", "agent:x:subagent:1"

@@ -324,10 +324,13 @@ def juzgar(
                 ),
                 None,
             )
-            if posicion is not None and any(
-                any(otro in elemento for otro in otros) for elemento in elementos[:posicion]
-            ):
-                posicion = None
+            if posicion is not None:
+                # B5 de G5d: el orden también dentro del elemento donde empieza
+                # el paso 1: lo que va antes de él en ese mismo elemento cuenta.
+                desde = _espacios(" ".join(elementos[posicion:]))
+                antes = " ".join([*elementos[:posicion], desde[: desde.index(objetivo)]])
+                if any(otro in antes for otro in otros):
+                    posicion = None
         if posicion is None:
             razones.append(
                 f"la primera lista no empieza con el primer paso del playbook: {paso_uno!r}"

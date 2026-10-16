@@ -646,10 +646,12 @@ class Routes(unittest.TestCase):
         self.assertEqual(coverage["hostAdapterRoute"]["mac-local"]["opencode"]["form"], "run-per-task")
         route = sesion.Route.load(coverage, "mac-local")
         self.assertEqual(route, sesion.Route("mac-local", "opencode", "run-per-task", "certified",
-                                             frozenset({"1.18.35"}), frozenset({"1"})))
+                                             frozenset({"1.18.35"}), frozenset({"1", "2"})))
         self.assertIsNone(route.open_for("1.18.35", canary=False))
         self.assertIsNone(route.open_for("1.18.35", 1, canary=False),
                           "M-16 certifies generation 1 of the package (SUA-03-mediciones.md)")
+        self.assertIsNone(route.open_for("1.18.35", 2, canary=False),
+                          "M-16 (generación 2) certifies generation 2 of the package")
         self.assertEqual(route.open_for("1.18.36", canary=False), modelos.RouteNotCertified("1.18.36", ("1.18.35",)))
         self.assertEqual(modelos.explicar(route.open_for("1.18.36", canary=False)).frase,
                          "Ruta certificada para 1.18.35, la Mac tiene opencode 1.18.36.")
@@ -715,14 +717,15 @@ class Routes(unittest.TestCase):
         self.assertIsNone(route({"1": "M-13"}).open_for("1.18.35", canary=False),
                           "a brief without a package only asks the version of the CLI")
 
-    def test_the_repos_coverage_certifies_generation_1_of_the_package(self):
-        # M-16 (corrida 5 + corrida 8) certifica la generación 1: la 2 sigue sin
-        # certificar y solo un canario la corre (antes de M-16 era al revés).
+    def test_the_repos_coverage_certifies_generations_1_and_2_of_the_package(self):
+        # M-16 certificó la generación 1 (corrida 5 + corrida 8) y la 2 (banco
+        # sobre la generación 2, dos corridas): la 3 sigue sin certificar.
         route = sesion.Route.load(json.loads(COVERAGE.read_text(encoding="utf-8")), "mac-local")
-        self.assertEqual(route.certified_context_generations, frozenset({"1"}))
+        self.assertEqual(route.certified_context_generations, frozenset({"1", "2"}))
         self.assertIsNone(route.open_for("1.18.35", 1, canary=False))
-        self.assertEqual(route.open_for("1.18.35", 2, canary=False), modelos.GenerationNotCertified(2, (1,)))
-        self.assertIsNone(route.open_for("1.18.35", 2, canary=True))
+        self.assertIsNone(route.open_for("1.18.35", 2, canary=False))
+        self.assertEqual(route.open_for("1.18.35", 3, canary=False), modelos.GenerationNotCertified(3, (1, 2)))
+        self.assertIsNone(route.open_for("1.18.35", 3, canary=True))
 
 
 class Plans(Policies):

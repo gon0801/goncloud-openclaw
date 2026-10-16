@@ -64,4 +64,32 @@ BANCO_E2E case=ingenieria task=4d2e7e8d-7b11-4388-9263-01dc08497830 conducta=ok 
 BANCO_E2E case=control task=ec302951-c64c-4518-8cb2-bab88a7d36fb conducta=roja razones=['falta la lectura de contexto/skills/poteto-mode/SKILL.md antes del primer cambio', 'falta la lectura de contexto/skills/poteto-mode/playbooks/feature.md antes del primer cambio', "la primera lista no empieza con el primer paso del playbook: '`how` over the affected subsystem.'"]
 ```
 
-**Veredicto M-16: VERDE, diez corridas (corrida 5 + corrida 8)**
+**Veredicto M-16: VERDE, diez casos en dos corridas (corrida 5 + corrida 8)**
+
+## M-16, generación 2
+
+La generación 2 del paquete (`poteto.v1.json`, digest `sha256:b612e4b83e73c488d708ee9e6dba1586a95e636d50971f93a5337cc66e9f9003`) existe por las sondas nativas M-17 y M-17b: las dos leyeron `poteto-openclaw` y `poteto-mode` antes del primer cambio, pero ninguna leyó el playbook ni usó `progress_card`, que en OpenClaw está detrás de `tool_search` y la adaptación no lo decía. Sus mediciones de conducta, literales: `{"ok": false, "razones": ["falta la lectura de skills/poteto-mode/playbooks/feature.md antes del primer cambio", "no hay lista de pasos (todowrite)"]}` y la segunda con una razón más, `"el resultado no cita la salida de las últimas pruebas"`. La generación 2 suma eso a la adaptación nativa y al bloque; el detalle está en la parte A de `LISTO-SUA03-G5d-r1` y en `artifacts/SUA03-G5d/m17-conducta.json` y `m17b-conducta.json`.
+
+Entorno común con la generación 1: R en `/Users/dn/dev/wt/r-sua02-c-gate` (`7b3db54226b`), opencode 1.18.35, modelo `zai-coding-plan/glm-5.3-flash` por suscripción, grupo de slot `_appserverusr`, casos con `--canary`. El paquete es el mismo en las dos corridas: `git diff --stat 8c5d32a4 cde564ae -- scripts/agent-work/contexto` sale vacío.
+
+| Corrida | Punta de G | Resultado | Causa |
+|---|---|---|---|
+| 1 | `8c5d32a4` | **9 de 10.** 21 tests en 2036,439 s, `FAILED (failures=1)`, `salida=1` | Ingeniería terminó en incidente `transport-unavailable/delivery-unaccepted`: opencode salió después de su primer paso sin aceptar la tarea y el host lo registró como debe. Los otros nueve casos, verdes |
+| 2 | `cde564ae` | **VERDE.** Ingeniería sola, 1 test en 403,172 s, `OK`, `salida=0` | Sin causa: cierra el caso que faltaba |
+
+Las diez líneas `BANCO_E2E` que certifican, literales (las nueve primeras de la corrida 1 y la última de la corrida 2):
+
+```
+BANCO_E2E case=revision-rota task=bd607de1-a499-4b9d-bd0f-9da382c635e8 verdict=changes
+BANCO_E2E case=revision-sana task=0c350c0d-3997-4112-9220-99daf30e88a7 verdict=approved
+BANCO_E2E case=verificacion-negativa task=189b53c6-c7fd-40a7-a4c0-ae68908d694d verdict=changes
+BANCO_E2E case=verificacion-positiva task=274b71fc-6fff-408c-9348-43c22a6a6c55 verdict=approved
+BANCO_E2E case=adversario-positiva task=e509b8c1-02c9-49b0-be88-f3014d2f91cd verdict=changes
+BANCO_E2E case=adversario-negativa task=bda2011f-e59f-432d-9ac0-2a04f2a52025 verdict=approved
+BANCO_E2E case=exploracion-negativa task=ce7c8d17-eafd-4936-a57c-3ace6ecb6c8b desenlace=resultado repo=igual
+BANCO_E2E case=exploracion-positiva task=d67133d3-ecb5-4c07-a3cf-0a1099762b04 resultado=grabado
+BANCO_E2E case=control task=d2723c11-fa4d-4781-b9ba-ec7329312e2c conducta=roja razones=['falta la lectura de contexto/skills/poteto-mode/SKILL.md antes del primer cambio', 'falta la lectura de contexto/skills/poteto-mode/playbooks/feature.md antes del primer cambio', "la primera lista no empieza con el primer paso del playbook: '`how` over the affected subsystem.'"]
+BANCO_E2E case=ingenieria task=c4431755-2494-4cab-bf95-2edee1ca4f9a conducta=ok suite_repo=pasa
+```
+
+**Veredicto M-16 (generación 2): VERDE, diez casos en dos corridas**
