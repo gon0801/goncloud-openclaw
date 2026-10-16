@@ -12,6 +12,7 @@ from pathlib import Path
 import re
 import sys
 import tempfile
+import uuid
 
 MAX_INSTRUCTION_BYTES = 1024 * 1024
 
@@ -24,6 +25,7 @@ MODEL_NAME = re.compile(r"[A-Za-z0-9._:@/-]{1,128}")
 # The profile line and section (SUA-03, design 4.5): `canonical` is contexto.canonico, which this file
 # cannot import either; test-agent-work-routing.py compares them.
 PROFILE_ID = re.compile(r"[a-z][a-z0-9-]{0,31}")
+AGENT_ID = re.compile(r"[a-z][a-z0-9-]{0,63}")
 
 
 def write_instruction(instruction_root, content):
@@ -67,13 +69,21 @@ def profile_id(text):
     return text
 
 
-def launch_header(model, profile=None):
+def agent_id(text):
+    if not AGENT_ID.fullmatch(text):
+        raise argparse.ArgumentTypeError(f"not an agent id: {text!r}")
+    return text
+
+
+def launch_header(model, profile=None, tarea=None):
     """The header the host reads with LaunchHeader.parse. It goes inside the brief so the digest covers it."""
     lines = [LAUNCH_SCHEMA]
     if model:
         lines.append(f"model: {model}")
     if profile:
         lines.append(f"profile: {profile}")
+    if tarea:
+        lines.append(f"tarea: {tarea}")
     return ("\n".join([*lines, HEADER_END]) + "\n").encode()
 
 
@@ -105,6 +115,22 @@ def profile_section(profile):
             "<!-- perfil fin -->\n").encode()
 
 
+def protocol_section(root, tarea, contrato):
+    """El protocolo de reporte del trabajador nativo (SUA-04, 4.5b): R exige un result con su
+    forma y su digest, y un modelo no lo arma a mano; reporte.py lo arma. Va después de la
+    sección del perfil y delante de la prosa, dentro del digest de la instrucción."""
+    veredicto = " --veredicto approved|changes" if contrato == "review.v1" else ""
+    return ("<!-- protocolo inicio -->\n"
+            "## Cómo reportar tu resultado\n\n"
+            f"Deja tu artefacto en tu workspace, en un archivo cuyo nombre lleve esta tarea: {tarea}.\n"
+            "Cuando termines, corre exactamente:\n\n"
+            f"python3 ~/.local/share/agent-work/reporte.py --root {root} --tarea {tarea} "
+            f"--contrato {contrato} --artefacto <ruta absoluta de tu artefacto>{veredicto}\n\n"
+            'y pásale a managed_tasks_report exactamente {"result": <la salida de ese comando>}, '
+            "sin cambiarle nada. Si el comando sale con error, dilo tal cual: no armes el resultado a mano.\n"
+            "<!-- protocolo fin -->\n").encode()
+
+
 def instruction_ref(digest):
     return {"ref": f"artifact:{digest}", "digest": f"sha256:{digest}"}
 
@@ -118,6 +144,8 @@ def main(argv=None):
     parser.add_argument("--model", type=model_id, help="model the adapter launches, as <provider>/<model>")
     parser.add_argument("--perfil", type=profile_id, help="worker profile, for example ingenieria")
     parser.add_argument("--perfiles", type=Path, help="perfiles.v1.json; required by --perfil without --host")
+    parser.add_argument("--agente", type=agent_id, help="native target agentId: with --perfil and without --host")
+    parser.add_argument("--contrato", choices=("ready.v1", "review.v1"), help="result contract; required by --agente")
     args = parser.parse_args(argv)
     if bool(args.host) != bool(args.adapter):
         parser.error("--host and --adapter go together")
@@ -125,6 +153,12 @@ def main(argv=None):
         parser.error("--perfiles goes with --perfil")
     if args.perfil and not args.host and not args.perfiles:
         parser.error("--perfil without --host is a native target and needs --perfiles")
+    if args.agente and (not args.perfil or args.host):
+        parser.error("--agente va con --perfil sin --host")
+    if args.agente and not args.contrato:
+        parser.error("--agente pide --contrato")
+    if args.contrato and not args.agente:
+        parser.error("--contrato va con --agente")
     section = b""
     if args.perfiles:
         try:
@@ -137,7 +171,9 @@ def main(argv=None):
     content = args.file.read_bytes() if args.file else sys.stdin.buffer.read()
     if (args.model or args.perfil) and content:
         # An empty brief stays empty, so write_instruction refuses it instead of publishing a bare header.
-        content = launch_header(args.model, args.perfil) + section + content
+        tarea = str(uuid.uuid4()) if args.agente else None
+        protocolo = protocol_section(args.root, tarea, args.contrato) if args.agente else b""
+        content = launch_header(args.model, args.perfil, tarea) + section + protocolo + content
     try:
         digest = write_instruction(args.root, content)
     except (OSError, ValueError) as exc:
@@ -146,6 +182,11 @@ def main(argv=None):
     fragments = {"instructionRef": instruction_ref(digest)}
     if args.host:
         fragments["target"] = {"kind": "cli", "hostId": args.host, "adapterId": args.adapter}
+    if args.agente:
+        # main pega los tres fragmentos en managed_tasks_submit (SUA-04, 4.5b).
+        fragments["target"] = {"kind": "agent", "agentId": args.agente}
+        fragments["inputRevision"] = {"kind": "artifact", "ref": f"artifact:{digest}",
+                                      "digest": f"sha256:{digest}"}
     print(json.dumps(fragments, sort_keys=True))
     return 0
 

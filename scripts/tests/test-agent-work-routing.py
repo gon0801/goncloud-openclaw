@@ -783,6 +783,42 @@ class BriefHelper(unittest.TestCase):
         self.assertIn(b"brief: cannot read", missing.stderr)
         self.assertEqual(list(self.root.iterdir()), [])
 
+    def test_brief_with_an_agent_carries_the_task_and_the_report_protocol(self):
+        # SUA-04 (4.5b): un destino nativo lleva la tarea en la cabecera, la sección de
+        # protocolo después de la del perfil, y los tres fragmentos para managed_tasks_submit.
+        done = self.run_helper("--perfil", "meli", "--perfiles", str(self.PERFILES),
+                               "--agente", "meli", "--contrato", "ready.v1")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        fragments = json.loads(done.stdout)
+        digest = fragments["instructionRef"]["ref"].removeprefix("artifact:")
+        self.assertEqual(fragments["target"], {"kind": "agent", "agentId": "meli"})
+        self.assertEqual(fragments["inputRevision"],
+                         {"kind": "artifact", "ref": f"artifact:{digest}", "digest": f"sha256:{digest}"})
+        text = (self.root / digest).read_bytes().decode()
+        tarea = re.search(r"^tarea: ([0-9a-f-]{36})$", text, re.MULTILINE).group(1)
+        self.assertLess(text.index("<!-- perfil inicio"), text.index("<!-- protocolo inicio"))
+        self.assertLess(text.index("<!-- protocolo fin -->"), text.index(self.BRIEF.decode()))
+        protocolo = text[text.index("<!-- protocolo inicio"):text.index("<!-- protocolo fin -->")]
+        self.assertIn(f"reporte.py --root {self.root} --tarea {tarea} --contrato ready.v1 "
+                      "--artefacto <ruta absoluta", protocolo)
+        self.assertIn('{"result": <la salida de ese comando>}', protocolo)
+        self.assertIn(tarea, protocolo)
+
+    def test_brief_refuses_an_agent_without_its_contract_or_with_a_host(self):
+        for args, message in (
+            (("--perfil", "meli", "--perfiles", str(self.PERFILES), "--agente", "meli"),
+             b"--agente pide --contrato"),
+            (("--perfil", "meli", "--perfiles", str(self.PERFILES), "--contrato", "ready.v1"),
+             b"--contrato va con --agente"),
+            (("--perfil", "meli", "--perfiles", str(self.PERFILES), "--agente", "meli",
+              "--contrato", "ready.v1", "--host", "mac-local", "--adapter", "opencode"),
+             b"--agente va con --perfil sin --host"),
+        ):
+            with self.subTest(args=args):
+                done = self.run_helper(*args)
+                self.assertEqual((done.returncode, done.stdout), (2, b""))
+                self.assertIn(message, done.stderr)
+
     def test_the_host_reads_the_profile_line_that_brief_writes(self):
         # G1 did not move the host: until G3 a brief with a profile was cabecera-mal-formada, which is
         # why main did not pass --perfil before the window of G5. G3 is the slice that teaches the host
