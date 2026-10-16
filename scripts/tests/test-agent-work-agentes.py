@@ -2,8 +2,12 @@
 """SUA-04 (4.5): descubrir agentes contra una lista viva de fixture y sondear con una Mini falsa."""
 
 import json
+import os
 from pathlib import Path
+import sqlite3
+import subprocess
 import sys
+import tempfile
 import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -61,10 +65,12 @@ class FakeMini:
     """Un ssh y un openclaw falsos: la tarea aparece cuando el turno a main corre."""
 
     def __init__(self, *, tarea=True, registrada=False, marcador=True, entregas=0,
-                 memoria_cambia=False, spawn=False, concurrente=False, turno_cortado=False):
+                 memoria_cambia=False, spawn=False, concurrente=False, turno_cortado=False,
+                 reporta=True):
         self.tarea, self.registrada, self.con_marcador = tarea, registrada, marcador
         self.entregas, self.memoria_cambia, self.spawn = entregas, memoria_cambia, spawn
         self.concurrente, self.turno_cortado = concurrente, turno_cortado
+        self.reporta = reporta
         self.llamadas = []
         self.memoria = "aaa  memory/notas.md\n"
         self.turno_corrido = False
@@ -85,7 +91,8 @@ class FakeMini:
             self.turno_corrido = True
             if self.memoria_cambia:
                 self.memoria = "bbb  memory/notas.md\n"
-            return 0, json.dumps({"taskId": "t-sonda"}), ""
+            # Sin taskId reportado (F8): un main que no declara su tarea gestionada.
+            return 0, json.dumps({"taskId": "t-sonda"} if self.reporta else {}), ""
         if "python3" in texto and "-c" in argv:
             tareas = []
             if self.turno_corrido and self.tarea:
@@ -169,6 +176,131 @@ class Sondear(unittest.TestCase):
         fila = sondear_con(FakeMini(memoria_cambia=True))
         self.assertEqual((fila["ok"], fila["memoriaIgual"], fila["causa"]),
                          (False, False, "memory/ cambió durante la sonda"))
+
+    def test_la_hija_se_borra_cuando_main_no_reporta_task_id(self):
+        # F8: la tarea se reconoció por su resultado, no por lo que main reportó;
+        # la sesión hija de ESA tarea también es de la sonda y debe irse.
+        fake = FakeMini(reporta=False)
+        fila = sondear_con(fake)
+        self.assertEqual((fila["ok"], fila["taskId"]), (True, "t-sonda"))
+        borradas = [" ".join(argv) for argv in fake.corridas("sessions delete")]
+        self.assertTrue(any("agent:ingenieria:managed:t-sonda" in b for b in borradas),
+                        borradas)
+
+
+SSH_FALSO = """#!/bin/sh
+# ssh de juguete con la semántica del real: registra el argv que llegó y luego lo
+# une con espacios y lo corre con sh -c, como el shell remoto de la Mini.
+printf '%s\\n' "$@" >> "$SUA_TEST_LOG"
+printf '%s\\n' --- >> "$SUA_TEST_LOG"
+sh -c "$*"
+"""
+
+
+class ConexionReal(unittest.TestCase):
+    """La lectura y la foto contra un HOME de juguete y un ssh local que replica al
+    real (F6): el ssh une el argv con espacios y el shell remoto lo vuelve a partir,
+    así que estas pruebas reproducen el machaqueo sin salir de la Mac.
+    """
+
+    def setUp(self):
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        self.tmp = Path(temp.name)
+        self.home = self.tmp / "home"
+        self.ws = self.home / "w" / "ingenieria"
+        (self.ws / "memory").mkdir(parents=True)
+        (self.ws / "memory" / "notas.md").write_text("nota de ingeniería\n", encoding="utf-8")
+        self.crear_base(
+            self.home / ".openclaw" / "state" / "openclaw.sqlite",
+            ["create table managed_tasks (task_id text, assignment_json text,"
+             " result_json text, created_at int)"],
+            [("insert into managed_tasks values (?, ?, ?, ?)",
+              ("t-1", json.dumps({"target": {"kind": "agent", "agentId": "ingenieria"}}),
+               json.dumps("SONDA-7"), 1))],
+        )
+        self.base_main = (self.home / ".openclaw" / "agents" / "main" / "agent"
+                          / "openclaw-agent.sqlite")
+        self.crear_base(self.base_main,
+                        ["create table conversation_deliveries (id int, source_session_key text)"])
+        self.crear_base(
+            self.home / ".openclaw" / "agents" / "ingenieria" / "agent" / "openclaw-agent.sqlite",
+            ["create table conversation_deliveries (id int, source_session_key text)",
+             "create table session_windows (session_key text, session_id text)",
+             "create table transcript_events (session_id text, seq int, event_json text)"],
+            [("insert into session_windows values (?, ?)",
+              ("agent:ingenieria:managed:t-1", "s-1"))],
+        )
+        self.log = self.tmp / "ssh.log"
+        self.guion = self.tmp / "ssh-falso"
+        self.guion.write_text(SSH_FALSO, encoding="utf-8")
+        self.guion.chmod(0o755)
+
+    def crear_base(self, ruta, ordenes=(), filas=()):
+        ruta.parent.mkdir(parents=True, exist_ok=True)
+        db = sqlite3.connect(ruta)
+        try:
+            for orden in ordenes:
+                db.execute(orden)
+            for orden, fila in filas:
+                db.execute(orden, fila)
+            db.commit()
+        finally:
+            db.close()
+
+    def correr(self, argv, entrada=None, timeout=None):
+        hecho = subprocess.run(
+            [str(self.guion), *argv], input=entrada, capture_output=True, text=True,
+            timeout=timeout or agentes.TIMEOUT_SSH,
+            env={**os.environ, "HOME": str(self.home), "SUA_TEST_LOG": str(self.log)},
+        )
+        return hecho.returncode, hecho.stdout, hecho.stderr
+
+    def correr_sin_ssh(self, argv, entrada=None, timeout=None):
+        # El argv tal cual, sin unirlo con espacios: el AYUDANTE llega entero y la
+        # prueba aísla dónde lee las entregas (F7) del machaqueo del ssh (F6).
+        argv = ["sh", "-c", argv[0]] if len(argv) == 1 else argv
+        hecho = subprocess.run(
+            argv, input=entrada, capture_output=True, text=True,
+            timeout=timeout or agentes.TIMEOUT_SSH, env={**os.environ, "HOME": str(self.home)},
+        )
+        return hecho.returncode, hecho.stdout, hecho.stderr
+
+    def test_la_lectura_y_la_foto_sobreviven_a_un_ssh_de_verdad(self):
+        estado = agentes._estado_remoto(self.correr, "agent:main:sua04-sonda-ingenieria-7",
+                                        "ingenieria", "SONDA-7")
+        tarea = estado["tareas"][0]
+        self.assertEqual(
+            (tarea["taskId"], tarea["kind"], tarea["agentId"], tarea["estado"]),
+            ("t-1", "agent", "ingenieria", "result-recorded"))
+        self.assertIn("SONDA-7", tarea["resultado"])
+        foto = [agentes._foto_memoria(self.correr, str(self.ws)) for _ in range(2)]
+        self.assertEqual(foto[0], foto[1])
+        self.assertIn("memory/notas.md", foto[0])
+
+    def test_las_entregas_se_leen_de_la_base_de_cada_agente(self):
+        # F7: la entrega vive en la base del agente main, no en la base de estado.
+        db = sqlite3.connect(self.base_main)
+        try:
+            db.execute("insert into conversation_deliveries values (?, ?)",
+                       (1, "agent:main:sua04-sonda-ingenieria-7"))
+            db.commit()
+        finally:
+            db.close()
+        estado = agentes._estado_remoto(self.correr_sin_ssh,
+                                        "agent:main:sua04-sonda-ingenieria-7",
+                                        "ingenieria", "SONDA-7")
+        self.assertEqual(estado["entregas"], 1)
+
+    def test_sin_tabla_de_entregas_falla_con_causa(self):
+        # F7: sin la tabla de entregas, fallar con su causa; un 0 en silencio es un
+        # "sin entregas hacia David" falso.
+        self.base_main.unlink()
+        self.crear_base(self.base_main)
+        with self.assertRaises(ValueError) as atrapado:
+            agentes._estado_remoto(self.correr_sin_ssh, "agent:main:sua04-sonda-ingenieria-7",
+                                   "ingenieria", "SONDA-7")
+        self.assertIn("conversation_deliveries", str(atrapado.exception))
 
 
 if __name__ == "__main__":
