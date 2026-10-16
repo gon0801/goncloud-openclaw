@@ -94,9 +94,14 @@ printf '%s' "$out" | grep -q "instalado" || fail "no imprime que quedo instalado
 grep -qF "$HOME/bin/tmux-activity-watch.sh" "$PL" || fail "el plist no apunta al HOME instalado"
 grep -qF "/Users/dn" "$PL" && fail "el plist trae /Users/dn a fuego"
 
-# (3b) la sucesion diaria de SUA-04 (4.3): su plist, a las 05:30, con el HOME de mentira.
+# (3b) la sucesion diaria de SUA-04 (4.3): sin R construido no se instala (B1); con el, sí.
 PL2="$HOME/Library/LaunchAgents/ai.goncloud.agent-work-sucesion.plist"
+[ ! -f "$PL2" ] || fail "sin R construido el plist de sucesion no debia instalarse"
+printf '%s' "$out" | grep -q "sin R construido" || fail "no dijo que falta el R construido: $out"
+mkdir -p "$HOME/dev/wt/r-sua02-c-gate" && printf 'x\n' > "$HOME/dev/wt/r-sua02-c-gate/openclaw.mjs"
+out="$(bash "$INST" 2>&1)" || fail "instalar con R construido fallo: $out"
 [ -f "$PL2" ] || fail "falta el plist de sucesion generado"
+grep -qF "$HOME/dev/wt/r-sua02-c-gate" "$PL2" || fail "el plist de sucesion no trae AGENT_WORK_SUCESION_RUNTIME_SOURCE con el HOME"
 grep -qF "$HOME/dev/wt/agent-work-host/scripts/agent-work/encargo.py" "$PL2" || fail "el plist de sucesion no corre encargo.py del checkout del host"
 grep -qF "<string>sucesion</string>" "$PL2" || fail "el plist de sucesion no llama sucesion"
 grep -qF "<integer>5</integer>" "$PL2" || fail "el plist de sucesion no es a las 05"

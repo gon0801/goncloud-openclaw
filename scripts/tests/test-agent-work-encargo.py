@@ -934,6 +934,31 @@ class Sucesion(Mac):
         entry = self.leer()["lines"]["zai-coding-plan/glm-{}-flash"]
         self.assertEqual((answer["accion"], entry["estado"], entry["intentos"]), ("pendiente", "pendiente", 0))
 
+    def test_tres_noches_de_infraestructura_dejan_su_causa(self):
+        # B1: si el canario nunca corre, a la tercera noche se ve por qué.
+        (self.bin / "listing").write_text(LISTING + "zai-coding-plan/glm-5.4-flash\n")
+        salida = (0, "test_x ... skipped 'set AGENT_WORK_RUNTIME_SOURCE to a built R checkout'\n\nOK (skipped=1)\n")
+        for noche in (1, 2, 3):
+            answer = self.plan(aplicar=True, correr_banco=lambda env, cwd: salida, runtime_source="/r")
+            self.assertEqual(answer["accion"], "pendiente")
+        self.assertTrue(answer["causa"].startswith("el canario no corre: "), answer)
+        entry = self.leer()["lines"]["zai-coding-plan/glm-{}-flash"]
+        self.assertEqual(entry["causa"], answer["causa"])
+        self.assertEqual(entry["intentos"], 0)
+
+    def test_el_host_ilegible_cuenta_como_ocupado(self):
+        # M1: si host.sqlite no se puede leer, el canario no corre.
+        (self.bin / "listing").write_text(LISTING + "zai-coding-plan/glm-5.4-flash\n")
+        self.beat(slot="free", taskId="t-1", model="zai-coding-plan/glm-5.3", since=time.time())
+        (self.state / "enc-1").mkdir(exist_ok=True)
+        (self.state / "enc-1" / "host.sqlite").write_bytes(b"no es sqlite")
+        llamado = []
+        answer = encargo.sucesion(state_root=self.state, checkout=self.checkout,
+                                  opencode_bin=self.bin / "opencode", now=time.time(), aplicar=True,
+                                  correr_banco=lambda env, cwd: llamado.append(1) or (0, "OK"),
+                                  runtime_source="/r")
+        self.assertEqual((answer["accion"], llamado), ("host-ocupado", []))
+
     def test_revertir_vuelve_a_anterior_y_no_se_libera_a_los_7_dias(self):
         (self.bin / "listing").write_text(LISTING + "zai-coding-plan/glm-5.4-flash\n")
         doc = {"schema": "agent-work.succession.v1", "lines": {"zai-coding-plan/glm-{}-flash": {

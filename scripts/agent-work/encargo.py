@@ -640,10 +640,21 @@ def _host_ocupado(state_root: Path, now: float) -> bool:
             f"SELECT count(*) FROM operations WHERE status NOT IN ({','.join('?' * len(OPERACIONES_CERRADAS))})",
             OPERACIONES_CERRADAS).fetchone()[0]
     except sqlite3.Error:
-        return False
+        # Ante la duda, ocupado (M1): si no se puede comprobar que el host está libre,
+        # el canario no corre.
+        return True
     finally:
         db.close()
     return abiertas > 0
+
+
+def _causa_infra(salida: str, rc: "int | None") -> str:
+    if rc is None:
+        return "el banco no terminó en su tope (timeout)"
+    for linea in salida.splitlines():
+        if "skipped" in linea:
+            return f"el banco se saltó el caso: {linea.strip()[:160]}"
+    return "el banco no trajo la línea del caso ingenieria"
 
 
 def _correr_banco_real(env_extra: dict, state_root: Path) -> "tuple[int | None, str]":
@@ -722,7 +733,7 @@ def sucesion(*, state_root: Path, checkout: Path, aplicar: bool = False, reverti
     entry["evidencia"] = str(evidencia_dir / "banco.log")
     if clase == "verde":
         entry.update({"anterior": entry["actual"], "actual": elegido["sucesor"], "candidato": None,
-                      "estado": "promovido", "causa": None, "ultimo": now})
+                      "estado": "promovido", "causa": None, "ultimo": now, "nochesInfra": 0})
         aviso = (f"sucesion: {elegido['sucesor']} reemplazó a {elegido['actual']} en la línea {line}; "
                  f"evidencia: {entry['evidencia']}")
         entry["aviso"] = aviso
@@ -732,14 +743,21 @@ def sucesion(*, state_root: Path, checkout: Path, aplicar: bool = False, reverti
     if clase == "rojo":
         entry.update({"candidato": elegido["sucesor"], "estado": "rechazado",
                       "causa": "canario rojo por el modelo", "intentos": int(entry.get("intentos") or 0) + 1,
-                      "ultimo": now})
+                      "ultimo": now, "nochesInfra": 0})
         _escribir_sucesion(state_root, doc)
         return {"ok": True, "accion": "rechazado", "linea": line, "candidato": elegido["sucesor"],
                 "evidencia": entry["evidencia"]}
-    entry.update({"candidato": elegido["sucesor"], "estado": "pendiente", "causa": "infraestructura del banco",
+    # Tres noches seguidas de infraestructura con el mismo candidato dejan la causa a la
+    # vista (B1): "el canario no corre: <causa>", en el estado y en la salida.
+    mismas = int(entry.get("nochesInfra") or 0) if entry.get("candidato") == elegido["sucesor"] else 0
+    entry["nochesInfra"] = mismas + 1
+    causa = "infraestructura del banco"
+    if entry["nochesInfra"] >= 3:
+        causa = f"el canario no corre: {_causa_infra(salida, rc)}"
+    entry.update({"candidato": elegido["sucesor"], "estado": "pendiente", "causa": causa,
                   "ultimo": now})
     _escribir_sucesion(state_root, doc)
-    return {"ok": True, "accion": "pendiente", "linea": line, "causa": "infraestructura del banco",
+    return {"ok": True, "accion": "pendiente", "linea": line, "causa": causa,
             "evidencia": entry["evidencia"]}
 
 

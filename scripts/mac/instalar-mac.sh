@@ -29,6 +29,9 @@ ETIQUETA="ai.goncloud.tmux-activity-watch"
 PL2_FUENTE="$AQUI/ai.goncloud.agent-work-sucesion.plist"
 PL2_NOMBRE="ai.goncloud.agent-work-sucesion.plist"
 ETIQUETA2="ai.goncloud.agent-work-sucesion"
+R_SUCESION="${AGENT_WORK_SUCESION_RUNTIME:-$HOME/dev/wt/r-sua02-c-gate}"
+# El R construido que el banco del canario usa hoy (B1): sin el, sucesion --aplicar
+# quedaria pendiente cada noche, asi que el plist no se instala y se dice.
 LINEA_SOURCE="source ~/bin/agent-tmux-shell.zsh"
 # Manifiesto binario: fuentes relativas a scripts/mac, destino ~/bin (cp -p
 # conserva el +x).
@@ -139,7 +142,9 @@ modo_verificar() {
   if [ ! -f "$LA_DIR/$PL_NOMBRE" ]; then di "FALTA: LaunchAgents/$PL_NOMBRE"; mal=$((mal+1));
   elif ! cmp -s "$tmp" "$LA_DIR/$PL_NOMBRE"; then di "DIFIERE: LaunchAgents/$PL_NOMBRE"; mal=$((mal+1)); fi
   generar_plist2 "$tmp" || { rm -f "$tmp"; falla "no se pudo generar el plist de sucesion esperado"; }
-  if [ ! -f "$LA_DIR/$PL2_NOMBRE" ]; then di "FALTA: LaunchAgents/$PL2_NOMBRE"; mal=$((mal+1));
+  if [ ! -f "$R_SUCESION/openclaw.mjs" ]; then
+    di "sin R construido en $R_SUCESION: el plist de sucesion no se instala (el canario nunca correria)"
+  elif [ ! -f "$LA_DIR/$PL2_NOMBRE" ]; then di "FALTA: LaunchAgents/$PL2_NOMBRE"; mal=$((mal+1));
   elif ! cmp -s "$tmp" "$LA_DIR/$PL2_NOMBRE"; then di "DIFIERE: LaunchAgents/$PL2_NOMBRE"; mal=$((mal+1)); fi
   rm -f "$tmp"
   if [ ! -f "$HOME/.tmux.conf" ]; then di "FALTA: .tmux.conf"; mal=$((mal+1));
@@ -178,14 +183,18 @@ modo_instalar() {
   copiar_si_difiere "$pl_tmp" "$LA_DIR/$PL_NOMBRE" || { rm -f "$pl_tmp"; falla "no se pudo instalar el plist"; }
   [ "$COPIO" = "1" ] && reiniciar=1
   rm -f "$pl_tmp"
-  pl_tmp="$(mktemp)" || falla "sin tmp para el plist de sucesion"
-  generar_plist2 "$pl_tmp" || { rm -f "$pl_tmp"; falla "no se pudo generar el plist de sucesion"; }
-  copiar_si_difiere "$pl_tmp" "$LA_DIR/$PL2_NOMBRE" || { rm -f "$pl_tmp"; falla "no se pudo instalar el plist de sucesion"; }
-  rm -f "$pl_tmp"
-  mkdir -p "$HOME/Library/Logs/goncloud" || falla "no se pudo crear Library/Logs/goncloud"
-  # La sucesion es de una pasada diaria: se carga una vez y no se reinicia como el vigilante.
-  if ! "$LC_BIN" print "gui/$QUIEN_UID/$ETIQUETA2" >/dev/null 2>&1; then
-    "$LC_BIN" bootstrap "gui/$QUIEN_UID" "$LA_DIR/$PL2_NOMBRE" >&2 || falla "launchctl no cargo $ETIQUETA2"
+  if [ ! -f "$R_SUCESION/openclaw.mjs" ]; then
+    di "sin R construido en $R_SUCESION (falta openclaw.mjs): el plist de sucesion no se instala"
+  else
+    pl_tmp="$(mktemp)" || falla "sin tmp para el plist de sucesion"
+    generar_plist2 "$pl_tmp" || { rm -f "$pl_tmp"; falla "no se pudo generar el plist de sucesion"; }
+    copiar_si_difiere "$pl_tmp" "$LA_DIR/$PL2_NOMBRE" || { rm -f "$pl_tmp"; falla "no se pudo instalar el plist de sucesion"; }
+    rm -f "$pl_tmp"
+    mkdir -p "$HOME/Library/Logs/goncloud" || falla "no se pudo crear Library/Logs/goncloud"
+    # La sucesion es de una pasada diaria: se carga una vez y no se reinicia como el vigilante.
+    if ! "$LC_BIN" print "gui/$QUIEN_UID/$ETIQUETA2" >/dev/null 2>&1; then
+      "$LC_BIN" bootstrap "gui/$QUIEN_UID" "$LA_DIR/$PL2_NOMBRE" >&2 || falla "launchctl no cargo $ETIQUETA2"
+    fi
   fi
   copiar_si_difiere "$AQUI/tmux.conf" "$HOME/.tmux.conf" || falla "no se pudo instalar .tmux.conf"
   [ -f "$HOME/.zshrc" ] || { touch "$HOME/.zshrc" || falla "no se pudo crear .zshrc"; }

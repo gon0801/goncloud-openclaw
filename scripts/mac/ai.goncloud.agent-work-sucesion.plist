@@ -32,6 +32,8 @@
     <string>/opt/homebrew/bin:/usr/bin:/bin</string>
     <key>LANG</key>
     <string>en_US.UTF-8</string>
+    <key>AGENT_WORK_SUCESION_RUNTIME_SOURCE</key>
+    <string>/Users/dn/dev/wt/r-sua02-c-gate</string>
   </dict>
   <!-- Diario a las 05:30, sin encargos habituales. Si la Mac dormía, launchd la corre al despertar. -->
   <key>StartCalendarInterval</key>
