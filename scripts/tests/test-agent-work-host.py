@@ -163,6 +163,15 @@ class HostReceipts(unittest.TestCase):
             ("review.v1", {"verdict": "changes", "findingsRef": "evidence.txt"}),
         ):
             with self.subTest(contrato=contrato, carga=sorted(carga)):
+                # SUA-05 (4.2): el artefacto de un changes válido es un hallazgos.v1.
+                if "findingsRef" in carga:
+                    self.artifact.write_text(json.dumps({
+                        "schema": "hallazgos.v1",
+                        "findings": [{"id": "F1", "bloqueante": False, "archivo": "a.py",
+                                      "linea": 1, "resumen": "menor"}],
+                    }), encoding="utf-8")
+                else:
+                    self.artifact.write_text("pruebas verdes\n", encoding="utf-8")
                 sufijo = contrato + "-" + "-".join(sorted(carga))
                 clave = replace(self.key, task_id=f"task-{sufijo}")
                 operacion = replace(self.operation, key=clave, result_contract=contrato)
@@ -201,6 +210,89 @@ class HostReceipts(unittest.TestCase):
                 self.assertEqual(list((maquina.state_dir / "results").glob("*.json")), [])
                 # F3: tampoco queda snapshot del artefacto.
                 self.assertEqual(list((maquina.state_dir / "artifacts").rglob("*.bin")), [])
+
+    def test_review_content_that_breaks_its_contract_becomes_invalid_result(self):
+        # SUA-05 (4.2): el CONTENIDO del artefacto también se valida antes de grabar. Un
+        # changes cuyo archivo no parsea como hallazgos.v1 sale "resultado-invalido" y un
+        # approved cuya evidencia trae un bloqueante (tipado o en una línea BLOQUEANTE/
+        # BLOCKER) sale "aprobado-con-bloqueante"; en ninguno queda resultado ni snapshot.
+        hallazgos_bloqueante = {
+            "schema": "hallazgos.v1",
+            "findings": [{"id": "F1", "bloqueante": True, "archivo": "scripts/a.py", "linea": 3,
+                          "resumen": "borra una edición del dueño",
+                          "reproduce": "python3 scripts/tests/test_a.py ATest"}],
+        }
+        casos = [
+            ("changes-no-parsea", {"verdict": "changes", "findingsRef": "evidence.txt"},
+             "esto no es json {{{", "resultado-invalido"),
+            ("changes-hallazgo-incompleto", {"verdict": "changes", "findingsRef": "evidence.txt"},
+             json.dumps({"schema": "hallazgos.v1", "findings": [{"id": "F1", "bloqueante": True}]}),
+             "resultado-invalido"),
+             ("changes-bloqueante-sin-reproduce", {"verdict": "changes", "findingsRef": "evidence.txt"},
+              json.dumps({"schema": "hallazgos.v1", "findings": [
+                  {"id": "F1", "bloqueante": True, "archivo": "a.py", "linea": 1,
+                   "resumen": "sin reproducción"}]}), "resultado-invalido"),
+            ("changes-bloqueante-no-bool", {"verdict": "changes", "findingsRef": "evidence.txt"},
+             json.dumps({"schema": "hallazgos.v1", "findings": [
+                 {"id": "F1", "bloqueante": 1, "archivo": "a.py", "linea": 1, "resumen": "entero",
+                  "reproduce": "cmd"}]}), "resultado-invalido"),
+            ("approved-bloqueante-tipado", {"verdict": "approved", "evidenceRef": "evidence.txt"},
+             json.dumps(hallazgos_bloqueante), "aprobado-con-bloqueante"),
+            ("approved-linea-bloqueante", {"verdict": "approved", "evidenceRef": "evidence.txt"},
+             "todo bien\nBLOQUEANTE hay una fuga\n", "aprobado-con-bloqueante"),
+            ("approved-linea-blocker", {"verdict": "approved", "evidenceRef": "evidence.txt"},
+             "BLOCKER fuga de datos\n", "aprobado-con-bloqueante"),
+        ]
+        for nombre, carga, contenido, motivo in casos:
+            with self.subTest(nombre=nombre):
+                maquina = Host("mac-test", self.root / f"host-h2-{nombre}")
+                clave = replace(self.key, task_id=f"task-h2-{nombre}")
+                operacion = replace(self.operation, key=clave)
+                entregas = []
+                maquina.apply(clave, operacion, lambda ref, sesion: entregas.append(ref), self.admit)
+                asignacion = json.loads(Path(entregas[0]).read_text())
+                self.artifact.write_text(contenido, encoding="utf-8")
+                cuerpo = dict(self.report(typedPayload=carga), taskId=f"task-h2-{nombre}")
+                Path(asignacion["resultRef"]).write_text(json.dumps(cuerpo))
+                with self.assertRaisesRegex(ValueError, motivo):
+                    maquina.collect("mac-test", clave)
+                self.assertEqual(list((maquina.state_dir / "results").glob("*.json")), [])
+                self.assertEqual(list((maquina.state_dir / "artifacts").rglob("*.bin")), [])
+
+    def test_review_content_that_passes_gets_recorded(self):
+        # SUA-05 (4.2): el camino feliz no se rompe — un changes con hallazgos.v1 válido
+        # (bloqueante con reproduce, no bloqueante sin reproduce) y un approved con evidencia
+        # sin marcadores se graban; BLOQUEANTE a mitad de línea no cae en la red.
+        hallazgos_validos = {
+            "schema": "hallazgos.v1",
+            "findings": [
+                {"id": "F1", "bloqueante": True, "archivo": "scripts/a.py", "linea": 3,
+                 "resumen": "borra una edición del dueño", "reproduce": "python3 scripts/tests/test_a.py ATest"},
+                {"id": "F2", "bloqueante": False, "archivo": "scripts/b.py", "linea": 9,
+                 "resumen": "nombre poco claro"},
+            ],
+        }
+        casos = [
+            ("changes-validos", {"verdict": "changes", "findingsRef": "evidence.txt"},
+             json.dumps(hallazgos_validos, ensure_ascii=False)),
+            ("approved-normal", {"verdict": "approved", "evidenceRef": "evidence.txt"},
+             "pruebas verdes, sin marcadores\n"),
+            ("approved-bloqueante-a-media-linea", {"verdict": "approved", "evidenceRef": "evidence.txt"},
+             "el revisor citó 'BLOQUEANTE hay una fuga' a mitad de línea y no cuenta\n"),
+        ]
+        for nombre, carga, contenido in casos:
+            with self.subTest(nombre=nombre):
+                maquina = Host("mac-test", self.root / f"host-h2b-{nombre}")
+                clave = replace(self.key, task_id=f"task-h2b-{nombre}")
+                operacion = replace(self.operation, key=clave)
+                entregas = []
+                maquina.apply(clave, operacion, lambda ref, sesion: entregas.append(ref), self.admit)
+                asignacion = json.loads(Path(entregas[0]).read_text())
+                self.artifact.write_text(contenido, encoding="utf-8")
+                cuerpo = dict(self.report(typedPayload=carga), taskId=f"task-h2b-{nombre}")
+                Path(asignacion["resultRef"]).write_text(json.dumps(cuerpo))
+                self.assertIsNotNone(maquina.collect("mac-test", clave))
+                self.assertEqual(len(list((maquina.state_dir / "results").glob("*.json"))), 1)
 
     def test_the_ready_protocol_names_artifact_ref_for_a_profile_that_does_not_write(self):
         # B de SUA03-G5c: ready.v1 de un perfil que no escribe (exploracion) deja su

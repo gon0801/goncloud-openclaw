@@ -160,6 +160,9 @@ def record(args):
     if args.ronda < 1:
         raise ValueError("ronda inválida")
     kind = "round.ready" if args.action == "record-ready" else "round.verdict"
+    verdict = None
+    if kind == "round.verdict":
+        verdict = {"aprobado": "approved", "cambios": "changes"}.get(args.verdict, args.verdict)
     identifier = check(args.event_id or event_id(kind, corrida, carril, intento, args.ronda), ID_RE, "ID")
     raw = Path(args.evidence_file).read_bytes()
     if len(raw) > 1_000_000:
@@ -189,7 +192,7 @@ def record(args):
         metadata["historical"] = True
         metadata["source"] = args.source
     if kind == "round.verdict":
-        metadata["verdict"] = args.verdict
+        metadata["verdict"] = verdict
     if evidence_path.exists():
         old = json.loads(evidence_path.read_text(encoding="utf-8"))
         if {key: old.get(key) for key in metadata} != metadata:
@@ -204,7 +207,7 @@ def record(args):
              "carril": carril, "intento": intento, "ronda": args.ronda, "sha": sha,
              "evidence": {"ref": f"evidence/{identifier}.json", "sha": hashlib.sha256(evidence_bytes).hexdigest()}}
     if kind == "round.verdict":
-        event["verdict"] = args.verdict
+        event["verdict"] = verdict
     if args.historical:
         event["source"] = "historical:" + args.source
     if args.expected_revision is not None:
@@ -501,7 +504,8 @@ def parser():
         q.add_argument("--historical", action="store_true")
         q.add_argument("--source")
         if action == "record-verdict":
-            q.add_argument("--verdict", choices=("aprobado", "cambios"), required=True)
+            q.add_argument("--verdict", choices=("aprobado", "cambios", "approved", "changes"),
+                           required=True)
     q = sub.add_parser("queue-event")
     q.add_argument("--event-json", required=True)
     q = sub.add_parser("publish")

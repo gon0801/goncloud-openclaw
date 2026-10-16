@@ -109,6 +109,26 @@ class Reporte(unittest.TestCase):
     def test_review_lleva_veredicto_y_su_forma(self):
         for veredicto, clave in (("approved", "evidenceRef"), ("changes", "findingsRef")):
             with self.subTest(veredicto=veredicto):
+                # SUA-05 (4.2): el artefacto de un changes válido es un hallazgos.v1.
+                self.artefacto.write_text(
+                    json.dumps(
+                        {
+                            "schema": "hallazgos.v1",
+                            "findings": [
+                                {
+                                    "id": "F1",
+                                    "bloqueante": False,
+                                    "archivo": "a.py",
+                                    "linea": 1,
+                                    "resumen": "menor",
+                                }
+                            ],
+                        }
+                    )
+                    if veredicto == "changes"
+                    else "evidencia: sí\n",
+                    encoding="utf-8",
+                )
                 done = self.reporte(
                     "--root",
                     str(self.root),
@@ -127,6 +147,91 @@ class Reporte(unittest.TestCase):
                 self.assertEqual(
                     result["payload"], {"verdict": veredicto, clave: str(self.artefacto)}
                 )
+
+    def test_review_valida_el_artefacto(self):
+        # SUA-05 (4.2): reporte valida el contenido del artefacto al armar review.v1 — un
+        # changes exige un hallazgos.v1 válido y un approved no sale con un bloqueante (tipado
+        # o en una línea BLOQUEANTE/BLOCKER). El fallo es Falla: exit 3, sin result.
+        hallazgos_validos = {
+            "schema": "hallazgos.v1",
+            "findings": [
+                {
+                    "id": "F1",
+                    "bloqueante": True,
+                    "archivo": "scripts/a.py",
+                    "linea": 3,
+                    "resumen": "borra una edición del dueño",
+                    "reproduce": "python3 scripts/tests/test_a.py ATest",
+                },
+                {
+                    "id": "F2",
+                    "bloqueante": False,
+                    "archivo": "scripts/b.py",
+                    "linea": 9,
+                    "resumen": "nombre poco claro",
+                },
+            ],
+        }
+        casos = [
+            ("changes-no-parsea", "changes", "esto no es json {{{", 3, "resultado-invalido"),
+            (
+                "changes-hallazgo-incompleto",
+                "changes",
+                json.dumps(
+                    {"schema": "hallazgos.v1", "findings": [{"id": "F1", "bloqueante": True}]}
+                ),
+                3,
+                "resultado-invalido",
+            ),
+            (
+                "changes-valido",
+                "changes",
+                json.dumps(hallazgos_validos, ensure_ascii=False),
+                0,
+                None,
+            ),
+            (
+                "approved-bloqueante-tipado",
+                "approved",
+                json.dumps(hallazgos_validos),
+                3,
+                "aprobado-con-bloqueante",
+            ),
+            (
+                "approved-linea-bloqueante",
+                "approved",
+                "todo bien\nBLOQUEANTE hay una fuga\n",
+                3,
+                "aprobado-con-bloqueante",
+            ),
+            ("approved-normal", "approved", "pruebas verdes, sin marcadores\n", 0, None),
+        ]
+        for nombre, veredicto, contenido, codigo, frase in casos:
+            with self.subTest(nombre=nombre):
+                self.artefacto.write_text(contenido, encoding="utf-8")
+                done = self.reporte(
+                    "--root",
+                    str(self.root),
+                    "--tarea",
+                    self.tarea,
+                    "--contrato",
+                    "review.v1",
+                    "--artefacto",
+                    str(self.artefacto),
+                    "--veredicto",
+                    veredicto,
+                )
+                if codigo:
+                    self.assertEqual((done.returncode, done.stdout), (codigo, ""))
+                    self.assertIn(frase, done.stderr)
+                else:
+                    self.assertEqual(done.returncode, 0, done.stderr)
+                    result = json.loads(done.stdout)
+                    validar_result(result, self.fragments["inputRevision"])
+                    clave = "evidenceRef" if veredicto == "approved" else "findingsRef"
+                    self.assertEqual(
+                        result["payload"], {"verdict": veredicto, clave: str(self.artefacto)}
+                    )
 
     def test_errores_salen_con_su_frase_y_sin_result(self):
         casos = [

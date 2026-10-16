@@ -139,8 +139,26 @@ else:
         evidence = json.loads((base / "evidence" / (identifier + ".json")).read_text())
         event = json.loads((base / "queue" / (identifier + ".json")).read_text())
         self.assertEqual(evidence["sha"], SHA)
-        self.assertEqual(event["verdict"], "aprobado")
+        self.assertEqual(event["verdict"], "approved")
         self.assertEqual(event["evidence"]["ref"], "evidence/" + identifier + ".json")
+
+    def test_verdict_is_saved_in_the_contract_terms(self):
+        # SUA-05 (4.2): el queue acepta las cuatro formas y guarda siempre la del contrato,
+        # para que una proyección vieja en vuelo no grabe español nuevo.
+        for ronda, (argumento, guardado) in enumerate(
+                (("approved", "approved"), ("changes", "changes"),
+                 ("aprobado", "approved"), ("cambios", "changes")), start=1):
+            with self.subTest(verdict=argumento):
+                self.input.write_text("VEREDICTO " + argumento + " " + SHA + "\n")
+                result = self.cli("record-verdict", "--corrida", "run-1", "--carril", "B3",
+                                  "--intento", "try-1", "--ronda", str(ronda), "--sha", SHA,
+                                  "--verdict", argumento, "--evidence-file", str(self.input))
+                identifier = json.loads(result.stdout)["id"]
+                base = self.state / "runs" / "run-1"
+                event = json.loads((base / "queue" / (identifier + ".json")).read_text())
+                evidence = json.loads((base / "evidence" / (identifier + ".json")).read_text())
+                self.assertEqual(event["verdict"], guardado)
+                self.assertEqual(evidence["verdict"], guardado)
 
     def test_invalid_identifiers_do_not_escape_state_dir(self):
         self.ready("--carril", "../B3", ok=False)
