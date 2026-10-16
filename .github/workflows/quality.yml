@@ -322,7 +322,7 @@ jobs:
         with:
           node-version: '24'
 
-      - name: Contrato de cobertura de CI (13 casos + cableado)
+      - name: Contrato de cobertura de CI (15 casos + cableado)
         run: bash scripts/tests/test-ci-coverage-contract.sh
 
   # La bateria completa conserva un solo entrypoint en CI: scripts/run-checks.sh,

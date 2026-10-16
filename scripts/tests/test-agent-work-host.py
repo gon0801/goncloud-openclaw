@@ -569,15 +569,23 @@ class HostReceipts(unittest.TestCase):
 
     def test_host_receipts_concurrent_finals_keep_one_file_and_one_result(self):
         self.apply(self.key, self.operation, lambda *_: None)
+        # Un hallazgos.v1 sin bloqueantes vale para los dos veredictos (SUA-05, 4.2): así el
+        # changes no muere por su contenido y lo que choca es de verdad el segundo final
+        # (DeepSeek F9 en #328).
+        self.artifact.write_text(json.dumps({"schema": "hallazgos.v1", "findings": [
+            {"id": "F1", "bloqueante": False, "archivo": "a.py", "linea": 1, "resumen": "menor"}]}))
         reports = [self.report(), self.report(typedPayload={"verdict": "changes", "findingsRef": "review.txt"})]
+        motivos = []
         def send(report):
             try:
                 return self.host.report("mac-test", report).result_id
-            except ValueError:
+            except ValueError as error:
+                motivos.append(str(error))
                 return "conflict"
         with ThreadPoolExecutor(max_workers=2) as pool:
             outcomes = list(pool.map(send, reports))
         self.assertEqual(outcomes.count("conflict"), 1)
+        self.assertFalse([m for m in motivos if "resultado-invalido" in m], motivos)
         stored = json.loads(next((self.root / "host" / "results").glob("*.json")).read_text())
         self.assertEqual(digest(json.dumps(stored, ensure_ascii=False, sort_keys=True,
                                            separators=(",", ":")).encode()), next(x for x in outcomes if x != "conflict"))
