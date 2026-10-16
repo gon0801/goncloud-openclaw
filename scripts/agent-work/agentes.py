@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import shlex
 import subprocess
 import sys
@@ -187,6 +188,62 @@ print(json.dumps({"tareas": tareas, "entregas": entregas, "sesionesHijas": hijas
 """
 
 
+AYUDANTE_LECTURA = """
+# LEER_ARTEFACTO: solo lectura; el código va por stdin y la ruta como dato citado.
+import json, sys
+print(open(json.loads(sys.argv[1])["ruta"], encoding="utf-8").read(), end="")
+"""
+
+
+def _leer_artefacto(correr, ruta: str) -> str:
+    """El contenido del artefacto que el result nombra, por ssh y en solo lectura (B1):
+    el marcador va en el archivo, no en result_json, que trae la ruta. El código viaja
+    por stdin (python3 -, como el resto del ayudante): un -c sin citar lo rompe el shell
+    de login de la Mini, que es zsh (B1 de G4b-r3)."""
+    rc, out, err = correr(
+        ["python3", "-", shlex.quote(json.dumps({"ruta": ruta}))], entrada=AYUDANTE_LECTURA
+    )
+    if rc != 0:
+        raise ValueError(err.strip() or "sin salida")
+    return out
+
+
+AYUDANTE_BORRADO = """
+# BORRAR_ARTEFACTO: borra solo un archivo regular dentro del workspace resuelto;
+# el código va por stdin y la ruta como dato, nunca como texto de shell.
+import json, os, sys
+req = json.loads(sys.argv[1])
+ruta, workspace = req["ruta"], req["workspace"]
+base = os.path.realpath(workspace)
+resuelta = os.path.realpath(ruta)
+if os.path.islink(ruta):
+    print(json.dumps({"borrado": False, "causa": "la ruta es un enlace"}))
+elif resuelta == base or os.path.commonpath([resuelta, base]) != base:
+    print(json.dumps({"borrado": False, "causa": "la ruta resuelta sale del workspace"}))
+elif not os.path.isfile(resuelta):
+    print(json.dumps({"borrado": False, "causa": "no es un archivo regular"}))
+else:
+    os.unlink(resuelta)
+    print(json.dumps({"borrado": True, "causa": None}))
+"""
+
+
+def _borrar_artefacto(correr, ruta: str, workspace: str) -> dict:
+    """El borrado del artefacto en la Mini (F1 de G4b-r4): un `rm` con la ruta que
+    escribió el trabajador ejecutaría lo que la ruta trajera (`;`, `..`, espacios).
+    Aquí la ruta viaja como dato y allá se resuelve con realpath antes de tocar nada."""
+    rc, out, err = correr(
+        ["python3", "-", shlex.quote(json.dumps({"ruta": ruta, "workspace": workspace}))],
+        entrada=AYUDANTE_BORRADO,
+    )
+    if rc != 0:
+        return {"borrado": False, "causa": err.strip() or "sin salida"}
+    try:
+        return json.loads(out)
+    except ValueError:
+        return {"borrado": False, "causa": "el ayudante de borrado no contestó JSON"}
+
+
 def _foto_memoria(correr, workspace: str) -> str:
     orden = (
         f"cd {shlex.quote(workspace)} && find memory -type f -print0 | sort -z | "
@@ -223,6 +280,23 @@ def _estado_remoto(
     return json.loads(out)
 
 
+UUID_EN_TEXTO = re.compile(
+    r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
+)
+
+
+def _task_id_en_texto(salida: str):
+    """El taskId en el texto del turno de main (4.5b): un uuid junto a "taskId" o a
+    managed_tasks_submit; si no, el primer uuid del texto."""
+    for marca in ("taskId", "managed_tasks_submit"):
+        for encontrado in re.finditer(marca, salida):
+            uuid = UUID_EN_TEXTO.search(salida, encontrado.start())
+            if uuid and uuid.start() - encontrado.start() < 200:
+                return uuid.group(0)
+    primero = UUID_EN_TEXTO.search(salida)
+    return primero.group(0) if primero else None
+
+
 def _task_id_reportado(salida: str):
     """El taskId que main reporta en su turno, si viene: la tarea de la sonda es esa (F1)."""
     try:
@@ -244,11 +318,13 @@ def _task_id_reportado(salida: str):
 MENSAJE = (
     "Sonda de SUA-04 (no avises a David, no escribas a Telegram, no uses sessions_spawn).\n"
     "\n"
-    "1. Escribe el brief con brief.py {perfil} en la Mini: "
-    "pide contestar exactamente {marcador} y nada más.\n"
-    "2. Manda UNA tarea gestionada con managed_tasks_submit, "
-    'target {{"kind": "agent", "agentId": "{agente}"}}, resultContract ready.v1.\n'
-    "3. Admítela con managed_tasks_admit.\n"
+    "1. Escribe el brief con brief.py {brief} "
+    "--contrato ready.v1 en la Mini{perfiles}: "
+    "pide contestar exactamente {marcador} y nada más, y reportarlo con managed_tasks_report "
+    "usando el resultado que arma reporte.py, como dice la sección de protocolo del brief.\n"
+    "2. Pega los tres fragmentos que contesta brief.py (instructionRef, target e inputRevision) "
+    "en managed_tasks_submit, con resultContract ready.v1.\n"
+    "3. Admite la tarea con managed_tasks_admit y dime su taskId.\n"
 )
 
 
@@ -273,12 +349,15 @@ def sondear(
         "taskId": None,
         "estado": None,
         "marcador": False,
+        "artefacto": None,
         "entregas": None,
         "memoriaIgual": None,
         "causa": None,
     }
     hijas: list = []
     turno_cortado = False
+    artefacto_marcado = False
+    vivos: dict = {}
     try:
         vivos = {a["id"]: a for a in lista_viva(mini, correr)}
         if agent_id not in vivos:
@@ -298,7 +377,10 @@ def sondear(
         previas = {t["taskId"] for t in estado0["tareas"]}
         sesiones_previas = estado0.get("sesionesAgente") or []
         texto = MENSAJE.format(
-            perfil=f"--perfil {perfil}" if perfil else "(sin --perfil)",
+            brief=f"--perfil {perfil} --agente {agent_id}" if perfil else f"--agente {agent_id}",
+            perfiles=" (con --perfiles ~/.local/share/agent-work/perfiles.v1.json)"
+            if perfil
+            else "",
             marcador=marcador,
             agente=agent_id,
         )
@@ -329,7 +411,8 @@ def sondear(
         if rc != 0:
             fila["causa"] = f"el turno a main falló: {err.strip()}"
             return fila
-        reportada = _task_id_reportado(out)
+        # F7 de #320: el taskId estructurado manda; el del texto es solo el respaldo.
+        reportada = _task_id_reportado(out) or _task_id_en_texto(out)
         inicio = reloj()
         estado = _estado_remoto(
             correr, sesion_main, agent_id, marcador, sesiones_previas, reportada
@@ -353,15 +436,25 @@ def sondear(
             if reportada:
                 tarea = next((t for t in nuevas if t["taskId"] == reportada), None)
             else:
-                tarea = next(
-                    (
-                        t
-                        for t in nuevas
-                        if t["estado"] == "result-recorded"
-                        and marcador in (t.get("resultado") or "")
-                    ),
-                    None,
-                )
+                # F3: sin taskId reportado, la tarea de la sonda es la nueva cuyo
+                # ARTEFACTO trae el marcador; una concurrente más nueva no se toma.
+                for candidata in nuevas:
+                    if candidata["estado"] != "result-recorded":
+                        continue
+                    try:
+                        resultado_c = json.loads(candidata.get("resultado") or "")
+                    except ValueError:
+                        continue
+                    ref = resultado_c.get("artifactRef") if isinstance(resultado_c, dict) else None
+                    if not ref:
+                        continue
+                    try:
+                        contenido_c = _leer_artefacto(correr, ref)
+                    except ValueError:
+                        continue
+                    if marcador in contenido_c:
+                        tarea = candidata
+                        break
             if tarea is not None:
                 fila["taskId"], fila["estado"] = tarea["taskId"], tarea["estado"]
                 # La hija de la tarea reconocida por su marcador también es de la sonda
@@ -374,17 +467,43 @@ def sondear(
                     if reportado_id and reportado_id in k
                 ] or hijas
                 if tarea["estado"] == "result-recorded":
-                    fila["marcador"] = marcador in (tarea.get("resultado") or "")
+                    # El marcador se busca en el contenido del artefacto, no en
+                    # result_json, que trae su ruta (B1 de G4b-r2, lo que mostró M-18b).
+                    try:
+                        resultado = json.loads(tarea.get("resultado") or "")
+                    except ValueError:
+                        resultado = {}
+                    fila["artefacto"] = (
+                        resultado.get("artifactRef") if isinstance(resultado, dict) else None
+                    )
+                    if not fila["artefacto"]:
+                        fila["causa"] = "el resultado no trae artifactRef"
+                    else:
+                        try:
+                            contenido = _leer_artefacto(correr, fila["artefacto"])
+                            fila["marcador"] = marcador in contenido
+                            artefacto_marcado = fila["marcador"]
+                        except ValueError as error:
+                            fila["causa"] = (
+                                f"el artefacto {fila['artefacto']} no se pudo leer: {error}"
+                            )
                     break
             if reloj() - inicio >= tope:
                 if not nuevas and estado.get("spawn"):
                     fila["causa"] = "main usó sessions_spawn en vez de la tarea gestionada"
+                elif tarea is None and not reportada and nuevas:
+                    fila["causa"] = (
+                        "la tarea no llegó: ninguna tarea nueva trae el marcador en su artefacto"
+                    )
                 elif tarea is None and not reportada:
                     fila["causa"] = (
                         "la tarea no llegó: main no mandó una tarea gestionada a este agente"
                     )
                 else:
-                    fila["causa"] = "la tarea no llegó a result-recorded en el tope"
+                    fila["causa"] = (
+                        f"la tarea llegó ({fila['taskId'] or reportada}) "
+                        "pero el agente no reportó resultado"
+                    )
                 break
             dormir(5)
             # El taskId ya reconocido también viaja al ayudante (F8): filtra hijas en el
@@ -402,7 +521,7 @@ def sondear(
         fila["memoriaIgual"] = antes == despues
         if fila["causa"] is None:
             if not fila["marcador"]:
-                fila["causa"] = "el resultado no trae el marcador"
+                fila["causa"] = f"el artefacto {fila.get('artefacto')} no trae el marcador"
             elif fila["entregas"]:
                 fila["causa"] = "hubo entregas hacia David"
             elif not fila["memoriaIgual"]:
@@ -411,11 +530,22 @@ def sondear(
         return fila
     finally:
         correr(["rm", "-f", mensaje_remoto])
+        # El artefacto de la sonda se borra, y solo ese (F1 de G4b-r4): solo la misma
+        # ruta que la sonda leyó y donde encontró el marcador, y el borrado lo acota el
+        # ayudante en la Mini (realpath, archivo regular, dentro del workspace). Si la
+        # lectura falló o el marcador no estaba, no se borra nada: la causa ya lo dice.
+        artefacto = fila.get("artefacto")
+        if artefacto and artefacto_marcado:
+            workspace = (vivos.get(agent_id) or {}).get("workspace", "")
+            if workspace:
+                _borrar_artefacto(correr, artefacto, workspace)
         # Solo lo suyo (F1): la sesión de main de la sonda y la hija de su tarea. Con el
         # turno cortado, la sesión de main se conserva (F5).
         if not turno_cortado:
             correr([OPENCLAW, "sessions", "delete", sesion_main, "--yes"])
-        for hija in hijas:
+        # F7 de #320: la hija se borra solo si su tarea es la de la sonda de verdad, con el
+        # marcador leído en su artefacto; un uuid ajeno no borra la sesión de otra tarea.
+        for hija in hijas if artefacto_marcado else []:
             correr([OPENCLAW, "sessions", "delete", hija, "--yes"])
 
 
@@ -434,7 +564,7 @@ def main(argv=None) -> int:
     args = parser.parse_args(argv)
     try:
         return _main(args)
-    except (OSError, ValueError, KeyError) as error:
+    except (OSError, ValueError, KeyError, TypeError) as error:
         print(json.dumps({"ok": False, "causa": str(error)}, ensure_ascii=False))
         return 3
 
@@ -444,6 +574,13 @@ def _main(args) -> int:
     if args.comando == "descubrir":
         if args.agentes_json is not None:
             vivos = contexto.leer_json(args.agentes_json)
+            if not isinstance(vivos, list) or not all(
+                isinstance(a, dict)
+                and isinstance(a.get("id"), str)
+                and isinstance(a.get("workspace"), str)
+                for a in vivos
+            ):
+                raise ValueError("la lista de agentes no tiene la forma esperada")
         elif args.mini:
             vivos = lista_viva(args.mini, _ssh(args.mini))
         else:

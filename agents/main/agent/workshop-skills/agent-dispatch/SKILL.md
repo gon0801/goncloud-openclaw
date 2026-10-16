@@ -37,6 +37,16 @@ teclear ni a pedir a ciegas; revisa con `managed_tasks_inspect` y decide. El
 host lanza un proceso de opencode por encargo y lo cierra él mismo al terminar
 o al cancelar. Qué modelos se pueden pedir lo contesta `encargo.py preparar`.
 
+## Encargo nativo a un agente (tarea gestionada)
+
+Cuando David pide un encargo a otro agente de esta Mini como tarea gestionada (no un trabajo por CLI), escríbelo con `brief.py` así, en la Mini:
+
+```bash
+python3 ~/.local/share/agent-work/brief.py --root <managedTasks.instructionRoot> --perfil <perfil> --perfiles <perfiles.v1.json> --agente <agentId> --contrato <ready.v1|review.v1> --file <brief>
+```
+
+`brief.py` contesta una línea JSON con `instructionRef`, `target` (`{"kind": "agent", "agentId": <id>}`) e `inputRevision`. Pega los tres fragmentos tal cual en `managed_tasks_submit`, junto con el `resultContract` que diste en `--contrato`, y después llama `managed_tasks_admit`. El agente reporta su resultado con `reporte.py`, como le dice la sección de protocolo de su brief: no le pidas que arme el resultado a mano. Cuando David no pide un encargo gestionado, `sessions_spawn` sigue siendo la forma normal de delegar a los agentes de esta skill.
+
 ## Chain dispatch (brief / "-saikit" lane)
 
 Legacy route (T9 `:265`): this chain (`sessions_spawn` to implementer, verifier and reviewer) stays outside the managed perimeter until its adoption (T12). Inside a managed run the runtime rejects `sessions_spawn` and `sessions_send`; only the requester-target pairs listed in "Ruteo nativo vs. legado" use the guarded route, and none of them goes from `main` to implementer, verifier or reviewer.
