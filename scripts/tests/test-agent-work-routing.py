@@ -142,6 +142,26 @@ class AgentsRouting(unittest.TestCase):
         self.assertEqual([key for key, route in zip(listed, routes) if route["certified"]],
                          [("main", "mac-local/opencode")])
 
+    def test_coverage_routes_are_the_five_of_the_design_with_their_generation_and_evidence(self):
+        # K1 de SUA03-G5b-cierre: las cinco rutas del diseño, cada una con su
+        # generación de contexto y su evidencia; certified solo en las de CLI.
+        rutas = {ruta["kind"]: ruta for ruta in self.coverage["routes"]}
+        self.assertEqual(
+            set(rutas),
+            {"native-turn", "native-child", "native-managed-agent", "cli-managed-task", "cli-child"},
+        )
+        for kind in ("native-turn", "native-child", "native-managed-agent"):
+            with self.subTest(ruta=kind):
+                self.assertFalse(rutas[kind]["certified"])
+                self.assertEqual(rutas[kind]["contextGeneration"], 2)
+                self.assertIn("SUA-03.md", rutas[kind]["evidence"])
+        for kind in ("cli-managed-task", "cli-child"):
+            with self.subTest(ruta=kind):
+                self.assertTrue(rutas[kind]["certified"])
+                self.assertEqual(rutas[kind]["contextGenerations"], [1, 2])
+                self.assertIn("SUA-03-mediciones.md", rutas[kind]["evidence"])
+        self.assertNotIn("user-adopted-session", rutas)
+
     def test_every_repo_path_the_inventory_names_as_its_source_exists(self):
         named = re.findall(r"\b(?:agents|scripts|docs)/[\w./-]*\w", self.coverage["source"])
         self.assertIn("agents/main/agent/workshop-skills/agent-dispatch/SKILL.md", named)
