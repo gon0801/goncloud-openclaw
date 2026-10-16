@@ -1,0 +1,11 @@
+{
+ "state": "success",
+ "sha": "bc7ddc0f8a95d9cb376d04339f5fc1864bac61ae",
+ "statuses": [
+  {
+   "context": "CodeRabbit",
+   "state": "success",
+   "description": "Review rate limited"
+  }
+ ]
+}
