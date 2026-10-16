@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import shlex
 import subprocess
 import sys
@@ -223,6 +224,23 @@ def _estado_remoto(
     return json.loads(out)
 
 
+UUID_EN_TEXTO = re.compile(
+    r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
+)
+
+
+def _task_id_en_texto(salida: str):
+    """El taskId en el texto del turno de main (4.5b): un uuid junto a "taskId" o a
+    managed_tasks_submit; si no, el primer uuid del texto."""
+    for marca in ("taskId", "managed_tasks_submit"):
+        for encontrado in re.finditer(marca, salida):
+            uuid = UUID_EN_TEXTO.search(salida, encontrado.start())
+            if uuid and uuid.start() - encontrado.start() < 200:
+                return uuid.group(0)
+    primero = UUID_EN_TEXTO.search(salida)
+    return primero.group(0) if primero else None
+
+
 def _task_id_reportado(salida: str):
     """El taskId que main reporta en su turno, si viene: la tarea de la sonda es esa (F1)."""
     try:
@@ -244,11 +262,13 @@ def _task_id_reportado(salida: str):
 MENSAJE = (
     "Sonda de SUA-04 (no avises a David, no escribas a Telegram, no uses sessions_spawn).\n"
     "\n"
-    "1. Escribe el brief con brief.py {perfil} en la Mini: "
-    "pide contestar exactamente {marcador} y nada más.\n"
-    "2. Manda UNA tarea gestionada con managed_tasks_submit, "
-    'target {{"kind": "agent", "agentId": "{agente}"}}, resultContract ready.v1.\n'
-    "3. Admítela con managed_tasks_admit.\n"
+    "1. Escribe el brief con brief.py {perfil} --agente {agente} "
+    "--contrato ready.v1 en la Mini (con --perfiles ~/.local/share/agent-work/perfiles.v1.json): "
+    "pide contestar exactamente {marcador} y nada más, y reportarlo con managed_tasks_report "
+    "usando el resultado que arma reporte.py, como dice la sección de protocolo del brief.\n"
+    "2. Pega los tres fragmentos que contesta brief.py (instructionRef, target e inputRevision) "
+    "en managed_tasks_submit, con resultContract ready.v1.\n"
+    "3. Admite la tarea con managed_tasks_admit y dime su taskId.\n"
 )
 
 
@@ -329,7 +349,7 @@ def sondear(
         if rc != 0:
             fila["causa"] = f"el turno a main falló: {err.strip()}"
             return fila
-        reportada = _task_id_reportado(out)
+        reportada = _task_id_en_texto(out) or _task_id_reportado(out)
         inicio = reloj()
         estado = _estado_remoto(
             correr, sesion_main, agent_id, marcador, sesiones_previas, reportada
@@ -384,7 +404,10 @@ def sondear(
                         "la tarea no llegó: main no mandó una tarea gestionada a este agente"
                     )
                 else:
-                    fila["causa"] = "la tarea no llegó a result-recorded en el tope"
+                    fila["causa"] = (
+                        f"la tarea llegó ({fila['taskId'] or reportada}) "
+                        "pero el agente no reportó resultado"
+                    )
                 break
             dormir(5)
             # El taskId ya reconocido también viaja al ayudante (F8): filtra hijas en el
@@ -434,7 +457,7 @@ def main(argv=None) -> int:
     args = parser.parse_args(argv)
     try:
         return _main(args)
-    except (OSError, ValueError, KeyError) as error:
+    except (OSError, ValueError, KeyError, TypeError) as error:
         print(json.dumps({"ok": False, "causa": str(error)}, ensure_ascii=False))
         return 3
 
@@ -444,6 +467,13 @@ def _main(args) -> int:
     if args.comando == "descubrir":
         if args.agentes_json is not None:
             vivos = contexto.leer_json(args.agentes_json)
+            if not isinstance(vivos, list) or not all(
+                isinstance(a, dict)
+                and isinstance(a.get("id"), str)
+                and isinstance(a.get("workspace"), str)
+                for a in vivos
+            ):
+                raise ValueError("la lista de agentes no tiene la forma esperada")
         elif args.mini:
             vivos = lista_viva(args.mini, _ssh(args.mini))
         else:

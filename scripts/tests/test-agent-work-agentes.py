@@ -98,11 +98,14 @@ class FakeMini:
         concurrente=False,
         turno_cortado=False,
         reporta=True,
+        en_texto=False,
     ):
         self.tarea, self.registrada, self.con_marcador = tarea, registrada, marcador
         self.entregas, self.memoria_cambia, self.spawn = entregas, memoria_cambia, spawn
         self.concurrente, self.turno_cortado = concurrente, turno_cortado
+        self.en_texto = en_texto
         self.reporta = reporta
+        self.tarea_id = "87b98ddf-12b4-466f-94f1-632a6c688ff5" if en_texto else "t-sonda"
         self.llamadas = []
         self.memoria = "aaa  memory/notas.md\n"
         self.turno_corrido = False
@@ -132,6 +135,15 @@ class FakeMini:
             if self.memoria_cambia:
                 self.memoria = "bbb  memory/notas.md\n"
             # Sin taskId reportado (F8): un main que no declara su tarea gestionada.
+            if self.en_texto:
+                return (
+                    0,
+                    (
+                        "managed_tasks_submit creó la tarea, taskId: "
+                        "87b98ddf-12b4-466f-94f1-632a6c688ff5, admitida"
+                    ),
+                    "",
+                )
             return 0, json.dumps({"taskId": "t-sonda"} if self.reporta else {}), ""
         if argv[1] == "-":
             # F6: el código llega por stdin y el pedido como argumento ya citado. Sin
@@ -142,7 +154,7 @@ class FakeMini:
             if self.turno_corrido and self.tarea:
                 tareas = [
                     {
-                        "taskId": "t-sonda",
+                        "taskId": self.tarea_id,
                         "kind": "agent",
                         "agentId": "ingenieria",
                         "estado": "registered" if self.registrada else "result-recorded",
@@ -162,7 +174,7 @@ class FakeMini:
             pedido = json.loads(argv[2].strip("'"))  # el pedido viaja citado como argumento (F6)
             sesiones = ["agent:ingenieria:managed:ajena"]
             if self.turno_corrido:
-                sesiones.append("agent:ingenieria:managed:t-sonda")
+                sesiones.append(f"agent:ingenieria:managed:{self.tarea_id}")
             # Fiel al ayudante real: las hijas se filtran con el taskId que el pedido
             # trae; sin él, la lista de hijas vuelve vacía y solo queda sesionesAgente.
             reportada = pedido.get("tareaReportada")
@@ -246,6 +258,15 @@ class Sondear(unittest.TestCase):
         self.assertFalse(any("agent:main:sua04-sonda" in b for b in borradas), borradas)
         self.assertTrue(any("rm" in argv for argv, _ in fake.llamadas))
 
+    def test_la_tarea_que_llego_sin_resultado_dice_su_task_id(self):
+        # 4.5b: main reporta el taskId en su texto y la tarea queda sin resultado: la
+        # causa es esa, no "main no mandó".
+        fake = FakeMini(registrada=True, en_texto=True)
+        fila = sondear_con(fake)
+        self.assertTrue(fila["causa"].startswith("la tarea llegó (87b98ddf-"))
+        self.assertTrue(fila["causa"].endswith("pero el agente no reportó resultado"))
+        self.assertEqual(fila["taskId"], "87b98ddf-12b4-466f-94f1-632a6c688ff5")
+
     def test_main_que_usa_sessions_spawn(self):
         fila = sondear_con(FakeMini(tarea=False, spawn=True))
         self.assertEqual(
@@ -256,7 +277,8 @@ class Sondear(unittest.TestCase):
     def test_tarea_que_no_llega(self):
         fila = sondear_con(FakeMini(registrada=True))
         self.assertEqual(
-            (fila["ok"], fila["causa"]), (False, "la tarea no llegó a result-recorded en el tope")
+            (fila["ok"], fila["causa"]),
+            (False, "la tarea llegó (t-sonda) pero el agente no reportó resultado"),
         )
 
     def test_una_entrega_hacia_david_falla(self):
@@ -410,6 +432,30 @@ class ConexionReal(unittest.TestCase):
                 self.correr, "agent:main:sua04-sonda-ingenieria-7", "ingenieria", "SONDA-7"
             )
         self.assertIn("conversation_deliveries", str(atrapado.exception))
+
+
+class DescubrirCli(unittest.TestCase):
+    def test_agentes_json_malformado_da_la_linea_json_y_exit_3(self):
+        # F11 de #318: un --agentes-json que no es la lista no revienta con TypeError.
+        import subprocess
+
+        with tempfile.TemporaryDirectory() as tmp:
+            malo = Path(tmp) / "agentes.json"
+            malo.write_text('{"id": "esto no es una lista"}')
+            hecho = subprocess.run(
+                [
+                    sys.executable,
+                    str(ROOT / "scripts/agent-work/agentes.py"),
+                    "descubrir",
+                    "--agentes-json",
+                    str(malo),
+                ],
+                capture_output=True,
+                text=True,
+            )
+        self.assertEqual(hecho.returncode, 3, hecho.stderr)
+        self.assertIn("la lista de agentes no tiene la forma esperada", hecho.stdout)
+        self.assertNotIn("Traceback", hecho.stderr)
 
 
 if __name__ == "__main__":

@@ -347,6 +347,38 @@ class PublicadorNativo(unittest.TestCase):
         )
         self.assertEqual(sobrantes, [], "quedaron respaldos de retiro viejos de pers")
 
+    def test_el_respaldo_del_retiro_se_elige_por_generacion_y_no_por_nombre(self):
+        # F12 de #318: con respaldos en la generación 2 y en la 10, manda la 10 ("10" < "2"
+        # por nombre, y elegir mal da un conflicto que no existe).
+        self.armar()
+        self.publicar("leer")
+        self.publicar("aplicar")
+        digest_bueno = self.estado_del_home()["bloques"]["pers"]
+        sin_pers = self.tmp / "agents-sin-pers.json"
+        sin_pers.write_text(
+            json.dumps([a for a in self.agentes if a["id"] != "pers"]) + "\n", encoding="utf-8"
+        )
+        self.agentes = [a for a in self.agentes if a["id"] != "pers"]
+        self.armar_generacion(2)
+        self.publicar("leer", agentes_json=sin_pers)
+        self.publicar("aplicar", agentes_json=sin_pers)
+        base = self.home / ".openclaw" / "sua-contexto"
+        # La 2 queda con un digest que no es; la 10 trae el bueno.
+        (base / "2" / "agentes-retirados" / "pers.json").write_text(
+            json.dumps({"bloques": "0" * 64, "workspaces": None}) + "\n", encoding="utf-8"
+        )
+        (base / "10" / "agentes-retirados").mkdir(parents=True)
+        (base / "10" / "agentes-retirados" / "pers.json").write_text(
+            json.dumps({"bloques": digest_bueno, "workspaces": None}) + "\n", encoding="utf-8"
+        )
+        self.agentes = [a for a in self.agentes] + [
+            a for a in json.loads(self.agents_json.read_text()) if a["id"] == "pers"
+        ]
+        self.armar_generacion(3)
+        self.publicar("leer")
+        codigo, salida = self.publicar("aplicar")
+        self.assertEqual((codigo, salida["conflictos"]), (0, 0))
+
     def revertir_con_copia_que_falla(self):
         """La reversa en proceso con la copia rota a medias (C6 de SUA03-G5c): el
         fallo se inyecta en copytree y no depende de permisos, así que también
