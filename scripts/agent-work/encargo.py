@@ -551,8 +551,11 @@ def fuentes(checkout: Path, state_root: Path, *, aviso: bool = False, now: float
     """`encargo.py fuentes [--aviso]`. Cada perfil con sus fuentes y la competencia de sus rutas,
     con los días que les quedan y cuáles van por vencer (SUA-04, 4.9). Con --aviso suma el estado
     semanal del aviso y lo quema cuando toca: G5 manda el aviso a David con la lista."""
-    documento = _valida_perfiles(
-        contexto.leer_json(Path(checkout) / CONTEXTO_DIR / "perfiles.v1.json"))
+    try:
+        documento = _valida_perfiles(
+            contexto.leer_json(Path(checkout) / CONTEXTO_DIR / "perfiles.v1.json"))
+    except (OSError, ValueError) as error:
+        raise ValueError(f"no se pudo leer perfiles.v1.json del checkout: {error}") from error
     ahora = datetime.fromtimestamp(now, tz=timezone.utc)
     filas = []
     vencen = []
@@ -1041,7 +1044,11 @@ def _run_fuentes(args: argparse.Namespace, where: dict, now: float) -> int:
         respuesta = fuentes(checkout=where["checkout"], state_root=where["state_root"],
                             aviso=args.aviso, now=now)
     except (OSError, ValueError, KeyError, TypeError) as error:
-        mensaje = f"fuentes: no se pudo leer perfiles.v1.json del checkout: {error}"
+        # El mensaje viaja tal cual si ya dice su origen (la lectura de perfiles se
+        # atribuye en fuentes); atribuir aquí la escritura del estado como lectura miente.
+        mensaje = str(error)
+        if not mensaje.startswith("no se pudo"):
+            mensaje = f"fuentes: {error}"
         print(json.dumps({"ok": False, "error": mensaje}, ensure_ascii=False), file=sys.stderr)
         return 3
     print(json.dumps(respuesta, ensure_ascii=False))

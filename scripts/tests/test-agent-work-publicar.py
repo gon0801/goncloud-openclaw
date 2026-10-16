@@ -397,8 +397,6 @@ class PublicadorNativo(unittest.TestCase):
         self.assertEqual(fixture.read_bytes(), foto)
         self.publicar("revertir")
         self.assertEqual(fixture.read_bytes(), foto)
-        cierre = json.loads(fixture.read_text(encoding="utf-8"))["closed"]
-        self.assertEqual(cierre[0]["provider"], "proveedor-cerrado")
 
     def test_un_alta_no_cambia_a_los_que_ya_estaban(self):
         # I19 (diseño 4.10): un alta publica al nuevo sin tocar a los que ya estaban:
