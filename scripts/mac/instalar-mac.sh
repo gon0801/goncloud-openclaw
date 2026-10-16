@@ -26,6 +26,9 @@ LA_DIR="$HOME/Library/LaunchAgents"
 PL_FUENTE="$AQUI/ai.goncloud.tmux-activity-watch.plist"
 PL_NOMBRE="ai.goncloud.tmux-activity-watch.plist"
 ETIQUETA="ai.goncloud.tmux-activity-watch"
+PL2_FUENTE="$AQUI/ai.goncloud.agent-work-sucesion.plist"
+PL2_NOMBRE="ai.goncloud.agent-work-sucesion.plist"
+ETIQUETA2="ai.goncloud.agent-work-sucesion"
 LINEA_SOURCE="source ~/bin/agent-tmux-shell.zsh"
 # Manifiesto binario: fuentes relativas a scripts/mac, destino ~/bin (cp -p
 # conserva el +x).
@@ -53,13 +56,18 @@ generar_plist() { # $1 destino
   sed "s|/Users/dn|$esc|g" "$PL_FUENTE" >"$1" || return 1
 }
 
+generar_plist2() { # $1 destino: la sucesion diaria de SUA-04 (4.3), misma sustitucion
+  local esc; esc="$(printf '%s' "$HOME" | sed 's/[&|\\]/\\&/g')"
+  sed "s|/Users/dn|$esc|g" "$PL2_FUENTE" >"$1" || return 1
+}
+
 # Fase 1: comprobar blobs contra la rama ANTES de tocar disco. Sale 0 si todo
 # cuadra o solo hay ausentes-declarados; sale 1 si algo difiere (fail closed).
 fase_blobs() {
   local git_ok=0 f rel esperado real
   if "$GIT_BIN" -C "$RAIZ" rev-parse --verify "$REF" >/dev/null 2>&1; then git_ok=1; fi
   [ "$git_ok" = "1" ] || { avisa "sin comprobacion de rama ($REF no resolvible); se instala por bytes"; return 0; }
-  for f in $BINS tmux.conf "$(basename "$PL_FUENTE")"; do
+  for f in $BINS tmux.conf "$(basename "$PL_FUENTE")" "$(basename "$PL2_FUENTE")"; do
     rel="scripts/mac/$f"
     esperado="$("$GIT_BIN" -C "$RAIZ" rev-parse "$REF:$rel" 2>/dev/null)" || { avisa "sin referencia en $REF: $rel (se declara y se sigue)"; continue; }
     real="$("$GIT_BIN" -C "$RAIZ" hash-object "$AQUI/$f" 2>/dev/null)" || falla "no se pudo leer $f"
@@ -99,7 +107,7 @@ modo_dry() {
   for f in $BINS; do sha="$(blob_de "$AQUI/$f")"; di "  bin/$f  (blob ${sha})"; done
   for f in $AGENT_WORK_FILES; do sha="$(blob_de "$RAIZ/agent-work/$f")"; di "  bin/agent-work/$f  (blob ${sha})"; done
   di "  bin/agent-work/contexto/  (carpeta entera: manifiesto, perfiles y competencia)"
-  di "  Library/LaunchAgents/$PL_NOMBRE  (generada con HOME=$HOME)"
+  di "  Library/LaunchAgents/$PL_NOMBRE y $PL2_NOMBRE  (generadas con HOME=$HOME)"
   di "  .tmux.conf  (blob $(blob_de "$AQUI/tmux.conf"))"
   di "  .zshrc: agregaria \`$LINEA_SOURCE\` si falta"
   di "  cargaria: $LC_BIN bootstrap gui/$QUIEN_UID $LA_DIR/$PL_NOMBRE"
@@ -130,6 +138,9 @@ modo_verificar() {
   generar_plist "$tmp" || { rm -f "$tmp"; falla "no se pudo generar el plist esperado"; }
   if [ ! -f "$LA_DIR/$PL_NOMBRE" ]; then di "FALTA: LaunchAgents/$PL_NOMBRE"; mal=$((mal+1));
   elif ! cmp -s "$tmp" "$LA_DIR/$PL_NOMBRE"; then di "DIFIERE: LaunchAgents/$PL_NOMBRE"; mal=$((mal+1)); fi
+  generar_plist2 "$tmp" || { rm -f "$tmp"; falla "no se pudo generar el plist de sucesion esperado"; }
+  if [ ! -f "$LA_DIR/$PL2_NOMBRE" ]; then di "FALTA: LaunchAgents/$PL2_NOMBRE"; mal=$((mal+1));
+  elif ! cmp -s "$tmp" "$LA_DIR/$PL2_NOMBRE"; then di "DIFIERE: LaunchAgents/$PL2_NOMBRE"; mal=$((mal+1)); fi
   rm -f "$tmp"
   if [ ! -f "$HOME/.tmux.conf" ]; then di "FALTA: .tmux.conf"; mal=$((mal+1));
   elif ! cmp -s "$AQUI/tmux.conf" "$HOME/.tmux.conf"; then di "DIFIERE: .tmux.conf"; mal=$((mal+1)); fi
@@ -167,6 +178,15 @@ modo_instalar() {
   copiar_si_difiere "$pl_tmp" "$LA_DIR/$PL_NOMBRE" || { rm -f "$pl_tmp"; falla "no se pudo instalar el plist"; }
   [ "$COPIO" = "1" ] && reiniciar=1
   rm -f "$pl_tmp"
+  pl_tmp="$(mktemp)" || falla "sin tmp para el plist de sucesion"
+  generar_plist2 "$pl_tmp" || { rm -f "$pl_tmp"; falla "no se pudo generar el plist de sucesion"; }
+  copiar_si_difiere "$pl_tmp" "$LA_DIR/$PL2_NOMBRE" || { rm -f "$pl_tmp"; falla "no se pudo instalar el plist de sucesion"; }
+  rm -f "$pl_tmp"
+  mkdir -p "$HOME/Library/Logs/goncloud" || falla "no se pudo crear Library/Logs/goncloud"
+  # La sucesion es de una pasada diaria: se carga una vez y no se reinicia como el vigilante.
+  if ! "$LC_BIN" print "gui/$QUIEN_UID/$ETIQUETA2" >/dev/null 2>&1; then
+    "$LC_BIN" bootstrap "gui/$QUIEN_UID" "$LA_DIR/$PL2_NOMBRE" >&2 || falla "launchctl no cargo $ETIQUETA2"
+  fi
   copiar_si_difiere "$AQUI/tmux.conf" "$HOME/.tmux.conf" || falla "no se pudo instalar .tmux.conf"
   [ -f "$HOME/.zshrc" ] || { touch "$HOME/.zshrc" || falla "no se pudo crear .zshrc"; }
   grep -qF "$LINEA_SOURCE" "$HOME/.zshrc" || printf '%s\n' "$LINEA_SOURCE" >>"$HOME/.zshrc"
@@ -185,7 +205,7 @@ modo_instalar() {
   di "instalado desde $AQUI (ref $REF@$(ref_sha)):"
   for f in $BINS; do sha="$(blob_de "$AQUI/$f")"; di "  bin/$f  ${sha}"; done
   for f in $AGENT_WORK_FILES; do sha="$(blob_de "$RAIZ/agent-work/$f")"; di "  bin/agent-work/$f  ${sha}"; done
-  di "  LaunchAgents/$PL_NOMBRE  (generada HOME=$HOME)"
+  di "  LaunchAgents/$PL_NOMBRE y $PL2_NOMBRE  (generadas HOME=$HOME)"
   di "  .tmux.conf  $(blob_de "$AQUI/tmux.conf")"
   di "  .zshrc: $LINEA_SOURCE"
 }

@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Sucesión del modelo por omisión de la ruta por CLI (SUA-04, 4.3): una pasada diaria de
+  `encargo.py sucesion --aplicar` desde el checkout del host. Es un proceso de una pasada,
+  no un daemon: promueve como mucho un sucesor por corrida, con su canario, y nunca con un
+  encargo en vuelo. Lo instala scripts/mac/instalar-mac.sh (que sustituye /Users/dn por el
+  HOME de quien lo corre); no instalarlo a mano.
+  Remove:
+    launchctl bootout gui/501/ai.goncloud.agent-work-sucesion
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>ai.goncloud.agent-work-sucesion</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/bin/python3</string>
+    <string>/Users/dn/dev/wt/agent-work-host/scripts/agent-work/encargo.py</string>
+    <string>sucesion</string>
+    <string>--aplicar</string>
+    <string>--checkout</string>
+    <string>/Users/dn/dev/wt/agent-work-host</string>
+    <string>--state-root</string>
+    <string>/Users/dn/.local/state/agent-work-host</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>HOME</key>
+    <string>/Users/dn</string>
+    <key>PATH</key>
+    <string>/opt/homebrew/bin:/usr/bin:/bin</string>
+    <key>LANG</key>
+    <string>en_US.UTF-8</string>
+  </dict>
+  <!-- Diario a las 05:30, sin encargos habituales. Si la Mac dormía, launchd la corre al despertar. -->
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Hour</key>
+    <integer>5</integer>
+    <key>Minute</key>
+    <integer>30</integer>
+  </dict>
+  <key>RunAtLoad</key>
+  <false/>
+  <key>ProcessType</key>
+  <string>Background</string>
+  <key>StandardOutPath</key>
+  <string>/Users/dn/Library/Logs/goncloud/agent-work-sucesion.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/dn/Library/Logs/goncloud/agent-work-sucesion.log</string>
+</dict>
+</plist>
