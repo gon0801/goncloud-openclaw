@@ -31,6 +31,7 @@ import tempfile
 import time
 import unicodedata
 from dataclasses import dataclass, replace
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Iterator, Literal
 
@@ -501,6 +502,82 @@ def perfiles(checkout: Path, mini: str | None = None, correr=None) -> dict:
     return respuesta
 
 
+AVISO_EVERY_SECONDS = 7 * 86400
+"""El aviso de fuentes por vencer se quema una vez por semana: lo corre el launchd diario de 4.3."""
+POR_VENCER_DIAS = 30
+AVISO_PENDIENTE = "aviso pendiente de G5"
+FUENTES_SCHEMA = "agent-work.fuentes.v1"
+
+
+def _cuenta(valid_until: str | None, ahora: datetime) -> dict:
+    """Un `validUntil` con los días que le quedan y si ya va por vencer (vencidas incluidas). Sin
+    validUntil no se cuenta: no hay de qué."""
+    if valid_until is None:
+        return {"validUntil": None, "dias": None, "porVencer": False}
+    dias = (datetime.fromisoformat(valid_until.replace("Z", "+00:00")) - ahora).days
+    return {"validUntil": valid_until, "dias": dias, "porVencer": dias < POR_VENCER_DIAS}
+
+
+def _quema_el_aviso(vencen: list, state_root: Path, now: float) -> dict:
+    """El estado semanal del aviso en `<state_root>/fuentes.json`. Si hay fuentes por vencer y pasó
+    una semana desde el último aviso, quema `ultimoAviso=now`: escritura atómica y sin candado
+    porque el único escritor es el launchd diario."""
+    path = Path(state_root) / "fuentes.json"
+    try:
+        estado = contexto.leer_json(path)
+    except (OSError, ValueError):
+        estado = None
+    ultimo = estado.get("ultimoAviso") if isinstance(estado, dict) else None
+    ultimo = ultimo if isinstance(ultimo, (int, float)) else None
+    avisado_hoy = False
+    if vencen and (ultimo is None or now - ultimo >= AVISO_EVERY_SECONDS):
+        contenido = json.dumps({"schema": FUENTES_SCHEMA, "ultimoAviso": now}, ensure_ascii=False)
+        descriptor, pending = tempfile.mkstemp(prefix=".fuentes-", dir=path.parent)
+        try:
+            with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
+                stream.write(contenido)
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.replace(pending, path)
+        finally:
+            if os.path.exists(pending):
+                os.unlink(pending)
+        ultimo, avisado_hoy = now, True
+    return {"vencen": vencen, "avisadoHoy": avisado_hoy, "ultimoAviso": ultimo,
+            "avisoPendiente": AVISO_PENDIENTE}
+
+
+def fuentes(checkout: Path, state_root: Path, *, aviso: bool = False, now: float) -> dict:
+    """`encargo.py fuentes [--aviso]`. Cada perfil con sus fuentes y la competencia de sus rutas,
+    con los días que les quedan y cuáles van por vencer (SUA-04, 4.9). Con --aviso suma el estado
+    semanal del aviso y lo quema cuando toca: G5 manda el aviso a David con la lista."""
+    documento = _valida_perfiles(
+        contexto.leer_json(Path(checkout) / CONTEXTO_DIR / "perfiles.v1.json"))
+    ahora = datetime.fromtimestamp(now, tz=timezone.utc)
+    filas = []
+    vencen = []
+    for perfil in documento["profiles"]:
+        fuentes_del_perfil = []
+        for fuente in perfil.get("sources") or ():
+            cuenta = _cuenta(fuente.get("validUntil"), ahora)
+            if cuenta["porVencer"]:
+                vencen.append(fuente["ref"])
+            fuentes_del_perfil.append(
+                {"ref": fuente["ref"], "revision": fuente["revision"], **cuenta})
+        competencia = []
+        for ruta in perfil["routes"]:
+            clave = contexto.clave_de_ruta(ruta)
+            dato = perfil["competence"].get(clave)
+            if dato is not None:
+                competencia.append({"ruta": clave, **_cuenta(dato.get("validUntil"), ahora)})
+        filas.append({"perfil": perfil["id"], "fuentes": fuentes_del_perfil,
+                      "competencia": competencia})
+    respuesta = {"ok": True, "perfiles": filas, "aviso": None}
+    if aviso:
+        respuesta["aviso"] = _quema_el_aviso(sorted(vencen), state_root, now)
+    return respuesta
+
+
 def _session(provider: ProviderId | None,
              catalog: Catalog | None) -> Literal["con-sesion", "sin-sesion", "sin-id", "sin-catalogo"]:
     if provider is None:
@@ -895,6 +972,10 @@ def _parser() -> argparse.ArgumentParser:
     perfiles_cmd = commands.add_parser("perfiles", help="los perfiles del checkout y los agentes sin perfil, en una línea JSON")
     perfiles_cmd.add_argument("--mini", default=None, metavar="user@host",
                               help="suma alta-sin-registrar, retirado y perfil-incompleto contra la lista viva de la Mini, por ssh")
+    fuentes_cmd = commands.add_parser(
+        "fuentes", help="cada perfil con sus fuentes y su competencia, y los días que les quedan")
+    fuentes_cmd.add_argument("--aviso", action="store_true",
+                             help="suma el aviso semanal y lo quema si hay fuentes por vencer")
     listing = commands.add_parser("proveedores", help="qué proveedores pueden correr, cómo cobran y qué falta")
     listing.add_argument("--refrescar", action="store_true", help="pide a opencode que vuelva a bajar su lista")
     allow = commands.add_parser("permitir", help="escribe un permiso, un filtro o el id de un permiso que existe")
@@ -955,6 +1036,18 @@ def _run_perfiles(args: argparse.Namespace, where: dict, now: float) -> int:
     return 0
 
 
+def _run_fuentes(args: argparse.Namespace, where: dict, now: float) -> int:
+    try:
+        respuesta = fuentes(checkout=where["checkout"], state_root=where["state_root"],
+                            aviso=args.aviso, now=now)
+    except (OSError, ValueError, KeyError, TypeError) as error:
+        mensaje = f"fuentes: no se pudo leer perfiles.v1.json del checkout: {error}"
+        print(json.dumps({"ok": False, "error": mensaje}, ensure_ascii=False), file=sys.stderr)
+        return 3
+    print(json.dumps(respuesta, ensure_ascii=False))
+    return 0
+
+
 def _run_proveedores(args: argparse.Namespace, where: dict, now: float) -> int:
     return _show("proveedores", proveedores(refrescar=args.refrescar, **where))
 
@@ -976,7 +1069,7 @@ def _run_politica(args: argparse.Namespace, where: dict, now: float) -> int:
 
 
 _COMMANDS = {"preparar": _run_preparar, "estado": _run_estado, "perfiles": _run_perfiles,
-             "proveedores": _run_proveedores,
+             "fuentes": _run_fuentes, "proveedores": _run_proveedores,
              "permitir": _run_politica, "cerrar": _run_politica}
 
 

@@ -19,6 +19,7 @@ import tempfile
 import threading
 import time
 import unittest
+from datetime import datetime, timedelta, timezone
 from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -658,6 +659,116 @@ class Perfiles(Mac):
                 respuesta = json.loads(err)
                 self.assertFalse(respuesta["ok"])
                 self.assertIn(campo, respuesta["error"], f"el mensaje no nombra {campo}")
+
+class Fuentes(Mac):
+    """`encargo.py fuentes` (SUA-04, 4.9): cada fuente y la competencia de cada ruta con los días que
+    les quedan, y con --aviso el estado semanal que se quema una vez por semana."""
+
+    AHORA = datetime(2026, 10, 16, 12, tzinfo=timezone.utc)
+
+    def vence_en(self, dias):
+        return (self.AHORA + timedelta(days=dias)).isoformat().replace("+00:00", "Z")
+
+    def escribir_perfiles(self, fuentes, competencia):
+        ruta = self.checkout / "scripts" / "agent-work" / "contexto" / "perfiles.v1.json"
+        ruta.write_text(json.dumps({
+            "schema": "agent-work.perfiles.v1",
+            "profiles": [{
+                "id": "ingenieria", "purpose": "prueba", "resultContracts": ["ready.v1"],
+                "routes": [{"host": "mac-local", "executor": "opencode", "via": ["task"]},
+                           {"host": "mini-native", "executor": "native", "agentId": "ingenieria", "via": ["turn"]}],
+                "writesSource": True, "sources": fuentes, "competence": competencia,
+            }],
+        }, ensure_ascii=False) + "\n", encoding="utf-8")
+
+    def fuentes(self, *args):
+        with mock.patch.object(encargo.time, "time", return_value=self.AHORA.timestamp()):
+            return self.cli("fuentes", *args)
+
+    def test_lista_fuentes_y_competencia_con_dias(self):
+        self.escribir_perfiles(
+            [{"ref": "G:agents/ingenieria/agent/workshop-skills", "revision": "97d35ab0",
+              "validUntil": self.vence_en(90)},
+             {"ref": "G:agents/implementer/agent/workshop-skills", "revision": "97d35ab0",
+              "validUntil": self.vence_en(10)}],
+            {"mac-local/opencode": {"status": "passed", "validUntil": self.vence_en(90)},
+             "mini-native/native/ingenieria": {"status": "pending", "validUntil": self.vence_en(5)}})
+        code, out, err = self.fuentes()
+        self.assertEqual((code, err), (0, ""))
+        self.assertEqual(len(out.splitlines()), 1, out + err)
+        respuesta = json.loads(out)
+        self.assertEqual(set(respuesta), {"ok", "perfiles", "aviso"})
+        self.assertEqual(respuesta["aviso"], None)
+        self.assertEqual([fila["perfil"] for fila in respuesta["perfiles"]], ["ingenieria"])
+        fila = respuesta["perfiles"][0]
+        self.assertEqual(set(fila), {"perfil", "fuentes", "competencia"})
+        self.assertEqual([(f["ref"], f["revision"], f["validUntil"], f["dias"], f["porVencer"])
+                          for f in fila["fuentes"]], [
+            ("G:agents/ingenieria/agent/workshop-skills", "97d35ab0", self.vence_en(90), 90, False),
+            ("G:agents/implementer/agent/workshop-skills", "97d35ab0", self.vence_en(10), 10, True)])
+        self.assertEqual([(c["ruta"], c["validUntil"], c["dias"], c["porVencer"])
+                          for c in fila["competencia"]], [
+            ("mac-local/opencode", self.vence_en(90), 90, False),
+            ("mini-native/native/ingenieria", self.vence_en(5), 5, True)])
+        self.assertEqual(set(fila["fuentes"][0]), {"ref", "revision", "validUntil", "dias", "porVencer"})
+        self.assertEqual(set(fila["competencia"][0]), {"ruta", "validUntil", "dias", "porVencer"})
+
+    def test_aviso_quema_el_estado_semanal(self):
+        self.escribir_perfiles(
+            [{"ref": "G:agents/ingenieria/agent/workshop-skills", "revision": "97d35ab0",
+              "validUntil": self.vence_en(10)}],
+            {"mac-local/opencode": {"status": "passed", "validUntil": self.vence_en(90)}})
+        code, out, err = self.fuentes("--aviso")
+        self.assertEqual((code, err), (0, ""))
+        aviso = json.loads(out)["aviso"]
+        self.assertEqual((aviso["vencen"], aviso["avisadoHoy"], aviso["ultimoAviso"]),
+                         (["G:agents/ingenieria/agent/workshop-skills"], True, self.AHORA.timestamp()))
+        estado = json.loads((self.state / "fuentes.json").read_text())
+        self.assertEqual(estado, {"schema": "agent-work.fuentes.v1", "ultimoAviso": self.AHORA.timestamp()})
+        written = (self.state / "fuentes.json").read_bytes()
+        code, out, err = self.fuentes("--aviso")
+        aviso = json.loads(out)["aviso"]
+        self.assertEqual((aviso["avisadoHoy"], aviso["ultimoAviso"]), (False, self.AHORA.timestamp()))
+        self.assertEqual((self.state / "fuentes.json").read_bytes(), written)
+        (self.state / "fuentes.json").write_text(json.dumps(
+            {"schema": "agent-work.fuentes.v1", "ultimoAviso": self.AHORA.timestamp() - 8 * 86400}))
+        code, out, err = self.fuentes("--aviso")
+        aviso = json.loads(out)["aviso"]
+        self.assertEqual((aviso["avisadoHoy"], aviso["ultimoAviso"]), (True, self.AHORA.timestamp()))
+        self.assertEqual(json.loads((self.state / "fuentes.json").read_text())["ultimoAviso"],
+                         self.AHORA.timestamp())
+        # Sin nada por vencer no hay quema y no nace el archivo.
+        self.escribir_perfiles(
+            [{"ref": "G:agents/ingenieria/agent/workshop-skills", "revision": "97d35ab0",
+              "validUntil": self.vence_en(90)}], {})
+        (self.state / "fuentes.json").unlink()
+        code, out, err = self.fuentes("--aviso")
+        aviso = json.loads(out)["aviso"]
+        self.assertEqual((aviso["vencen"], aviso["avisadoHoy"], aviso["ultimoAviso"]), ([], False, None))
+        self.assertFalse((self.state / "fuentes.json").exists())
+
+    def test_mutacion_marca_sin_el_limite_de_30(self):
+        # Si alguien mueve el umbral de 30 días, esta prueba canta: 31 no va, 29 sí, y sin validUntil nunca.
+        self.escribir_perfiles(
+            [{"ref": "G:agents/a/agent/workshop-skills", "revision": "r", "validUntil": self.vence_en(31)},
+             {"ref": "G:agents/b/agent/workshop-skills", "revision": "r", "validUntil": self.vence_en(29)},
+             {"ref": "G:agents/c/agent/workshop-skills", "revision": "r", "validUntil": None}], {})
+        code, out, err = self.fuentes("--aviso")
+        self.assertEqual((code, err), (0, ""))
+        respuesta = json.loads(out)
+        fila = respuesta["perfiles"][0]
+        self.assertEqual([(f["dias"], f["porVencer"]) for f in fila["fuentes"]],
+                         [(31, False), (29, True), (None, False)])
+        self.assertEqual(respuesta["aviso"]["vencen"], ["G:agents/b/agent/workshop-skills"])
+
+    def test_la_salida_diga_aviso_pendiente_de_g5(self):
+        self.escribir_perfiles(
+            [{"ref": "G:agents/ingenieria/agent/workshop-skills", "revision": "97d35ab0",
+              "validUntil": self.vence_en(10)}], {})
+        code, out, err = self.fuentes("--aviso")
+        self.assertEqual((code, err), (0, ""))
+        self.assertEqual(json.loads(out)["aviso"]["avisoPendiente"], "aviso pendiente de G5")
+
 
 class Permitir(Mac):
     def test_rebinding_glm_to_another_provider_drops_its_default_and_the_default_grant(self):
