@@ -10,8 +10,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import socket
+import subprocess
 import sys
 from collections.abc import Mapping
 from datetime import datetime, timedelta, timezone
@@ -311,6 +313,39 @@ def _cargar_notados(ruta: str | Path | None) -> dict[str, datetime]:
     return {clave: _instante(valor, f"notados[{clave!r}]") for clave, valor in crudo.items()}
 
 
+def _gateway(openclaw_bin: str | Path, metodo: str, params: dict) -> object:
+    """Una llamada `openclaw gateway call`; devuelve el primer JSON de la salida."""
+    resultado = subprocess.run(
+        [str(openclaw_bin), "gateway", "call", metodo,
+         "--params", json.dumps(params, ensure_ascii=False, separators=(",", ":")),
+         "--json"],
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    if resultado.returncode:
+        detalle = " ".join((resultado.stderr or resultado.stdout).split())[:200]
+        raise RuntimeError(f"gateway no disponible para {metodo}: {detalle}")
+    lineas = resultado.stdout.splitlines(keepends=True)
+    for indice, linea in enumerate(lineas):
+        if not linea.lstrip().startswith("{"):
+            continue
+        try:
+            respuesta, _ = json.JSONDecoder().raw_decode("".join(lineas[indice:]).lstrip())
+        except json.JSONDecodeError:
+            continue
+        return respuesta
+    try:
+        return json.loads(resultado.stdout.strip())
+    except ValueError:
+        raise RuntimeError(f"respuesta JSON inválida del gateway para {metodo}") from None
+
+
+def _binario(openclaw_bin: str | None) -> Path:
+    binario = openclaw_bin or os.environ.get("OPENCLAW_BIN")
+    return Path(binario) if binario else Path.home() / ".openclaw/bin/openclaw"
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="proyeccion.py", description=__doc__)
     subcomandos = parser.add_subparsers(dest="comando", required=True)
@@ -327,9 +362,32 @@ def main(argv: list[str] | None = None) -> int:
     derivar_cli.add_argument("snapshot", type=Path)
     comunes(derivar_cli)
 
+    leer_cli = subcomandos.add_parser("leer", help="lee la raíz del gateway y la deriva")
+    leer_cli.add_argument("--root", required=True)
+    leer_cli.add_argument("--openclaw-bin", default=None)
+    comunes(leer_cli)
+
+    listar_cli = subcomandos.add_parser("listar", help="lista las raíces del gateway")
+    listar_cli.add_argument("--openclaw-bin", default=None)
+
     args = parser.parse_args(argv)
     try:
-        snapshot = cargar_snapshot(args.snapshot)
+        if args.comando == "listar":
+            print(json.dumps(
+                _gateway(_binario(args.openclaw_bin), "managedTasks.root.list", {}),
+                ensure_ascii=False, indent=2,
+            ))
+            return 0
+        if args.comando == "leer":
+            snapshot = _gateway(
+                _binario(args.openclaw_bin), "managedTasks.root.read", {"rootId": args.root}
+            )
+            if not isinstance(snapshot, dict):
+                raise ValueError(
+                    f"managedTasks.root.read no devolvió un snapshot para {args.root!r}"
+                )
+        else:
+            snapshot = cargar_snapshot(args.snapshot)
         proyeccion_de_la_raiz = derivar(
             snapshot,
             datetime.now(timezone.utc),

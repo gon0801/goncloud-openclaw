@@ -193,5 +193,96 @@ class CliDerivar(unittest.TestCase):
         self.assertIn("proyeccion:", hecho.stderr)
 
 
+class LeerListar(unittest.TestCase):
+    SCRIPT = ROOT / "scripts/agent-work/proyeccion.py"
+    LISTA = {"roots": [{"rootId": "root-estados", "state": "active",
+                        "openedAt": "2026-10-16T09:05:00Z"}]}
+
+    def setUp(self):
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        self.tmp = Path(temp.name)
+        self.log = self.tmp / "gateway.log"
+        self.bin = self.tmp / "openclaw"
+        self.bin.write_text(
+            "#!/usr/bin/env python3\n"
+            "import json, os, pathlib, sys\n"
+            "args = sys.argv[1:]\n"
+            "assert args[:2] == ['gateway', 'call'] and args[-1] == '--json'\n"
+            "metodo = args[2]\n"
+            "params = json.loads(args[args.index('--params') + 1])\n"
+            "with open(os.environ['FAKE_LOG'], 'a') as f:\n"
+            "    f.write(json.dumps({'method': metodo, 'params': params}) + '\\n')\n"
+            "if metodo == 'managedTasks.root.read':\n"
+            "    if params['rootId'] == 'root-estados':\n"
+            "        print(pathlib.Path(os.environ['FAKE_SNAPSHOT']).read_text(), end='')\n"
+            "    else:\n"
+            "        print('null')\n"
+            "else:\n"
+            "    print(json.dumps(json.loads(os.environ['FAKE_LISTA'])))\n",
+            encoding="utf-8",
+        )
+        self.bin.chmod(0o755)
+        self.snapshot = FIXTURES / "raiz-estados.json"
+
+    def correr(self, *argumentos, con_env=True):
+        entorno = dict(os.environ, LANG="en_US.UTF-8", FAKE_LOG=str(self.log),
+                       FAKE_SNAPSHOT=str(self.snapshot), FAKE_LISTA=json.dumps(self.LISTA))
+        if con_env:
+            entorno["OPENCLAW_BIN"] = str(self.bin)
+        else:
+            entorno.pop("OPENCLAW_BIN", None)
+        return subprocess.run(
+            [sys.executable, str(self.SCRIPT), *argumentos],
+            capture_output=True, text=True, timeout=60, env=entorno, cwd=str(ROOT),
+        )
+
+    def llamadas(self):
+        return [json.loads(linea) for linea in self.log.read_text().splitlines()]
+
+    def test_leer_por_env_llama_root_read_y_deriva(self):
+        hecho = self.correr(
+            "leer", "--root", "root-estados",
+            "--stale-after-ms", str(STALE), "--intervalo-ms", str(INTERVALO),
+            "--host-gateway", GATEWAY,
+        )
+        self.assertEqual(hecho.returncode, 0, hecho.stderr)
+        impresa = json.loads(hecho.stdout)
+        self.assertEqual(impresa["schema"], "sistema-agentes.proyeccion.v1")
+        self.assertEqual(impresa["rootId"], "root-estados")
+        self.assertEqual(impresa["progress"], {"declared": 66, "observed": 66, "accepted": 33})
+        self.assertEqual(contrato.validar(impresa), [])
+        self.assertEqual(self.llamadas(), [
+            {"method": "managedTasks.root.read", "params": {"rootId": "root-estados"}},
+        ])
+
+    def test_leer_por_flag_openclaw_bin(self):
+        hecho = self.correr(
+            "leer", "--root", "root-estados",
+            "--stale-after-ms", str(STALE), "--intervalo-ms", str(INTERVALO),
+            "--host-gateway", GATEWAY, "--openclaw-bin", str(self.bin),
+            con_env=False,
+        )
+        self.assertEqual(hecho.returncode, 0, hecho.stderr)
+        self.assertEqual(json.loads(hecho.stdout)["rootId"], "root-estados")
+
+    def test_leer_raiz_desconocida_es_error_con_nombre(self):
+        hecho = self.correr(
+            "leer", "--root", "no-existe",
+            "--stale-after-ms", str(STALE), "--intervalo-ms", str(INTERVALO),
+        )
+        self.assertEqual(hecho.returncode, 2)
+        self.assertIn("no devolvió un snapshot", hecho.stderr)
+        self.assertIn("no-existe", hecho.stderr)
+
+    def test_listar_imprime_el_json_del_gateway(self):
+        hecho = self.correr("listar")
+        self.assertEqual(hecho.returncode, 0, hecho.stderr)
+        self.assertEqual(json.loads(hecho.stdout), self.LISTA)
+        self.assertEqual(self.llamadas(), [
+            {"method": "managedTasks.root.list", "params": {}},
+        ])
+
+
 if __name__ == "__main__":
     unittest.main()
