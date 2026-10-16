@@ -20,6 +20,7 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts"))
 sys.path.insert(0, str(ROOT / "scripts" / "agent-work"))
+import native_gateway  # noqa: E402
 import proyeccion  # noqa: E402
 from sistema_agentes import contrato  # noqa: E402
 
@@ -540,6 +541,214 @@ class Cli(Pasada):
         self.assertEqual(hecho.returncode, 0, hecho.stderr)
         self.assertEqual(json.loads(hecho.stdout), {"saltada": True})
         self.assertFalse(self.log.exists())
+
+
+class RelojFalso:
+    def __init__(self, valor=0.0):
+        self.valor = valor
+
+    def __call__(self):
+        return self.valor
+
+
+class PasarFalso:
+    VACIO = {"raices": 0, "escritas": 0, "errores": []}
+
+    def __init__(self, resultado=None, error=None):
+        self.llamadas = []
+        self.resultado = resultado if resultado is not None else dict(self.VACIO)
+        self.error = error
+
+    def __call__(self, raices_dir, **kwargs):
+        self.llamadas.append({"raices_dir": raices_dir, **kwargs})
+        if self.error is not None:
+            raise self.error
+        return self.resultado
+
+
+class ClienteGateway:
+    host_id = "host-uno"
+    openclaw_bin = "/bin/openclaw-falso"
+
+    def list_pending(self, after_task_id=None, limit=100):
+        return []
+
+    def ack(self, receipt):
+        return receipt
+
+    def close_host(self, *_):
+        raise AssertionError("sin cierres pendientes")
+
+    def report_host_result(self, *_):
+        raise AssertionError("sin reportes pendientes")
+
+    def report_host_incident(self, *_):
+        raise AssertionError("sin incidentes pendientes")
+
+
+class HostQuieto:
+    def flush(self, *_):
+        return []
+
+    def flush_closures(self, *_):
+        return 0, []
+
+    def flush_incidents(self, *_):
+        return 0, []
+
+    def operation_key_for(self, *_):
+        return None
+
+
+class RaicesPublisherDelHost(unittest.TestCase):
+    def setUp(self):
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        self.tmp = Path(temp.name)
+
+    def test_cuando_no_toca_no_llama_y_devuelve_vacio(self):
+        reloj = RelojFalso(100.0)
+        pasar = PasarFalso(resultado={"raices": 1, "escritas": 2, "errores": []})
+        publisher = native_gateway.RaicesPublisher(str(self.tmp), clock=reloj, pasar_fn=pasar)
+        self.assertEqual(publisher.publish(ClienteGateway()), (2, []))
+        reloj.valor = 399.9
+        self.assertEqual(publisher.publish(ClienteGateway()), (0, []))
+        self.assertEqual(len(pasar.llamadas), 1)
+
+    def test_cuando_toca_llama_una_vez_muda_y_reprograma(self):
+        reloj = RelojFalso(100.0)
+        pasar = PasarFalso()
+        publisher = native_gateway.RaicesPublisher(
+            str(self.tmp), clock=reloj, pasar_fn=pasar, host_gateway="mini"
+        )
+        publisher.publish(ClienteGateway())
+        self.assertEqual(len(pasar.llamadas), 1)
+        llamada = pasar.llamadas[0]
+        self.assertEqual(llamada["raices_dir"], str(self.tmp))
+        self.assertEqual(llamada["stale_after_ms"], 3600000)
+        self.assertEqual(llamada["intervalo_ms"], 300000)
+        self.assertEqual(llamada["host_gateway"], "mini")
+        self.assertNotIn("avisar_fn", llamada)
+        self.assertNotIn("consolidado_ms", llamada)
+        self.assertTrue(callable(llamada["gateway"]))
+        self.assertIsNotNone(llamada["ahora"].tzinfo)
+
+        reloj.valor = 399.9
+        publisher.publish(ClienteGateway())
+        reloj.valor = 400.0
+        publisher.publish(ClienteGateway())
+        self.assertEqual(len(pasar.llamadas), 2)
+
+    def test_un_fallo_de_pasar_sale_como_error_y_no_lanza(self):
+        publisher = native_gateway.RaicesPublisher(
+            str(self.tmp),
+            clock=RelojFalso(100.0),
+            pasar_fn=PasarFalso(error=RuntimeError("gateway en llamas")),
+        )
+        self.assertEqual(publisher.publish(ClienteGateway()), (0, ["raices: gateway en llamas"]))
+        publisher = native_gateway.RaicesPublisher(
+            str(self.tmp), clock=RelojFalso(100.0), pasar_fn=PasarFalso(error=OSError("disco ido"))
+        )
+        self.assertEqual(publisher.publish(ClienteGateway()), (0, ["raices: disco ido"]))
+
+    def test_los_errores_del_resultado_salen_prefijados(self):
+        publisher = native_gateway.RaicesPublisher(
+            str(self.tmp),
+            clock=RelojFalso(100.0),
+            pasar_fn=PasarFalso(
+                resultado={"raices": 1, "escritas": 2, "errores": ["raíz root-x: boom"]}
+            ),
+        )
+        self.assertEqual(publisher.publish(ClienteGateway()), (2, ["raices: raíz root-x: boom"]))
+
+
+class PumpOnceConRaices(unittest.TestCase):
+    def setUp(self):
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        self.tmp = Path(temp.name)
+        self.args = {
+            "evidence_root": self.tmp / "evidence",
+            "progress_state_dir": self.tmp / "progress",
+            "progress_client": ROOT / "scripts" / "mac" / "progress-events.py",
+        }
+
+    def test_resultado_limpio_incluye_raices(self):
+        raices = PasarFalso(resultado={"raices": 1, "escritas": 3, "errores": []})
+        resultado = native_gateway.pump_once(
+            ClienteGateway(),
+            host=HostQuieto(),
+            raices_publisher=raices_como_publisher(raices),
+            **self.args,
+        )
+        self.assertEqual(
+            resultado,
+            {
+                "reported": 0,
+                "closed": 0,
+                "incidents": 0,
+                "transferred": 0,
+                "published": 0,
+                "raices": 3,
+            },
+        )
+
+    def test_el_error_de_raices_se_suma_al_runtimeerror(self):
+        publisher = native_gateway.RaicesPublisher(
+            str(self.tmp),
+            clock=RelojFalso(100.0),
+            pasar_fn=PasarFalso(error=RuntimeError("gateway en llamas")),
+        )
+
+        class HostRoto(HostQuieto):
+            def flush(self, *_):
+                raise RuntimeError("host report unavailable")
+
+        with self.assertRaisesRegex(
+            RuntimeError, r"host report unavailable.*raices: gateway en llamas"
+        ):
+            native_gateway.pump_once(
+                ClienteGateway(), host=HostRoto(), raices_publisher=publisher, **self.args
+            )
+
+
+def raices_como_publisher(pasar):
+    return native_gateway.RaicesPublisher("donde-sea", clock=RelojFalso(100.0), pasar_fn=pasar)
+
+
+class WatchConRaices(unittest.TestCase):
+    def test_watch_construye_el_publisher_y_lo_atraviesa(self):
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        tmp = Path(temp.name)
+        with (
+            mock.patch.object(native_gateway, "watch_pump") as bombeo,
+            mock.patch.object(native_gateway, "RaicesPublisher") as clase,
+        ):
+            codigo = native_gateway.main(
+                [
+                    "--openclaw-bin",
+                    "/bin/openclaw-falso",
+                    "--host-id",
+                    "host-uno",
+                    "--expect-url",
+                    "https://gateway",
+                    "--host-state-dir",
+                    str(tmp),
+                    "--evidence-root",
+                    str(tmp),
+                    "--progress-state-dir",
+                    str(tmp),
+                    "--progress-client",
+                    "progress-events.py",
+                    "--watch",
+                    "--raices-dir",
+                    "/data/raices",
+                ]
+            )
+        self.assertEqual(codigo, 0)
+        clase.assert_called_once_with("/data/raices")
+        self.assertIs(bombeo.call_args.kwargs["raices_publisher"], clase.return_value)
 
 
 if __name__ == "__main__":

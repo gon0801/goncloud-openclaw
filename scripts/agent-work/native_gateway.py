@@ -30,6 +30,7 @@ from modelos import claude_por_omision
 from modelos import (POLICY_FILE, CatalogStore, CatalogUnavailable, ContextoIncompleto, ExactModel, ModelNotListed,
                      PerfilRechazado, ProviderNotConfigured, ProviderPolicy, authorize, catalogo_claude, explicar)
 from progress_bridge import transfer_host_projection, transfer_projection
+import proyeccion
 from resources import BoundaryBusy
 from sesion import (ADAPTADORES, COVERAGE_FILE, GroupBoundaryBackend, LaunchHeader, LaunchSpec, MalformedHeader,
                     Package, Route, adaptador, plan_launch, session_name)
@@ -977,6 +978,44 @@ class ProgressPublisher:
         return published, errors
 
 
+class RaicesPublisher:
+    """Runs one muted proyeccion.pasar on the host's raices dir every interval.
+
+    The watch loop of the Mac's encargos host embeds it beside ProgressPublisher. It never
+    sends avisos (the Mini's cron owns them there), never raises, and a failed pass leaves
+    the checkpoint untouched for the next pass to retry. First pass runs immediately."""
+
+    def __init__(self, raices_dir, *, intervalo=300.0, stale_after_ms=3_600_000, host_gateway=None,
+                 clock=time.monotonic, ahora=None, pasar_fn=None):
+        self.raices_dir = raices_dir
+        self.intervalo = intervalo
+        self.stale_after_ms = stale_after_ms
+        self.host_gateway = host_gateway
+        self.clock = clock
+        self.ahora = ahora if ahora is not None else (lambda: datetime.now(timezone.utc))
+        self.pasar_fn = pasar_fn if pasar_fn is not None else proyeccion.pasar
+        self.next_due = 0.0
+
+    def publish(self, client):
+        """(escritas, errores) of one due pass; a busy interval reports nothing."""
+        momento = self.clock()
+        if momento < self.next_due:
+            return 0, []
+        self.next_due = momento + self.intervalo
+        try:
+            resultado = self.pasar_fn(
+                self.raices_dir,
+                stale_after_ms=self.stale_after_ms,
+                intervalo_ms=int(self.intervalo * 1000),
+                ahora=self.ahora(),
+                gateway=lambda metodo, params: proyeccion._gateway(client.openclaw_bin, metodo, params),
+                host_gateway=self.host_gateway,
+            )
+        except (OSError, RuntimeError, ValueError) as exc:
+            return 0, [f"raices: {exc}"]
+        return resultado.get("escritas", 0), [f"raices: {error}" for error in resultado.get("errores", [])]
+
+
 def close_pass(client, *, host, cli_release=None, cli_cancel=None, cli_retry=None, close_host=None):
     """Report results, release acknowledged sessions, release cancelled tasks, retry pending cleanups and
     send the closures to R. Claims and delivers nothing. Returns counts, the report error and the other
@@ -1059,9 +1098,9 @@ def close_only(client, *, host, manager, before):
 
 def pump_once(client, *, host, evidence_root, progress_state_dir, progress_client,
               cli_claim=None, cli_watch=None, cli_release=None, cli_cancel=None, cli_retry=None,
-              progress_publisher=None, cli_beat=None):
+              progress_publisher=None, cli_beat=None, raices_publisher=None):
     """Beat, settle closures (close_pass), detect silent CLI failures, claim authorized work, drain
-    projections and publish the progress queue in one code-only pass."""
+    projections, publish the progress queue and project the raices in one code-only pass."""
     beat_errors = []
     if cli_beat is not None:
         try:
@@ -1098,8 +1137,11 @@ def pump_once(client, *, host, evidence_root, progress_state_dir, progress_clien
     )
     publisher = progress_publisher or ProgressPublisher(progress_client, progress_state_dir)
     published, publish_errors = publisher.publish(client)
+    raices_escritas, raices_errors = 0, []
+    if raices_publisher is not None:
+        raices_escritas, raices_errors = raices_publisher.publish(client)
     raised = [error for error in (report_error, claim_error) if error is not None]
-    errors += watch_errors + incident_errors + publish_errors
+    errors += watch_errors + incident_errors + publish_errors + raices_errors
     if len(raised) == 1 and not errors:
         raise raised[0]
     if raised or errors:
@@ -1109,12 +1151,14 @@ def pump_once(client, *, host, evidence_root, progress_state_dir, progress_clien
         result["claimed"] = 1 if claimed is not None else 0
     if cli_watch is not None:
         result["detected"] = detected
+    if raices_publisher is not None:
+        result["raices"] = raices_escritas
     return result
 
 
 def watch_pump(client, *, host, evidence_root, progress_state_dir, progress_client,
                stop_event, interval=1.0, cli_claim=None, cli_watch=None, cli_release=None, cli_cancel=None,
-               cli_retry=None, cli_beat=None):
+               cli_retry=None, cli_beat=None, raices_publisher=None):
     """Poll with code; a failed pass leaves durable host and native work for retry."""
     if not 0 < interval <= 5:
         raise ValueError("poll interval must be between zero and five seconds")
@@ -1127,6 +1171,7 @@ def watch_pump(client, *, host, evidence_root, progress_state_dir, progress_clie
                 progress_state_dir=progress_state_dir, progress_client=progress_client,
                 cli_claim=cli_claim, cli_watch=cli_watch, cli_release=cli_release, cli_cancel=cli_cancel,
                 cli_retry=cli_retry, progress_publisher=publisher, cli_beat=cli_beat,
+                raices_publisher=raices_publisher,
             )
         except (OSError, RuntimeError, ValueError) as exc:
             error = str(exc)
@@ -1149,6 +1194,9 @@ def main(argv=None):
     parser.add_argument("--progress-state-dir")
     parser.add_argument("--progress-client")
     parser.add_argument("--host-state-dir")
+    parser.add_argument("--raices-dir",
+                        default=str(Path.home() / ".local/state/agent-work-host/raices"),
+                        help="where proyeccion.pasar writes the raices projections (the watch loop)")
     parser.add_argument("--claim-once", action="store_true")
     parser.add_argument("--cli-instance-id")
     parser.add_argument("--cli-tmux-socket")
@@ -1237,6 +1285,7 @@ def main(argv=None):
                 progress_client=args.progress_client, stop_event=stop,
                 cli_claim=cli_claim, cli_watch=cli_watch, cli_release=cli_release, cli_cancel=cli_cancel,
                 cli_retry=cli_retry, cli_beat=cli_beat,
+                raices_publisher=RaicesPublisher(args.raices_dir),
             )
         finally:
             signal.signal(signal.SIGTERM, old_term)
