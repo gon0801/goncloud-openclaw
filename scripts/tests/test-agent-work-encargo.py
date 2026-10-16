@@ -1382,5 +1382,19 @@ class ClosedStaysClosed(Mac):
         self.assert_stays_closed("permitir", "qwen", "--solo", "opencode-go/*", *phrase, pieces=["no cubre ninguno"])
 
 
+class PlistDeSucesion(unittest.TestCase):
+    def test_el_plist_de_sucesion_trae_argumentos_que_encargo_acepta(self):
+        # F9 de #319: --checkout y --state-root son del parser raíz y van antes del
+        # subcomando; después de "sucesion" argparse los rechaza y el launchd no hace nada.
+        import plistlib
+        plist = ROOT / "scripts" / "mac" / "ai.goncloud.agent-work-sucesion.plist"
+        with plist.open("rb") as archivo:
+            argv = plistlib.load(archivo)["ProgramArguments"]
+        self.assertTrue(argv[1].endswith("encargo.py"))
+        args = encargo._parser().parse_args(argv[2:])
+        self.assertEqual(args.command, "sucesion")
+        self.assertTrue(args.aplicar)
+
+
 if __name__ == "__main__":
     unittest.main()
