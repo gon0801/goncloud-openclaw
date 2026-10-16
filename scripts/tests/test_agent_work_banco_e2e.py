@@ -367,6 +367,20 @@ def desenlace_de(snapshot: dict) -> str:
     return f"incidente:{snapshot['incidents'][0]['kind']}"
 
 
+def desenlace_de_la_espera(mensaje: str) -> "tuple[str, str]":
+    """La causa de una espera que no trajo resultado (F1a): el kind del incidente que el
+    mensaje de wait_result nombra, la ventana vencida sin ninguno, o uno que no se dejó
+    nombrar. Los kinds que son del modelo la vuelven roja; el resto es del banco."""
+    if "terminó en incidente" in mensaje:
+        kind = mensaje.split("terminó en incidente", 1)[1].lstrip().split("/", 1)[0]
+        if kind in ("launch-failed", "invalid-result", "deadline"):
+            return "rojo", kind
+        return "infraestructura", "incidente-desconocido"
+    if "nunca entregó resultado" in mensaje:
+        return "infraestructura", "espera-sin-incidente"
+    return "infraestructura", "incidente-desconocido"
+
+
 def guardar_caso(raiz: Path, destino: Path) -> Path:
     """La evidencia de un caso antes de borrar su temporal (R3 de G5c-r3): copia
     la raíz sin ningún `.git` y sin `*.dylib`, que son lo pesado y lo que no dice
@@ -541,6 +555,10 @@ class BancoE2E(unittest.TestCase):
         where = ["--checkout", str(ROOT), "--state-root", str(self.state), "--opencode", OPENCODE,
                  "--workspace-root", str(self.root / "dev")]
         args = ["preparar", "--repo", str(self.repo)]
+        # SUA-04 (4.3): el canario de la sucesión pide un modelo exacto, y preparar lo
+        # autoriza como ExactModel y lo pone en briefArgs como --model.
+        if os.environ.get("AGENT_WORK_BANCO_MODELO"):
+            args += ["--modelo", os.environ["AGENT_WORK_BANCO_MODELO"]]
         if perfil:
             args += ["--perfil", perfil]
         out = io.StringIO()
@@ -654,18 +672,43 @@ class BancoE2E(unittest.TestCase):
         return self.reached(settled, seconds, f"la tarea {task_id} ni entregó resultado ni terminó en incidente")
 
     def test_a_profiled_engineering_task_shows_the_behavior_the_design_asks_for(self):
-        task_id = self.ask(FIX_BRIEF, "ready.v1", perfil="ingenieria")
-        snapshot = self.wait_result(task_id)
-        artifact = self.artifact_path(task_id)
-        self.assertTrue(artifact.is_file())
-        code, verdict = self.conducta_verdict(task_id, artifact, self.run_dir(task_id).context / PLAYBOOK)
-        self.assertEqual((code, verdict), (0, {"ok": True, "razones": []}), verdict["razones"])
-        self.assert_package_and_flota(task_id, "ingenieria")
-        # ingenieria escribe fuente: su trabajo se ve en el repo, y la suite que estaba roja pasa ahora.
-        self.assertNotIn('"hola"', (self.repo / "saluda.py").read_text(), "el modelo no arregló el defecto")
-        done = subprocess.run([sys.executable, "test-saluda.py"], cwd=self.repo, capture_output=True)
-        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
-        print(f"BANCO_E2E case=ingenieria task={task_id} conducta=ok suite_repo=pasa", flush=True)
+        # F1a: con AGENT_WORK_BANCO_MODELO el canario lee UNA línea final de desenlace,
+        # impresa pase o falle. Cada etapa fija la causa de su fallo antes de correr, y
+        # solo el éxito de todas la deja en verde; sin la variable el caso va como hoy.
+        canario = bool(os.environ.get("AGENT_WORK_BANCO_MODELO"))
+        desenlace = ["infraestructura", "preparar"]
+        try:
+            task_id = self.ask(FIX_BRIEF, "ready.v1", perfil="ingenieria")
+            desenlace[:] = ["infraestructura", "espera-sin-incidente"]
+            try:
+                snapshot = self.wait_result(task_id)
+            except AssertionError as error:
+                desenlace[:] = desenlace_de_la_espera(str(error))
+                raise
+            desenlace[:] = ["infraestructura", "sin-artefacto"]
+            artifact = self.artifact_path(task_id)
+            self.assertTrue(artifact.is_file())
+            desenlace[:] = ["rojo", "conducta"]
+            code, verdict = self.conducta_verdict(task_id, artifact, self.run_dir(task_id).context / PLAYBOOK)
+            self.assertEqual((code, verdict), (0, {"ok": True, "razones": []}), verdict["razones"])
+            desenlace[:] = ["infraestructura", "flota"]
+            flota = self.assert_package_and_flota(task_id, "ingenieria")
+            if canario:
+                desenlace[:] = ["infraestructura", "modelo-distinto"]
+                # El canario no sale verde con otro modelo (SUA-04, 4.3): es un fallo del
+                # host, no del candidato.
+                self.assertEqual(flota["model"]["id"], os.environ["AGENT_WORK_BANCO_MODELO"])
+            desenlace[:] = ["rojo", "defecto-sin-arreglar"]
+            # ingenieria escribe fuente: su trabajo se ve en el repo, y la suite que estaba roja pasa ahora.
+            self.assertNotIn('"hola"', (self.repo / "saluda.py").read_text(), "el modelo no arregló el defecto")
+            desenlace[:] = ["rojo", "suite-repo"]
+            done = subprocess.run([sys.executable, "test-saluda.py"], cwd=self.repo, capture_output=True)
+            self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+            desenlace[:] = ["verde", "ninguna"]
+            print(f"BANCO_E2E case=ingenieria task={task_id} conducta=ok suite_repo=pasa", flush=True)
+        finally:
+            if canario:
+                print(f"BANCO_E2E case=ingenieria desenlace={desenlace[0]} causa={desenlace[1]}", flush=True)
 
     def test_the_control_without_a_package_is_red_for_the_expected_reason(self):
         task_id = self.ask(FIX_BRIEF, "ready.v1")
