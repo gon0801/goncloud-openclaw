@@ -92,7 +92,7 @@ class CutoverRollbackE2E(unittest.TestCase):
         self.state = self.host.root / "cutover-state.json"
         (self.host.root / "instructions").mkdir()
         cutover_live.prepare(self.state, {
-            "id": "ensayo:vigia", "legacyCrons": [CRON], "host": "mac-local", "adapter": "claude_opus",
+            "id": "ensayo:vigia", "legacyCrons": [CRON], "host": "mac-local", "adapter": "fixture-cli-a",  # id de juguete (SUA-04, 4.6)
             "spools": [str(self.host.root / "host-spool")], "deviceId": "ensayo-device",
             "instructionRoot": str(self.host.root / "instructions"), "runTimeoutSeconds": 3600})
         self.assertEqual(cutover_live.apply(self.state, self.client, lambda: int(time.time() * 1000),

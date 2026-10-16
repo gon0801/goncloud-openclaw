@@ -22,6 +22,9 @@ from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts" / "agent-work"))
+# "fixture-cli-a" es un adaptador de juguete (SUA-04, 4.6): estas pruebas usan el nombre como
+# identificador cualquiera del host falso, y un id que parezca real daría a entender que ese
+# host lo implementa.
 from contracts import AuthorizedOperation, IncidentRejected, OperationKey, RunDir, operation_id  # noqa: E402
 from host import Host  # noqa: E402
 import native_gateway  # noqa: E402
@@ -449,7 +452,7 @@ else:
 
     def test_gateway_host_admission_binds_claim_before_delivery(self):
         assignment = {"hostId": "host-one", "taskId": "task-one", "generation": 1,
-                      "instanceId": "instance-one", "producerId": "codex", "adapterId": "codex",
+                      "instanceId": "instance-one", "producerId": "fixture-cli-a", "adapterId": "fixture-cli-a",
                       "capability": "secret", "claimId": "claim-one"}
         receipt = {"state": "host-admitted", "hostId": "host-one",
                    "instanceId": "instance-one", "claimId": "claim-one", "generation": 1}
@@ -461,9 +464,9 @@ else:
         self.assertEqual(command[3], "managedTasks.host.admit")
         self.assertIn("--device-auth", command)
         self.assertEqual(json.loads(command[command.index("--params") + 1]), {
-            "hostId": "host-one", "adapterId": "codex", "instanceId": "instance-one", "claimId": "claim-one",
+            "hostId": "host-one", "adapterId": "fixture-cli-a", "instanceId": "instance-one", "claimId": "claim-one",
             "capability": {"taskId": "task-one", "generation": 1,
-                           "producerId": "codex", "token": "secret"}})
+                           "producerId": "fixture-cli-a", "token": "secret"}})
         with mock.patch("native_gateway.subprocess.run", return_value=subprocess.CompletedProcess(
                 [], 0, json.dumps({**receipt, "instanceId": "foreign"}), "")):
             with self.assertRaisesRegex(RuntimeError, "identity mismatch"):
@@ -1298,7 +1301,7 @@ class CliClaimTest(unittest.TestCase):
         self.brief = b"Review the assigned change.\n" * 190
         self.digest = hashlib.sha256(self.brief).hexdigest()
         self.assignment = {
-            "target": {"kind": "cli", "hostId": "host-one", "adapterId": "codex"},
+            "target": {"kind": "cli", "hostId": "host-one", "adapterId": "fixture-cli-a"},
             "instructionRef": {"ref": "artifact:" + self.digest,
                                "digest": "sha256:" + self.digest},
             "inputRevision": {"kind": "artifact", "digest": "sha256:" + "a" * 64},
@@ -1307,9 +1310,9 @@ class CliClaimTest(unittest.TestCase):
         }
         self.claim = {
             "taskId": "task-one", "generation": 1, "claimId": "claim-one",
-            "hostId": "host-one", "adapterId": "codex", "instanceId": "instance-one",
+            "hostId": "host-one", "adapterId": "fixture-cli-a", "instanceId": "instance-one",
             "capability": {"taskId": "task-one", "generation": 1,
-                           "producerId": "codex", "token": "secret"},
+                           "producerId": "fixture-cli-a", "token": "secret"},
             "assignment": self.assignment,
         }
 
@@ -1325,18 +1328,18 @@ class CliClaimTest(unittest.TestCase):
         ]
         client = GatewayProjectionClient("/isolated/openclaw", "host-one", "ws://127.0.0.1:18789")
         with mock.patch("native_gateway.subprocess.run", side_effect=responses) as invoke:
-            self.assertEqual(client.claim_host("codex", "instance-one"), self.claim)
-            self.assertEqual(client.brief_chunk("codex", "instance-one", "task-one",
+            self.assertEqual(client.claim_host("fixture-cli-a", "instance-one"), self.claim)
+            self.assertEqual(client.brief_chunk("fixture-cli-a", "instance-one", "task-one",
                                                 "claim-one", 4096, 4096)["offset"], 4096)
-            self.assertIsNone(client.claim_host("codex", "instance-one"))
+            self.assertIsNone(client.claim_host("fixture-cli-a", "instance-one"))
         commands = [entry.args[0] for entry in invoke.call_args_list]
         self.assertEqual([command[3] for command in commands],
                          ["managedTasks.host.claim", "managedTasks.host.brief", "managedTasks.host.claim"])
         self.assertTrue(all("--device-auth" in command for command in commands))
         self.assertEqual(json.loads(commands[0][commands[0].index("--params") + 1]),
-                         {"hostId": "host-one", "adapterId": "codex", "instanceId": "instance-one"})
+                         {"hostId": "host-one", "adapterId": "fixture-cli-a", "instanceId": "instance-one"})
         self.assertEqual(json.loads(commands[1][commands[1].index("--params") + 1]),
-                         {"hostId": "host-one", "adapterId": "codex", "instanceId": "instance-one",
+                         {"hostId": "host-one", "adapterId": "fixture-cli-a", "instanceId": "instance-one",
                           "taskId": "task-one", "claimId": "claim-one", "offset": 4096,
                           "length": 4096})
 
@@ -1352,9 +1355,9 @@ class CliClaimTest(unittest.TestCase):
                 return claim
 
         with self.assertRaisesRegex(ValueError, "host claim identity mismatch"):
-            native_gateway._claim(Client(), "codex", "instance-one")
+            native_gateway._claim(Client(), "fixture-cli-a", "instance-one")
         claim = self.claim
-        self.assertEqual(native_gateway._claim(Client(), "codex", "instance-one"), self.claim)
+        self.assertEqual(native_gateway._claim(Client(), "fixture-cli-a", "instance-one"), self.claim)
 
     def test_changed_brief_chunk_is_rejected_before_materialization(self):
         class Client:
@@ -1448,11 +1451,11 @@ class ClosureFlushTest(unittest.TestCase):
         key = OperationKey("host-one", task_id, 1, instance_id)
         if register:
             operation = AuthorizedOperation(
-                key=key, producer_id="codex", capability="closure-secret",
+                key=key, producer_id="fixture-cli-a", capability="closure-secret",
                 session=f"session-{instance_id}", workspace_ref=str(workspace), brief_ref=str(brief),
                 brief_digest=hashlib.sha256(brief.read_bytes()).hexdigest(),
                 input_revision={"kind": "code", "repository": "repo", "sha": "c" * 40},
-                result_contract="review.v1", claim_id=f"claim-{instance_id}", adapter_id="codex")
+                result_contract="review.v1", claim_id=f"claim-{instance_id}", adapter_id="fixture-cli-a")
             host.apply(key, operation, lambda *_: None,
                        lambda a: {"state": "host-admitted", "claimId": a["claimId"],
                                   "hostId": a["hostId"], "instanceId": a["instanceId"],
@@ -1478,7 +1481,7 @@ class ClosureFlushTest(unittest.TestCase):
                                   "instanceId": "instance-a",
                                   "state": "CleanupPending",
                                   "reason": "adopted session unverifiable",
-                                  "evidenceDigest": expected, "adapterId": "codex"}])
+                                  "evidenceDigest": expected, "adapterId": "fixture-cli-a"}])
         last = host.spool.closure_last(operation_id(key))
         self.assertEqual((last["state"], last["reason"], last["evidence_digest"]),
                          ("CleanupPending", "adopted session unverifiable", expected))
@@ -1639,7 +1642,7 @@ class IncidentFlushTest(unittest.TestCase):
         self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name)
 
-    def seed(self, task_id, instance_id, *, adapter_id="codex", generation=1):
+    def seed(self, task_id, instance_id, *, adapter_id="fixture-cli-a", generation=1):
         workspace = self.root / f"workspace-{instance_id}"
         workspace.mkdir()
         brief = workspace / "brief.txt"
@@ -1647,7 +1650,7 @@ class IncidentFlushTest(unittest.TestCase):
         host = Host("host-one", self.root / "host")
         key = OperationKey("host-one", task_id, generation, instance_id)
         operation = AuthorizedOperation(
-            key=key, producer_id="codex", capability="incident-secret",
+            key=key, producer_id="fixture-cli-a", capability="incident-secret",
             session=f"session-{instance_id}", workspace_ref=str(workspace), brief_ref=str(brief),
             brief_digest=hashlib.sha256(brief.read_bytes()).hexdigest(),
             input_revision={"kind": "code", "repository": "repo", "sha": "c" * 40},
@@ -1754,7 +1757,7 @@ class IncidentFlushTest(unittest.TestCase):
         assignment = calls[0]["assignment"]
         self.assertEqual((assignment["hostId"], assignment["taskId"], assignment["generation"],
                           assignment["instanceId"], assignment["adapterId"]),
-                         ("host-one", "task-send", 1, "instance-send", "codex"))
+                         ("host-one", "task-send", 1, "instance-send", "fixture-cli-a"))
         row = self.incident_row(host, self.EXPECTED_KEY)
         self.assertEqual(row["status"], "sent")
         self.assertEqual(json.loads(row["receipt_json"]),
@@ -1836,10 +1839,10 @@ class IncidentClientTest(unittest.TestCase):
         self.client = GatewayProjectionClient("/isolated/openclaw", "host-one",
                                               "ws://127.0.0.1:18789")
         self.assignment = {"hostId": "host-one", "taskId": "task-x", "generation": 1,
-                           "instanceId": "instance-x", "producerId": "codex",
-                           "capability": "incident-secret", "adapterId": "codex"}
+                           "instanceId": "instance-x", "producerId": "fixture-cli-a",
+                           "capability": "incident-secret", "adapterId": "fixture-cli-a"}
 
-    def seed(self, task_id, instance_id, *, state="host", adapter_id="codex", generation=1):
+    def seed(self, task_id, instance_id, *, state="host", adapter_id="fixture-cli-a", generation=1):
         workspace = self.root / f"workspace-{state}-{instance_id}"
         workspace.mkdir(parents=True)
         brief = workspace / "brief.txt"
@@ -1847,7 +1850,7 @@ class IncidentClientTest(unittest.TestCase):
         host = Host("host-one", self.root / state)
         key = OperationKey("host-one", task_id, generation, instance_id)
         operation = AuthorizedOperation(
-            key=key, producer_id="codex", capability="incident-secret",
+            key=key, producer_id="fixture-cli-a", capability="incident-secret",
             session=f"session-{instance_id}", workspace_ref=str(workspace), brief_ref=str(brief),
             brief_digest=hashlib.sha256(brief.read_bytes()).hexdigest(),
             input_revision={"kind": "code", "repository": "repo", "sha": "c" * 40},
@@ -1887,10 +1890,10 @@ class IncidentClientTest(unittest.TestCase):
                                        "managedTasks.host.incident"])
         self.assertIn("--device-auth", command)
         self.assertEqual(json.loads(command[command.index("--params") + 1]),
-                         {"hostId": "host-one", "adapterId": "codex",
+                         {"hostId": "host-one", "adapterId": "fixture-cli-a",
                           "instanceId": "instance-x",
                           "capability": {"taskId": "task-x", "generation": 1,
-                                         "producerId": "codex", "token": "incident-secret"},
+                                         "producerId": "fixture-cli-a", "token": "incident-secret"},
                           "incident": self.INCIDENT})
         for changes in ({"taskId": "other"}, {"generation": 2},
                         {"incidentKey": "host:1:transport-unavailable:other"},
@@ -1999,11 +2002,11 @@ class IncidentPumpTest(unittest.TestCase):
         host = Host("host-one", self.root / "host")
         key = OperationKey("host-one", task_id, 1, instance_id)
         operation = AuthorizedOperation(
-            key=key, producer_id="codex", capability="incident-secret",
+            key=key, producer_id="fixture-cli-a", capability="incident-secret",
             session=f"session-{instance_id}", workspace_ref=str(workspace), brief_ref=str(brief),
             brief_digest=hashlib.sha256(brief.read_bytes()).hexdigest(),
             input_revision={"kind": "code", "repository": "repo", "sha": "c" * 40},
-            result_contract="review.v1", claim_id=f"claim-{instance_id}", adapter_id="codex")
+            result_contract="review.v1", claim_id=f"claim-{instance_id}", adapter_id="fixture-cli-a")
         host.apply(key, operation, lambda *_: None,
                    lambda a: {"state": "host-admitted", "claimId": a["claimId"],
                               "hostId": a["hostId"], "instanceId": a["instanceId"],
@@ -2142,8 +2145,8 @@ class ClientCloseTest(unittest.TestCase):
     def setUp(self):
         self.client = GatewayProjectionClient("/isolated/openclaw", "host-one", "ws://gateway")
         self.assignment = {"hostId": "host-one", "taskId": "task-x", "generation": 2,
-                           "instanceId": "instance-x", "producerId": "codex",
-                           "capability": "tok", "adapterId": "codex"}
+                           "instanceId": "instance-x", "producerId": "fixture-cli-a",
+                           "capability": "tok", "adapterId": "fixture-cli-a"}
 
     def receipt(self, **changes):
         base = {"taskId": "task-x", "generation": 2, "state": "CleanupPending",
@@ -2163,9 +2166,9 @@ class ClientCloseTest(unittest.TestCase):
                                              "reason-text", "a" * 64)
         self.assertEqual(seen["method"], "managedTasks.host.close")
         self.assertEqual(seen["params"], {
-            "hostId": "host-one", "instanceId": "instance-x", "adapterId": "codex",
+            "hostId": "host-one", "instanceId": "instance-x", "adapterId": "fixture-cli-a",
             "capability": {"taskId": "task-x", "generation": 2,
-                           "producerId": "codex", "token": "tok"},
+                           "producerId": "fixture-cli-a", "token": "tok"},
             "state": "CleanupPending", "reason": "reason-text",
             "evidenceDigest": "a" * 64,
         })

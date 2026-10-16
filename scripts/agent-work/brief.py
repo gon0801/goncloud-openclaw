@@ -114,7 +114,7 @@ def main(argv=None):
     parser.add_argument("--root", required=True, type=Path, help="managedTasks.instructionRoot")
     parser.add_argument("--file", type=Path, help="brief file; stdin when omitted")
     parser.add_argument("--host", help="target hostId, for example mac-local")
-    parser.add_argument("--adapter", help="target adapterId, for example claude_opus")
+    parser.add_argument("--adapter", help="target adapterId, for example fixture-cli-a")
     parser.add_argument("--model", type=model_id, help="model the adapter launches, as <provider>/<model>")
     parser.add_argument("--perfil", type=profile_id, help="worker profile, for example ingenieria")
     parser.add_argument("--perfiles", type=Path, help="perfiles.v1.json; required by --perfil without --host")

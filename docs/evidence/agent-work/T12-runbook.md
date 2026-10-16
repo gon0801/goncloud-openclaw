@@ -98,7 +98,7 @@ Instalarlo, desde la Mac de desarrollo y en la raíz de G:
 ssh gon@100.73.187.5 'mkdir -p -m 700 ~/.local/share/agent-work <instructionRoot>'
 scp scripts/agent-work/brief.py gon@100.73.187.5:.local/share/agent-work/brief.py
 shasum -a 256 scripts/agent-work/brief.py; ssh gon@100.73.187.5 'shasum -a 256 ~/.local/share/agent-work/brief.py'
-ssh gon@100.73.187.5 'R=$(mktemp -d); printf "prueba\n" | python3 ~/.local/share/agent-work/brief.py --root "$R" --host mac-local --adapter claude_opus; rm -rf "$R"'
+ssh gon@100.73.187.5 'R=$(mktemp -d); printf "prueba\n" | python3 ~/.local/share/agent-work/brief.py --root "$R" --host mac-local --adapter opencode; rm -rf "$R"'
 ```
 
 Los dos sha256 tienen que coincidir. La última línea imprime un JSON con `instructionRef` y `target`. `<instructionRoot>` no puede ser un enlace simbólico: R y `brief.py` lo rechazan.

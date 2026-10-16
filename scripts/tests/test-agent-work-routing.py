@@ -33,6 +33,12 @@ def repo_wake_sources(root):
     ).stdout.splitlines()
 
 
+# Adaptadores de juguete para las rutas que routing.py prepara con datos de mentira (SUA-04, 4.6):
+# usar un id que parezca real daría a entender que ese host lo implementa, y ninguno lo hace.
+FIXTURE_CLI_A = "fixture-cli-a"
+FIXTURE_CLI_B = "fixture-cli-b"
+
+
 class AgentsRouting(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
@@ -67,17 +73,17 @@ class AgentsRouting(unittest.TestCase):
         self.assertEqual(request["assignment"]["continuation"], {"kind": "requester"})
 
     def test_remote_cli_requires_certified_host_adapter(self):
-        with self.assertRaisesRegex(RouteUnavailable, "windows-remote/codex"):
-            self.request("ingenieria", "windows-remote/codex")
+        with self.assertRaisesRegex(RouteUnavailable, f"windows-remote/{FIXTURE_CLI_A}"):
+            self.request("ingenieria", f"windows-remote/{FIXTURE_CLI_A}")
         certified = json.loads(json.dumps(self.coverage))
-        certified["hostAdapterCoverage"]["windows-remote"]["codex"] = "certified"
-        request = self.request("ingenieria", "windows-remote/codex", coverage=certified)
+        certified["hostAdapterCoverage"]["windows-remote"][FIXTURE_CLI_A] = "certified"
+        request = self.request("ingenieria", f"windows-remote/{FIXTURE_CLI_A}", coverage=certified)
         self.assertEqual(request["assignment"]["target"],
-                         {"kind": "cli", "hostId": "windows-remote", "adapterId": "codex"})
+                         {"kind": "cli", "hostId": "windows-remote", "adapterId": FIXTURE_CLI_A})
 
     def test_only_a_certified_cli_route_is_prepared_and_the_rest_stay_closed_for_any_host(self):
-        """Walks cliAdapters, the 8 inventory CLIs on 2 hosts. routing.py prepares a request only for a
-        certified route."""
+        """Walks cliAdapters, the inventory CLIs on the managed hosts. routing.py prepares a request only
+        for a certified route; el número de rechazos sale del inventario, no de un literal."""
         prepared, refused = [], []
         for requester, host_id in sorted(routing.CLI_ROUTES):
             for adapter_id in self.coverage["cliAdapters"]:
@@ -92,9 +98,30 @@ class AgentsRouting(unittest.TestCase):
                                      {"kind": "cli", "hostId": host_id, "adapterId": adapter_id})
                     prepared.append(target)
         self.assertEqual(prepared, ["mac-local/opencode"])
-        self.assertEqual(len(refused), 15)
+        self.assertEqual(len(refused),
+                         len(routing.CLI_ROUTES) * len(self.coverage["cliAdapters"]) - len(prepared))
         with self.assertRaisesRegex(RouteUnavailable, "outside the managed perimeter"):
             self.request("ingenieria", "mac-local/opencode")
+
+    def test_no_retired_adapter_is_offered_by_coverage(self):
+        # SUA-04 (4.6): un adaptador que ningún host implementa sale de cliAdapters y de
+        # hostAdapterCoverage, y queda solo en su fila retirada de migration. Que un id
+        # retirado vuelva a coverage abre una ruta que ningún host atiende.
+        rows = {row["id"]: row for row in self.coverage["migration"]}
+        retired = {row_id.removeprefix("adapter:")
+                   for row_id, row in rows.items() if row.get("state") == "retired"}
+        self.assertTrue(retired, "migration no tiene adaptadores retirados")
+        for host_id, adapters in self.coverage["hostAdapterCoverage"].items():
+            for adapter_id in adapters:
+                if adapter_id == "opencode":
+                    continue
+                self.assertNotIn(adapter_id, retired,
+                                 f"{host_id}/{adapter_id} está retirado y sigue en hostAdapterCoverage")
+                self.assertIn(adapter_id, self.coverage["hostAdapterRoute"].get(host_id, {}),
+                              f"{host_id}/{adapter_id} está en coverage sin ruta en hostAdapterRoute")
+        for adapter_id in retired:
+            self.assertNotIn(adapter_id, self.coverage["cliAdapters"],
+                             f"{adapter_id} está retirado y sigue en cliAdapters")
 
     def test_every_certified_host_adapter_names_its_live_evidence(self):
         certified = [(host_id, adapter_id)
@@ -170,18 +197,18 @@ class AgentsRouting(unittest.TestCase):
 
     def test_cli_route_is_limited_to_its_requester(self):
         certified = json.loads(json.dumps(self.coverage))
-        certified["hostAdapterCoverage"]["mac-local"]["claude_opus"] = "certified"
+        certified["hostAdapterCoverage"]["mac-local"][FIXTURE_CLI_B] = "certified"
         with self.assertRaisesRegex(RouteUnavailable, "outside the managed perimeter"):
-            self.request("operaciones", "mac-local/claude_opus", coverage=certified)
+            self.request("operaciones", f"mac-local/{FIXTURE_CLI_B}", coverage=certified)
 
     def test_main_cli_route_stays_disabled_until_mac_local_is_certified(self):
         with self.assertRaisesRegex(RouteUnavailable, "not certified"):
-            self.request("main", "mac-local/claude_opus")
+            self.request("main", f"mac-local/{FIXTURE_CLI_B}")
         certified = json.loads(json.dumps(self.coverage))
-        certified["hostAdapterCoverage"]["mac-local"]["claude_opus"] = "certified"
-        request = self.request("main", "mac-local/claude_opus", coverage=certified)
+        certified["hostAdapterCoverage"]["mac-local"][FIXTURE_CLI_B] = "certified"
+        request = self.request("main", f"mac-local/{FIXTURE_CLI_B}", coverage=certified)
         self.assertEqual(request["assignment"]["target"],
-                         {"kind": "cli", "hostId": "mac-local", "adapterId": "claude_opus"})
+                         {"kind": "cli", "hostId": "mac-local", "adapterId": FIXTURE_CLI_B})
 
     def test_outside_managed_perimeter_is_rejected(self):
         with self.assertRaisesRegex(RouteUnavailable, "route"):
@@ -474,7 +501,7 @@ class AgentsRouting(unittest.TestCase):
     def test_every_inventory_entry_is_migrated_or_declared_out(self):
         # T9 :265: cada entrada del inventario queda gestionada (preparada y apagada), protegida en el
         # perimetro o declarada fuera con su razon. Lo que se exige sale del repo, no de las filas.
-        states = {"managed-prepared", "perimeter-guarded", "legacy-until-adoption", "out-of-perimeter"}
+        states = {"managed-prepared", "perimeter-guarded", "legacy-until-adoption", "out-of-perimeter", "retired"}
         wakes = self.coverage["modelWakes"]["entries"]
         rows = {}
         for row in self.coverage["migration"]:
@@ -487,6 +514,9 @@ class AgentsRouting(unittest.TestCase):
         required |= {"route:user-adopted-session"}
         required |= {f"managed:{route['requester']}->{route['target']}"
                      for route in self.coverage["managedRequesterRoutes"]}
+        # SUA-04 (4.6): los siete adaptadores retirados quedan solo en su fila de migration.
+        required |= {f"adapter:{adapter_id}" for adapter_id in (
+            "claude_fable", "claude_opus", "kimi_k3", "kimi_coding", "codex", "zcode", "grok")}
         required |= {f"wake:{entry['name']}" for entry in wakes}
         required |= {f"wake:{job['name']}" for job in self.coverage["cronJobs"]["entries"] if job["kind"] == "vigia"}
         # T9 (plan :257): los helpers y los lanzadores.
@@ -601,11 +631,11 @@ class BriefHelper(unittest.TestCase):
                               input=stdin, capture_output=True, cwd=self.tmp)
 
     def test_brief_writes_the_file_r_resolves_and_prints_the_submit_fragments(self):
-        done = self.run_helper("--host", "mac-local", "--adapter", "claude_opus")
+        done = self.run_helper("--host", "mac-local", "--adapter", FIXTURE_CLI_B)
         self.assertEqual(done.returncode, 0, done.stderr)
         self.assertEqual(json.loads(done.stdout), {
             "instructionRef": {"ref": "artifact:" + self.DIGEST, "digest": "sha256:" + self.DIGEST},
-            "target": {"kind": "cli", "hostId": "mac-local", "adapterId": "claude_opus"},
+            "target": {"kind": "cli", "hostId": "mac-local", "adapterId": FIXTURE_CLI_B},
         })
         artifact = self.root / self.DIGEST
         self.assertFalse(artifact.is_symlink())

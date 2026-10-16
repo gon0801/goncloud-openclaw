@@ -514,7 +514,7 @@ class HostReceipts(unittest.TestCase):
         def lost(*_):
             raise RuntimeError("the keys may have reached the pane")
 
-        operation = replace(self.operation, adapter_id="codex")
+        operation = replace(self.operation, adapter_id="fixture-cli-a")  # id de juguete (SUA-04, 4.6)
         self.assertEqual(self.apply(self.key, operation, lost).status, "uncertain")
         return operation, operation_id(self.key)
 
