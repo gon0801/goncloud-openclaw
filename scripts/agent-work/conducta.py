@@ -295,11 +295,14 @@ def _salida_claude(contenido: object) -> str:
 
 def _paso_claude(nombre: str, entrada: dict, salida: str) -> Paso:
     """Una llamada de claude traducida al vocabulario que `juzgar` ya conoce. Los
-    nombres medidos en 2.1.301 (p3b/p4/p5) viajan con mayúscula y las rutas en
-    `file_path`. Un `Task` cuenta como cambio, como el `task` de opencode (D3): los
-    eventos de su hijo no están en este stream. Una `Skill` de claude no cuenta como
-    lectura del paquete: su input no trae carpeta y la copia que carga puede ser la
-    global, no la de la corrida; la del paquete se lee con Read por su ruta."""
+    nombres medidos en 2.1.301 (p3b/p4/p5 y M-24 punto 5) viajan con mayúscula y
+    las rutas en `file_path`. La lista de pasos de claude es `TaskCreate` (el
+    TodoWrite no existe en 2.1.301): cada llamada es un elemento y su `subject`
+    es el texto del paso; `TaskUpdate` no aporta paso de lista y cae genérico.
+    Un `Task` cuenta como cambio, como el `task` de opencode (D3): los eventos
+    de su hijo no están en este stream. Una `Skill` de claude no cuenta como
+    lectura del paquete: su input no trae carpeta y la copia que carga puede ser
+    la global, no la de la corrida; la del paquete se lee con Read por su ruta."""
     ruta = entrada.get("file_path") or entrada.get("path") or entrada.get("notebook_path")
     if nombre == "Read":
         return Paso("read", str(ruta) if ruta else None, "", salida)
@@ -307,12 +310,8 @@ def _paso_claude(nombre: str, entrada: dict, salida: str) -> Paso:
         return Paso("edit", str(ruta) if ruta else None, "", salida)
     if nombre == "Bash":
         return Paso("bash", None, str(entrada.get("command") or ""), salida)
-    if nombre == "TodoWrite":
-        todos = entrada.get("todos") if isinstance(entrada.get("todos"), list) else []
-        detalle = "\n".join(
-            str(todo.get("content", "")) for todo in todos if isinstance(todo, dict)
-        )
-        return Paso("todowrite", None, detalle, salida)
+    if nombre == "TaskCreate":
+        return Paso("todowrite", None, str(entrada.get("subject") or ""), salida)
     if nombre == "Task":
         return Paso("edit", None, str(entrada.get("description") or ""), salida)
     return Paso(nombre.lower(), str(ruta) if ruta else None, "", salida)

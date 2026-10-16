@@ -975,7 +975,7 @@ class ConductaClaude(unittest.TestCase):
         self.assertEqual(veredicto.razones, ("no hay lista de pasos (todowrite)",))
 
     def test_la_corrida_claude_que_deja_la_lista_pasa_completa(self):
-        veredicto = juzgar_claude(corrida_claude(con_lista=True), f"{RUN_CLAUDE}/{PLAYBOOK}")
+        veredicto = juzgar_claude(corrida_claude(con_lista=True))
         self.assertEqual(veredicto, conducta.Veredicto(True, ()))
 
     def test_los_streams_medidos_de_la_lista_m24_punto_5(self):
@@ -1009,8 +1009,12 @@ class ConductaClaude(unittest.TestCase):
             resultado_claude("c4", "Created task #2\n"),
         ]
         pasos = conducta.pasos_claude(lineas)
-        self.assertEqual([paso.tool for paso in pasos], ["todowrite", "todowrite"])
-        self.assertEqual([paso.detail for paso in pasos], ["leer", "arreglar"])
+        self.assertEqual(
+            [paso.tool for paso in pasos], ["read", "todowrite", "taskupdate", "todowrite"]
+        )
+        self.assertEqual(
+            [paso.detail for paso in pasos if paso.tool == "todowrite"], ["leer", "arreglar"]
+        )
         veredicto = conducta.juzgar(
             pasos,
             playbook=PLAYBOOK,
