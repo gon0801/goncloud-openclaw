@@ -903,6 +903,7 @@ class Sucesion(Mac):
     """SUA-04 (4.3): el estado vive en <state>/sucesion.json y el canario es un banco falso."""
 
     def plan(self, **kwargs):
+        kwargs.setdefault("enviar_aviso", lambda texto, **kw: {"enviado": True})
         return encargo.sucesion(state_root=self.state, checkout=self.checkout,
                                 opencode_bin=self.bin / "opencode", now=1_800_000_000.0, **kwargs)
 
@@ -941,8 +942,11 @@ class Sucesion(Mac):
         self.assertEqual((entry["actual"], entry["anterior"], entry["estado"]),
                          ("zai-coding-plan/glm-5.4-flash", "zai-coding-plan/glm-5.3-flash", "promovido"))
         self.assertIn("zai-coding-plan/glm-5.4-flash reemplazó a zai-coding-plan/glm-5.3-flash", answer["aviso"])
-        # F4: el aviso de la promoción queda pendiente hasta que G5 lo consuma.
-        self.assertIn("aviso pendiente de G5", answer["aviso"] + answer.get("avisoPendiente", ""))
+        # SUA-04 G5: el aviso sale por avisar.py (aquí, el de juguete que siempre manda):
+        # la línea queda con avisoEnviado y sin avisoPendiente.
+        entry = self.leer()["lines"]["zai-coding-plan/glm-{}-flash"]
+        self.assertTrue(entry.get("avisoEnviado"))
+        self.assertNotIn("avisoPendiente", answer)
         # G2 lo lee: un sucesion.json escrito por G3 pasa succession_actual y preparar lo usa.
         self.beat()
         self.assertEqual(self.preparar()["modelo"], "zai-coding-plan/glm-5.4-flash")
@@ -1107,6 +1111,180 @@ class Sucesion(Mac):
         self.assertTrue(marcador.exists(), "el banco inyectado no corrió")
         entry = self.leer()["lines"]["zai-coding-plan/glm-{}-flash"]
         self.assertEqual((entry["actual"], entry["estado"]), ("zai-coding-plan/glm-5.4-flash", "promovido"))
+
+
+import sqlite3 as _sqlite3
+
+
+def _hay_zstd():
+    """compression.zstd (Python 3.14+) o el binario zstd: el runner de CI trae otro Python."""
+    try:
+        from compression import zstd  # noqa: F401
+    except ImportError:
+        return shutil.which("zstd") is not None
+    return True
+
+
+def _comprimir(datos):
+    try:
+        from compression import zstd
+    except ImportError:
+        return subprocess.run(["zstd", "-c"], input=datos, capture_output=True, check=True,
+                              timeout=60).stdout
+    return zstd.compress(datos)
+
+
+def _base_telegram(ruta, *, session_key="agent:main:telegram:default:direct:6470689715",
+                   role="user", content="confirmo abrir mistral (mistral, subscription) por favor",
+                   comprimido=False):
+    ruta.parent.mkdir(parents=True, exist_ok=True)
+    ruta.unlink(missing_ok=True)
+    db = _sqlite3.connect(ruta)
+    db.execute("CREATE TABLE session_windows (session_id TEXT, session_key TEXT)")
+    db.execute("CREATE TABLE transcript_events (session_id TEXT, seq INTEGER, event_json TEXT, event_zstd BLOB)")
+    db.execute("INSERT INTO session_windows VALUES ('s-1', ?)", (session_key,))
+    evento = {"type": "message", "timestamp": 1792000000000,
+              "message": {"role": role, "content": content}}
+    if comprimido:
+        # Como en la base real: los eventos grandes van en event_zstd con event_json nulo.
+        db.execute("INSERT INTO transcript_events VALUES ('s-1', 7, NULL, ?)",
+                   (_comprimir(json.dumps(evento).encode()),))
+    else:
+        db.execute("INSERT INTO transcript_events VALUES ('s-1', 7, ?, NULL)", (json.dumps(evento),))
+    db.commit()
+    db.close()
+
+
+class Solicitar(Mac):
+    def test_solicitar_escribe_la_solicitud_y_contesta_la_frase(self):
+        answer = encargo.solicitar("mistral", "mistral", "subscription",
+                                   state_root=self.state, checkout=self.checkout, now=1_800_000_000.0)
+        self.assertEqual(answer["frase"], "confirmo abrir mistral (mistral, subscription)")
+        doc = json.loads((self.state / "solicitudes" / "mistral.json").read_text())
+        self.assertEqual((doc["nombre"], doc["proveedor"], doc["cobro"], doc["frase"]),
+                         ("mistral", "mistral", "subscription", answer["frase"]))
+        # No toca la política.
+        self.assertEqual(self.policy().unreadable, None)
+        self.assertNotIn("mistral", [g.name for g in self.policy().grants])
+
+    def test_solicitar_no_escribe_fuera_de_solicitudes(self):
+        # F1 de DeepSeek en #321: el id armaba la ruta tal cual y ../host pisaba host.json.
+        fuera = self.root / "fuera"
+        for provider in ("../host", str(fuera), "a/b", ""):
+            with self.subTest(provider=provider):
+                answer = encargo.solicitar("mistral", provider, "subscription",
+                                           state_root=self.state, checkout=self.checkout,
+                                           now=1_800_000_000.0)
+                self.assertFalse(answer["ok"])
+                self.assertIn("inválido", answer["causa"])
+        self.assertFalse((self.state / "solicitudes").exists())
+        self.assertFalse((self.state / "host.json").exists())
+        self.assertFalse(fuera.with_suffix(".json").exists())
+
+    def test_solicitar_se_niega_si_el_nombre_es_un_cerrado(self):
+        # F3 de DeepSeek en #321: como permitir, mira el nombre y el id.
+        answer = encargo.solicitar("opencode-go", "otro-id", "subscription",
+                                   state_root=self.state, checkout=self.checkout, now=1_800_000_000.0)
+        self.assertFalse(answer["ok"])
+        self.assertIn("cerrado", answer["causa"])
+        self.assertFalse((self.state / "solicitudes").exists())
+
+    def test_solicitar_se_niega_si_el_id_ya_es_de_otro_permiso(self):
+        # F7 de DeepSeek en #321 (push 2): permitir moriría después con "dos permisos ligan
+        # el id"; la frase que se le pediría a David no se puede aplicar.
+        answer = encargo.solicitar("otro", "zai-coding-plan", "subscription",
+                                   state_root=self.state, checkout=self.checkout, now=1_800_000_000.0)
+        self.assertFalse(answer["ok"])
+        self.assertIn("ya está ligado", answer["causa"])
+        self.assertFalse((self.state / "solicitudes").exists())
+
+    def test_solicitar_se_niega_a_un_cerrado(self):
+        answer = encargo.solicitar("go", "opencode-go", "subscription",
+                                   state_root=self.state, checkout=self.checkout, now=1_800_000_000.0)
+        self.assertFalse(answer["ok"])
+        self.assertIn("cerrado", answer["causa"])
+        self.assertFalse((self.state / "solicitudes").exists())
+
+
+class TelegramCitation(Mac):
+    def fake_ssh(self, argv, entrada=None, timeout=None):
+        # El ssh de juguete corre lo que recibe por stdin donde apunta HOME (zsh si está).
+        import subprocess as _sp
+        pedido = argv[-1].strip("'")
+        # La Mini corre Python 3.9: sin compression.zstd. Un paquete compression que no
+        # importa, por delante de la biblioteca estándar, la imita (F2 de DeepSeek en #321).
+        sin_zstd = self.root / "py39"
+        (sin_zstd / "compression").mkdir(parents=True, exist_ok=True)
+        (sin_zstd / "compression" / "__init__.py").write_text(
+            "raise ImportError('Python 3.9 no trae compression')\n")
+        env = {**os.environ, "HOME": str(self.toy_home), "PYTHONPATH": str(sin_zstd)}
+        hecho = _sp.run([sys.executable, "-", pedido], input=entrada, capture_output=True,
+                        text=True, env=env)
+        return hecho.returncode, hecho.stdout, hecho.stderr
+
+    def setUp(self):
+        super().setUp()
+        self.toy_home = self.root / "mini"
+        _base_telegram(self.toy_home / ".openclaw/agents/main/agent/openclaw-agent.sqlite")
+
+    def permitir_tg(self, **cambios_db):
+        (self.bin / "listing").write_text(LISTING + "mistral/mistral-large\n")
+        _base_telegram(self.toy_home / ".openclaw/agents/main/agent/openclaw-agent.sqlite", **cambios_db)
+        return encargo.permitir(
+            "mistral", provider="mistral", billing="subscription", ref="tg:s-1:7",
+            quote="confirmo abrir mistral (mistral, subscription)",
+            state_root=self.state, checkout=self.checkout, prompts=self.prompts,
+            opencode_bin=self.bin / "opencode", correr=self.fake_ssh)
+
+    def test_pasa_con_la_sesion_del_dueno_y_rol_user(self):
+        row = self.permitir_tg()
+        self.assertNotIsInstance(row, str)
+        policy = self.policy()
+        glm = policy.grant_for("mistral")
+        self.assertEqual(glm.decision.ref, "tg:s-1:7")
+
+    @unittest.skipUnless(_hay_zstd(), "sin compression.zstd ni el binario zstd no hay fila comprimida")
+    def test_pasa_con_el_evento_comprimido(self):
+        # F2 de DeepSeek en #321: ~39% de las filas de main van en event_zstd y la Mini no
+        # descomprime; el evento viaja en base64 y se descomprime en la Mac.
+        row = self.permitir_tg(comprimido=True)
+        self.assertNotIsInstance(row, str, row)
+        self.assertEqual(self.policy().grant_for("mistral").decision.ref, "tg:s-1:7")
+
+    def test_un_seq_de_mas_de_18_digitos_y_una_cita_vacia_se_niegan_limpio(self):
+        # F8 y F9 de DeepSeek en #321 (push 2): el seq cabe en un entero de sqlite, como
+        # PROMPT_REF, y una cita vacía no coteja (en "" cualquier texto la contiene).
+        (self.bin / "listing").write_text(LISTING + "mistral/mistral-large\n")
+        for ref, quote, motivo in (("tg:s-1:" + "9" * 25, "confirmo abrir mistral (mistral, subscription)",
+                                    "no tiene la forma"),
+                                   ("tg:s-1:7", "  ", "la cita está vacía")):
+            with self.subTest(ref=ref, quote=quote):
+                row = encargo.permitir(
+                    "mistral", provider="mistral", billing="subscription", ref=ref, quote=quote,
+                    state_root=self.state, checkout=self.checkout, prompts=self.prompts,
+                    opencode_bin=self.bin / "opencode", correr=self.fake_ssh)
+                self.assertIsInstance(row, str)
+                self.assertIn(motivo, row)
+
+    def test_un_seq_que_no_es_un_numero_ascii_se_niega_limpio(self):
+        # F5 de DeepSeek en #321: "²".isdigit() es verdadero e int("²") revienta.
+        (self.bin / "listing").write_text(LISTING + "mistral/mistral-large\n")
+        row = encargo.permitir(
+            "mistral", provider="mistral", billing="subscription", ref="tg:s-1:\u00b2",
+            quote="confirmo abrir mistral (mistral, subscription)",
+            state_root=self.state, checkout=self.checkout, prompts=self.prompts,
+            opencode_bin=self.bin / "opencode", correr=self.fake_ssh)
+        self.assertIsInstance(row, str)
+        self.assertIn("no tiene la forma", row)
+
+    def test_se_niega_con_otra_sesion_con_assistant_y_con_frase_ausente(self):
+        row = self.permitir_tg(session_key="agent:main:telegram:default:direct:999")
+        self.assertIsInstance(row, str)
+        self.assertIn("no coteja", row)
+        row = self.permitir_tg(role="assistant")
+        self.assertIsInstance(row, str)
+        row = self.permitir_tg(content="otra cosa entirely")
+        self.assertIsInstance(row, str)
 
 
 class Cerrar(Mac):
