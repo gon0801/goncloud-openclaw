@@ -41,7 +41,7 @@ RECETA_POR_DEFECTO = (
     Path(__file__).resolve().parents[2] / "docs/evidence/agent-work/recetas-repos.json"
 )
 SCHEMA_RECETA = "agent-work.recetas.v1"
-CAMPOS_PR = "number,isDraft,headRefOid,state,statusCheckRollup,comments"
+CAMPOS_PR = "number,isDraft,headRefOid,state,comments"
 CONSULTA_THREADS = (
     "query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name)"
     "{pullRequest(number:$number){reviewThreads(first:100){nodes{isResolved"
@@ -542,7 +542,7 @@ def recolectar(gh_bin, repo: str, numero: int, head: str) -> VistaPR:
                 f"owner={owner}",
                 "-f",
                 f"name={name}",
-                "-f",
+                "-F",
                 f"number={numero}",
             ],
         ),
@@ -603,6 +603,10 @@ def cmd_mergear(gh_bin, receta, numero: int, head: str) -> int:
         raise Falla(f"la receta de {receta.repo} no trae metodo squash: {receta.metodo}")
     vista = recolectar(gh_bin, receta.repo, numero, head)
     if vista.estado == "MERGED":
+        if vista.head_real != head:
+            # DeepSeek F1 en #330: un PR mergeado con otro head no certifica el pedido.
+            print(canonico({"mergeado": False, "faltan": ["head-movido"]}))
+            return 1
         estado, oid = releer_merge(gh_bin, receta.repo, numero)
         if estado != "MERGED":
             raise Falla(f"el PR {numero} dejó de estar MERGED en la relectura: {estado}")

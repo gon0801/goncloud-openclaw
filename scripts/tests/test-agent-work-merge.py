@@ -34,7 +34,7 @@ d=$(dirname "$0")
 oid=0f9cafe000000000000000000000000000000000
 printf '%s\n' "$*" >> "$d/argv.log"
 case "$*" in
-  'pr view '*' --json number,isDraft,headRefOid,state,statusCheckRollup,comments')
+  'pr view '*' --json number,isDraft,headRefOid,state,comments')
     cat "$d/store/pr$3.json" ;;
   'pr view '*' --json state,mergeCommit')
     if [ -f "$d/store/mergeado.json" ]; then
@@ -56,7 +56,13 @@ case "$*" in
   */status*)
     cat "$d/store/status.json" ;;
   'api graphql'*)
-    cat "$d/store/threads.json" ;;
+    # Como el gh real: number tipado con -F; con -f llega como texto y GraphQL lo rechaza
+    # (medido contra #330: "Variable $number of type Int! was provided invalid value").
+    case "$*" in
+      *'-F number='*) cat "$d/store/threads.json" ;;
+      *) printf 'gh: Variable $number of type Int! was provided invalid value\n' >&2
+         exit 1 ;;
+    esac ;;
   */pulls/*/comments*)
     cat "$d/store/inline.json" ;;
   */collaborators/*/permission*)
@@ -415,6 +421,19 @@ class MergeConToy(unittest.TestCase):
         )
 
     # --- mergear ---------------------------------------------------------------
+
+    def test_mergear_sobre_un_pr_ya_mergeado_con_otro_head_no_certifica(self):
+        # DeepSeek F1 en #330: si el PR ya está MERGED con otro head, el recibo no puede
+        # certificar como mergeado un sha que nunca entró.
+        pr = self.escenario_verde()
+        pr["state"] = "MERGED"
+        pr["headRefOid"] = "b" * 40
+        self.guardar(321, pr)
+        codigo, salida, error = self.correr(
+            "mergear", "321", "--sha", HEAD321, "--repo", REPO, "--receta", str(RECETA)
+        )
+        self.assertNotEqual(codigo, 0)
+        self.assertIn("head-movido", salida + error)
 
     def test_mergear_mergea_deja_el_recibo_y_la_recorrida_es_ya_estaba(self):
         pr = self.escenario_verde()
