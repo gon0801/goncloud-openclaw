@@ -22,6 +22,8 @@ include = [
     "scripts/tests/test-agent-work-flota.py",
     "scripts/tests/test-agent-work-conducta.py",
     "scripts/tests/test-agent-work-publicar.py",
+    "scripts/agent-work/merge.py",
+    "scripts/tests/test-agent-work-merge.py",
 ]
 target-version = "py39"
 line-length = 100

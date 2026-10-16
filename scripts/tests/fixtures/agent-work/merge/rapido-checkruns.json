@@ -1,0 +1,14 @@
+{
+ "total_count": 9,
+ "check_runs": [
+  {"name": "clasificador", "status": "completed", "conclusion": "success", "started_at": "2026-10-16T11:00:24Z"},
+  {"name": "shards (1/5, 1)", "status": "completed", "conclusion": "skipped", "started_at": "2026-10-16T11:00:25Z"},
+  {"name": "shards (2/5, 2)", "status": "completed", "conclusion": "skipped", "started_at": "2026-10-16T11:00:25Z"},
+  {"name": "shards (3/5, 3)", "status": "completed", "conclusion": "skipped", "started_at": "2026-10-16T11:00:25Z"},
+  {"name": "shards (4/5, 4)", "status": "completed", "conclusion": "skipped", "started_at": "2026-10-16T11:00:25Z"},
+  {"name": "shards (5/5, 5)", "status": "completed", "conclusion": "skipped", "started_at": "2026-10-16T11:00:25Z"},
+  {"name": "ci-contract", "status": "completed", "conclusion": "success", "started_at": "2026-10-16T11:00:26Z"},
+  {"name": "reconcile", "status": "completed", "conclusion": "success", "started_at": "2026-10-16T11:00:37Z"},
+  {"name": "gate", "status": "completed", "conclusion": "success", "started_at": "2026-10-16T11:02:24Z"}
+ ]
+}
