@@ -33,7 +33,9 @@ responder éxito; reconstruye la proyección si quedó atrás tras una caída.
 `sha` y `baseSha` son commits hexadecimales completos de 40 caracteres;
 `evidence` tiene `{ref,sha}` con una referencia relativa `evidence/...` y el
 SHA-256 del archivo de evidencia inmutable. LISTO, VEREDICTO, intento y número
-de ronda deben coincidir. El silencio del panel tmux y un aviso atendido no son
+de ronda deben coincidir. La evidencia de un veredicto puede ser, en vez de la
+línea VEREDICTO, un documento `hallazgos.v1` (SUA-05, 4.2): con cualquier
+hallazgo para `cambios` y sin bloqueantes para `aprobado`. El silencio del panel tmux y un aviso atendido no son
 veredictos. El historial se consulta con
 `runbook.progress.events.get({corrida,after,limit})` (`operator.read`).
 

@@ -192,7 +192,13 @@ else:
         identifier = json.loads(result.stdout)["id"]
         event = json.loads((self.state / "runs" / "run-1" / "queue" / (identifier + ".json")).read_text())
         self.assertEqual(event["verdict"], "cambios")
-        # Un approved sigue pidiendo su línea VEREDICTO, y un JSON que no es hallazgos.v1 no pasa.
+        # Un approved con un hallazgos.v1 sin bloqueantes pasa (DeepSeek F5 en #328); con un
+        # bloqueante, o un JSON que no es hallazgos.v1, no.
+        limpio = {"schema": "hallazgos.v1", "findings": [dict(hallazgos["findings"][0], bloqueante=False)]}
+        self.input.write_text(json.dumps(limpio) + "\n")
+        self.cli("record-verdict", "--corrida", "run-1", "--carril", "B3", "--intento", "try-1",
+                 "--ronda", "9", "--sha", SHA, "--verdict", "approved",
+                 "--evidence-file", str(self.input))
         for verdict, texto in (("approved", json.dumps(hallazgos)), ("changes", '{"otra": "cosa"}')):
             with self.subTest(verdict=verdict):
                 self.input.write_text(texto + "\n")

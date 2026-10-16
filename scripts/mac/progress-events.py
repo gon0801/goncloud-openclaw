@@ -152,14 +152,18 @@ def event_id(kind, corrida, carril, intento, ronda):
     return "evt-" + hashlib.sha256(key).hexdigest()[:32]
 
 
-def es_hallazgos(content):
-    """Si la evidencia es un documento hallazgos.v1: un objeto con ese schema y su lista."""
+def es_hallazgos(content, sin_bloqueantes=False):
+    """Si la evidencia es un documento hallazgos.v1: un objeto con ese schema y su lista. Un
+    approved puede traer uno sin bloqueantes, como lo acepta el host (DeepSeek F5 en #328)."""
     try:
         documento = json.loads(content)
     except ValueError:
         return False
-    return (isinstance(documento, dict) and documento.get("schema") == "hallazgos.v1"
-            and isinstance(documento.get("findings"), list))
+    if not (isinstance(documento, dict) and documento.get("schema") == "hallazgos.v1"
+            and isinstance(documento.get("findings"), list)):
+        return False
+    return not sin_bloqueantes or not any(
+        isinstance(h, dict) and h.get("bloqueante") is True for h in documento["findings"])
 
 
 def record(args):
@@ -191,7 +195,8 @@ def record(args):
         raise ValueError("evidencia LISTO no corresponde al SHA")
     if (not args.historical and kind == "round.verdict"
             and not re.search(r"(?m)^VEREDICTO(?:\s|$)", content)
-            and not (verdict == "cambios" and es_hallazgos(content))):
+            and not (verdict == "cambios" and es_hallazgos(content))
+            and not (verdict == "aprobado" and es_hallazgos(content, sin_bloqueantes=True))):
         # El artefacto de un changes es un hallazgos.v1 (SUA-05, 4.2): es su propia marca,
         # porque ninguna línea de un JSON puede empezar con VEREDICTO (DeepSeek F3 en #328).
         raise ValueError("falta VEREDICTO en evidencia")
