@@ -9,7 +9,6 @@ python3 scripts/tests/test-agent-work-agentes.py
 python3 scripts/tests/test-agent-work-lineas.py
 python3 scripts/tests/test-agent-work-avisar.py
 python3 scripts/tests/test-agent-work-reporte.py
-python3 scripts/tests/test-agent-work-avisar.py
 python3 scripts/tests/test-agent-work-sucesion.py
 python3 scripts/tests/test-agent-work-conducta.py
 python3 scripts/tests/test-agent-work-contexto.py

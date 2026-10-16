@@ -356,47 +356,16 @@ class PublicadorNativo(unittest.TestCase):
         self.assertEqual(self.estado_del_home()["generacion"], 1)
 
     def test_un_cierre_sigue_cerrado_tras_la_reversa(self):
-        # I19 (diseño 4.10): la política de proveedores vive fuera del paquete que se
-        # publica; ni aplicar ni revertir la tocan, y el cierre sigue ahí.
-        fixture = (
-            self.tmp
-            / "checkout-de-juguete"
-            / "docs"
-            / "evidence"
-            / "agent-work"
-            / "proveedores-permitidos.json"
-        )
-        fixture.parent.mkdir(parents=True)
-        fixture.write_text(
-            json.dumps(
-                {
-                    "schema": "agent-work.provider-policy.v1",
-                    "providers": [],
-                    "closed": [
-                        {
-                            "provider": "proveedor-cerrado",
-                            "decision": {
-                                "by": "David",
-                                "on": "2026-10-16",
-                                "ref": "1",
-                                "quote": "cerrado",
-                            },
-                        }
-                    ],
-                },
-                indent=2,
-                ensure_ascii=False,
-            )
-            + "\n",
-            encoding="utf-8",
-        )
-        foto = fixture.read_bytes()
-        self.armar()
-        self.publicar("leer")
-        self.publicar("aplicar")
-        self.assertEqual(fixture.read_bytes(), foto)
-        self.publicar("revertir")
-        self.assertEqual(fixture.read_bytes(), foto)
+        # I19 (diseño 4.10): la política de proveedores vive fuera del paquete. Ni la
+        # publicación la lleva ni aplicar o revertir la escriben en el home, así que una
+        # reversa del paquete no puede reabrir un proveedor cerrado (F2 de DeepSeek en
+        # #322: la versión anterior comparaba un archivo que el publicador nunca abre).
+        politica = "proveedores-permitidos.json"
+        publicacion = self.armar()
+        self.assertEqual([p for p in publicacion.rglob(politica)], [])
+        for paso in ("leer", "aplicar", "revertir"):
+            self.publicar(paso)
+            self.assertEqual([p for p in self.home.rglob(politica)], [], paso)
 
     def test_un_alta_no_cambia_a_los_que_ya_estaban(self):
         # I19 (diseño 4.10): un alta publica al nuevo sin tocar a los que ya estaban:
