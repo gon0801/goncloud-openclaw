@@ -9,11 +9,16 @@ Biblioteca estándar.
 
 from __future__ import annotations
 
+import os
 import subprocess
 
 
 def avisar(texto: str, *, policy, openclaw_bin, dry_run: bool = False) -> dict:
     """{"enviado": bool, ...}: el resultado del envío, no el texto por stdout."""
+    # Compuerta (B1): solo manda con AGENT_WORK_AVISOS=1, que pone el plist de la
+    # sucesión y nadie más. Una prueba o una corrida a mano no le escribe a David.
+    if os.environ.get("AGENT_WORK_AVISOS") != "1":
+        return {"enviado": False, "causa": "avisos apagados (AGENT_WORK_AVISOS no es 1)"}
     destino = getattr(policy, "owner_telegram_chat", None)
     if not destino:
         return {"enviado": False, "causa": "la política no trae ownerTelegramChat"}
