@@ -30,7 +30,7 @@ LINEA_SOURCE="source ~/bin/agent-tmux-shell.zsh"
 # Manifiesto binario: fuentes relativas a scripts/mac, destino ~/bin (cp -p
 # conserva el +x).
 BINS="progress-events.py agent-tmux.sh agent-tmux-shell.zsh tmux-activity-watch.sh claude-stop-openclaw-event.sh shot.sh tablero-trabajo.sh"
-AGENT_WORK_FILES="brief.py contexto.py contracts.py flota.py host.py modelos.py native_gateway.py progress_bridge.py resources.py routing.py sesion.py spool.py cutover.py"
+AGENT_WORK_FILES="brief.py contexto.py contracts.py flota.py host.py lineas.py modelos.py native_gateway.py progress_bridge.py resources.py routing.py sesion.py spool.py cutover.py"
 
 di() { printf '%s\n' "$1"; }
 falla() { printf 'instalar-mac: error: %s\n' "$1" >&2; exit 1; }

@@ -162,11 +162,11 @@ class Proveedores(Mac):
         lines = out.splitlines()
         self.assertEqual((code, len(lines)), (0, 12))
         self.assertEqual(lines[0].split(), ["nombre", "proveedor", "decisión", "cobro", "sesión", "lista", "entran",
-                                            "cita"])
+                                            "línea", "desde", "efectivo", "cita"])
         self.assertEqual(lines[7].split(), ["qwen", "alibaba-token-plan", "permitido", "subscription", "con-sesion",
-                                            "27", "6", "David", "2026-10-12", "P10867"])
-        self.assertEqual(lines[9].split(), ["-", "opencode-go", "cerrado", "-", "con-sesion", "31", "-", "David",
-                                            "2026-10-12", "P10845"])
+                                            "27", "6", "-", "-", "-", "David", "2026-10-12", "P10867"])
+        self.assertEqual(lines[9].split(), ["-", "opencode-go", "cerrado", "-", "con-sesion", "31", "-", "-", "-",
+                                            "-", "David", "2026-10-12", "P10845"])
         self.assertNotIn("sin-decision", out)
         self.assertEqual(self.argv_log(), ["--version", "models"])
         self.cli("proveedores")
@@ -322,10 +322,12 @@ class Preparar(Mac):
         self.assertLess(time.monotonic() - started, 5)
 
     def test_a_request_without_model_is_refused_when_the_default_provider_has_no_grant(self):
+        # SUA-04 (4.2): sin el permiso de defaultGrant la política no carga, porque defaultGrant
+        # nombra un permiso que ya no está. Antes el id por omisión vivía fijo en el código.
         self.edit_policy(lambda doc: doc.update(providers=[doc["providers"][7]], closed=[]))
-        self.assertEqual(self.preparar(), {
-            "ok": False, "causa": "proveedor-no-permitido", "accion": "no-registrar", "candidatos": [],
-            "frase": "zai-coding-plan no tiene permiso para encargos. Permitidos con sesión: deepseek."})
+        answer = self.preparar()
+        self.assertEqual((answer["ok"], answer["causa"]), (False, "politica-ilegible"))
+        self.assertIn("defaultGrant", answer["frase"])
 
     def test_the_folder_must_be_a_git_root_with_a_commit_under_the_operators_root(self):
         self.beat()
@@ -366,6 +368,26 @@ class Preparar(Mac):
             "host": {"politica": self.policy().digest[:12], "cli": "1.18.35"}})
         self.beat(canary=True, beatAt=time.time() - 121)
         self.assertEqual(self.preparar()["causa"], "ruta-no-certificada", "a canary host that died still opened it")
+
+    def test_preparar_without_a_model_uses_since_and_then_the_promoted_actual(self):
+        # SUA-04 (4.2, I10): sin sucesion.json corre el since de glm; con el actual de
+        # sucesion.json corre ese, sin tocar proveedores-permitidos.json.
+        self.beat()
+        self.assertEqual(self.preparar()["modelo"], "zai-coding-plan/glm-5.3-flash")
+        (self.bin / "listing").write_text(LISTING + "zai-coding-plan/glm-5.4-flash\n")
+        (self.state / "catalogo.json").unlink()
+        (self.state / "sucesion.json").write_text(json.dumps({
+            "schema": "agent-work.succession.v1",
+            "lines": {"zai-coding-plan/glm-{}-flash": {"actual": "zai-coding-plan/glm-5.4-flash"}}}))
+        answer = self.preparar()
+        self.assertEqual(answer["modelo"], "zai-coding-plan/glm-5.4-flash")
+        self.assertEqual(answer["briefArgs"][-1], "zai-coding-plan/glm-5.4-flash")
+        rows = encargo.proveedores(state_root=self.state, checkout=self.checkout,
+                                   opencode_bin=self.bin / "opencode")
+        glm = rows[0]
+        self.assertEqual((glm.line, glm.since, glm.efectivo, glm.promovido),
+                         ("zai-coding-plan/glm-{}-flash", "zai-coding-plan/glm-5.3-flash",
+                          "zai-coding-plan/glm-5.4-flash", True))
 
     def test_a_live_host_with_the_same_policy_and_cli_gets_the_brief_arguments(self):
         self.beat()
@@ -627,6 +649,21 @@ class Perfiles(Mac):
                 self.assertIn(campo, respuesta["error"], f"el mensaje no nombra {campo}")
 
 class Permitir(Mac):
+    def test_rebinding_glm_to_another_provider_drops_its_default_and_the_default_grant(self):
+        # F1: la línea del default es del proveedor viejo; al re-ligar el permiso el
+        # default sale, y con él defaultGrant, y la salida lo dice.
+        (self.bin / "listing").write_text(LISTING + "otro/glm-5.3-flash\n")
+        code, out, err, changed = self.permitir(
+            "glm", "--proveedor", "otro", "--cobro", "subscription", "--ref", "P10901",
+            "--cita", "ok, permite mistral para por CLI, cobra por suscripción")
+        self.assertEqual((code, changed), (0, True), err)
+        self.assertIn("se quitó también el modelo por omisión", err + out)
+        policy = self.policy()
+        glm = next(grant for grant in policy.grants if grant.name == "glm")
+        self.assertEqual((str(glm.provider), glm.default), ("otro", None))
+        self.assertIsNone(policy.default_grant)
+        self.assertIsNone(policy.unreadable)
+
     def permitir(self, *args):
         before = self.policy_path.read_bytes()
         code, out, err = self.cli("permitir", *args)
@@ -684,7 +721,7 @@ class Permitir(Mac):
         code, out, err, changed = self.permitir("kimi", "--proveedor", "kimi-code-plan-cn")
         self.assertEqual((code, changed), (0, True), err)
         self.assertEqual(out.splitlines()[1].split(), ["kimi", "kimi-code-plan-cn", "permitido", "subscription",
-                                                       "con-sesion", "4", "4", "David", "2026-10-12", "P10867"])
+                                                       "con-sesion", "4", "4", "-", "-", "-", "David", "2026-10-12", "P10867"])
         after = self.policy()
         self.assertEqual((after.grant_for("kimi-code-plan-cn").decision, after.closed), (before.grants[5].decision,
                                                                                          before.closed))
@@ -762,7 +799,7 @@ class Permitir(Mac):
         code, out, err, changed = self.permitir(*args)
         self.assertEqual((code, changed, err), (0, True, ""))
         self.assertEqual(out.splitlines()[1].split(), ["mistral", "(sin", "id)", "permitido", "subscription", "sin-id",
-                                                       "-", "-", "David", "2026-10-14", "P10901"])
+                                                       "-", "-", "-", "-", "-", "David", "2026-10-14", "P10901"])
         after = self.policy()
         self.assertIsNone(after.unreadable)
         self.assertEqual((after.grants[:8], after.closed), (before.grants, before.closed))
@@ -849,11 +886,36 @@ class Permitir(Mac):
 
 
 class Cerrar(Mac):
+    def test_closing_the_default_provider_also_drops_the_default(self):
+        # F1 de VEREDICTO-SUA04-G2-r1-bots: cerrar el proveedor del modelo por omisión es el
+        # freno de emergencia y no puede quedarse sin escribir. El documento pierde
+        # defaultGrant, la política carga, y un preparar sin modelo da la frase nueva.
+        for args in (("--por", "coordinador", "--motivo", "prueba de freno"),
+                     ("--ref", "P10902", "--cita", "cierra muse para encargos")):
+            with self.subTest(args=args):
+                code, out, err = self.cli("cerrar", "zai-coding-plan", *args)
+                self.assertEqual(code, 0, err)
+                self.assertIn("se quitó también el modelo por omisión", err + out)
+                policy = self.policy()
+                self.assertIsNone(policy.unreadable)
+                self.assertIsNone(policy.default_grant)
+                self.assertIn("zai-coding-plan", policy.closed)
+                self.assertNotIn("glm", [grant.name for grant in policy.grants])
+                self.beat()
+                answer = self.preparar()
+                self.assertEqual((answer["ok"], answer["causa"]), (False, "sin-modelo-por-omision"))
+                self.assertEqual(answer["frase"],
+                                 "no hay modelo por omisión: el permiso que lo daba se cerró; "
+                                 "pide el encargo con --modelo")
+                self.assertEqual(answer["accion"], "preguntar-a-david")
+                # El siguiente subTest parte de la política íntegra otra vez.
+                self.setUp()
+
     def test_closing_removes_the_grant_and_leaves_davids_words(self):
         code, out, err = self.cli("cerrar", "meta", "--ref", "P10902", "--cita", "cierra muse para encargos")
         self.assertEqual((code, err), (0, ""))
-        self.assertEqual(out.splitlines()[1].split(), ["-", "meta", "cerrado", "-", "con-sesion", "6", "-", "David",
-                                                       "2026-10-15", "P10902"])
+        self.assertEqual(out.splitlines()[1].split(), ["-", "meta", "cerrado", "-", "con-sesion", "6", "-", "-", "-",
+                                                       "-", "David", "2026-10-15", "P10902"])
         policy = self.policy()
         self.assertEqual(([grant.name for grant in policy.grants], sorted(policy.closed)),
                          (["glm", "claude", "grok", "gpt", "kimi", "qwen", "deepseek"],
@@ -871,8 +933,8 @@ class Cerrar(Mac):
         (self.bin / "version").write_text("")
         code, out, err = self.cli("cerrar", "meta", "--ref", "P10902", "--cita", "cierra muse para encargos")
         self.assertEqual(code, 0, err)
-        self.assertEqual(out.splitlines()[1].split(), ["-", "meta", "cerrado", "-", "sin-catalogo", "-", "-", "David",
-                                                       "2026-10-15", "P10902"])
+        self.assertEqual(out.splitlines()[1].split(), ["-", "meta", "cerrado", "-", "sin-catalogo", "-", "-", "-", "-",
+                                                       "-", "David", "2026-10-15", "P10902"])
         self.assertIn("opencode no contestó", err)
         policy = self.policy()
         self.assertEqual((policy.grant_for("meta"), policy.closed["meta"].decision.ref), (None, "P10902"))
@@ -884,7 +946,8 @@ class Cerrar(Mac):
         code, out, err = self.cli("cerrar", "xai", "--por", "Claude en la Mac", "--motivo", "gasto que nadie pidió en xai")
         self.assertEqual(code, 0, err)
         today = time.strftime("%Y-%m-%d", time.gmtime())
-        self.assertEqual(out.splitlines()[1].split(), ["-", "xai", "cerrado", "-", "con-sesion", "13", "-", "Claude",
+        self.assertEqual(out.splitlines()[1].split(), ["-", "xai", "cerrado", "-", "con-sesion", "13", "-", "-", "-",
+                                                       "-", "Claude",
                                                        "en", "la", "Mac", today, "sin-cotejar"])
         self.assertIn("sin cita cotejada. No es una decisión de David", err)
         closure = self.policy().closed["xai"].decision

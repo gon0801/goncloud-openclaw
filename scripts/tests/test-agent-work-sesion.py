@@ -1470,7 +1470,8 @@ class Decisions(Slot):
     def test_an_old_brief_is_refused_once_the_default_provider_loses_its_grant(self):
         self.edit_policy(lambda document: document.update(
             providers=[entry for entry in document["providers"] if entry["name"] == "deepseek"]))
-        self.refused("proveedor-no-permitido", "zai-coding-plan no tiene permiso para encargos.")
+        # SUA-04 (4.2): sin el permiso de defaultGrant la política no carga y nada corre.
+        self.refused("politica-ilegible", "La política de proveedores no se puede leer")
 
     def test_a_folder_outside_the_operators_root_is_refused(self):
         outside = self.root / "fuera"

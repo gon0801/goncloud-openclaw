@@ -274,7 +274,7 @@ def _may_not_write(perfil: dict, config: dict) -> PerfilRechazado | None:
 def plan_launch(assignment: object, brief: bytes, *, policy: ProviderPolicy, catalog: Catalog, route: Route,
                 cli_version: str, allowed_root: Path, run: RunDir, record: Path, operation: str,
                 canary: bool = False, package: Package | None = None,
-                now: "datetime | None" = None) -> "LaunchSpec | Refusal":
+                now: "datetime | None" = None, state_root: "Path | None" = None) -> "LaunchSpec | Refusal":
     """La frontera donde lo que llegó de R (JSON y bytes) se vuelve tipos del dominio. El primer rechazo
     corta. Un brief sin cabecera pide el modelo por omisión, que también pasa por authorize.
 
@@ -305,7 +305,8 @@ def plan_launch(assignment: object, brief: bytes, *, policy: ProviderPolicy, cat
                                    ahora=now, canario=canary)
         if admitted.causa is not None:
             return PerfilRechazado(admitted.causa, admitted.frase)
-    model = authorize(ExactModel(header.model) if header.model else DefaultModel(), policy, catalog)
+    model = authorize(ExactModel(header.model) if header.model else DefaultModel(), policy, catalog,
+                      state_root=state_root)
     if not isinstance(model, PermittedModel):
         return model
     config: dict | None = None
