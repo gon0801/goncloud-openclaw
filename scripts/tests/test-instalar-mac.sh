@@ -94,6 +94,18 @@ printf '%s' "$out" | grep -q "instalado" || fail "no imprime que quedo instalado
 grep -qF "$HOME/bin/tmux-activity-watch.sh" "$PL" || fail "el plist no apunta al HOME instalado"
 grep -qF "/Users/dn" "$PL" && fail "el plist trae /Users/dn a fuego"
 
+# (3b) la sucesion diaria de SUA-04 (4.3): su plist, a las 05:30, con el HOME de mentira.
+PL2="$HOME/Library/LaunchAgents/ai.goncloud.agent-work-sucesion.plist"
+[ -f "$PL2" ] || fail "falta el plist de sucesion generado"
+grep -qF "$HOME/dev/wt/agent-work-host/scripts/agent-work/encargo.py" "$PL2" || fail "el plist de sucesion no corre encargo.py del checkout del host"
+grep -qF "<string>sucesion</string>" "$PL2" || fail "el plist de sucesion no llama sucesion"
+grep -qF "<integer>5</integer>" "$PL2" || fail "el plist de sucesion no es a las 05"
+grep -qF "<integer>30</integer>" "$PL2" || fail "el plist de sucesion no es a las :30"
+grep -qF "en_US.UTF-8" "$PL2" || fail "el plist de sucesion no fija LANG"
+grep -qF "$HOME/Library/Logs/goncloud/agent-work-sucesion.log" "$PL2" || fail "el plist de sucesion no deja su log"
+grep -qF "/Users/dn" "$PL2" && fail "el plist de sucesion trae /Users/dn a fuego"
+grep -q "bootstrap gui/59999" "$LAUNCHLOG" || fail "no cargo la sucesion con gui/59999"
+
 # (4) el vigilante se carga con el uid inyectado.
 grep -q "bootstrap gui/59999" "$LAUNCHLOG" || fail "no cargo el vigilante con gui/59999"
 

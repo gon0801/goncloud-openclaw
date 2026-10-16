@@ -541,6 +541,10 @@ class BancoE2E(unittest.TestCase):
         where = ["--checkout", str(ROOT), "--state-root", str(self.state), "--opencode", OPENCODE,
                  "--workspace-root", str(self.root / "dev")]
         args = ["preparar", "--repo", str(self.repo)]
+        # SUA-04 (4.3): el canario de la sucesión pide un modelo exacto, y preparar lo
+        # autoriza como ExactModel y lo pone en briefArgs como --model.
+        if os.environ.get("AGENT_WORK_BANCO_MODELO"):
+            args += ["--modelo", os.environ["AGENT_WORK_BANCO_MODELO"]]
         if perfil:
             args += ["--perfil", perfil]
         out = io.StringIO()
@@ -660,7 +664,10 @@ class BancoE2E(unittest.TestCase):
         self.assertTrue(artifact.is_file())
         code, verdict = self.conducta_verdict(task_id, artifact, self.run_dir(task_id).context / PLAYBOOK)
         self.assertEqual((code, verdict), (0, {"ok": True, "razones": []}), verdict["razones"])
-        self.assert_package_and_flota(task_id, "ingenieria")
+        flota = self.assert_package_and_flota(task_id, "ingenieria")
+        if os.environ.get("AGENT_WORK_BANCO_MODELO"):
+            # El canario no sale verde con otro modelo (SUA-04, 4.3).
+            self.assertEqual(flota["model"]["id"], os.environ["AGENT_WORK_BANCO_MODELO"])
         # ingenieria escribe fuente: su trabajo se ve en el repo, y la suite que estaba roja pasa ahora.
         self.assertNotIn('"hola"', (self.repo / "saluda.py").read_text(), "el modelo no arregló el defecto")
         done = subprocess.run([sys.executable, "test-saluda.py"], cwd=self.repo, capture_output=True)

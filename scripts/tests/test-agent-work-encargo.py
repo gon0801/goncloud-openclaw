@@ -863,6 +863,105 @@ class Permitir(Mac):
                              "permite mistral para por CLI"], "billing", "glm")
 
 
+SUCESION = {"schema": "agent-work.succession.v1", "lines": {}}
+
+
+class Sucesion(Mac):
+    """SUA-04 (4.3): el estado vive en <state>/sucesion.json y el canario es un banco falso."""
+
+    def plan(self, **kwargs):
+        return encargo.sucesion(state_root=self.state, checkout=self.checkout,
+                                opencode_bin=self.bin / "opencode", now=1_800_000_000.0, **kwargs)
+
+    def escribir(self, doc):
+        (self.state / "sucesion.json").write_text(json.dumps(doc))
+
+    def leer(self):
+        return json.loads((self.state / "sucesion.json").read_text())
+
+    def test_plan_y_causas(self):
+        answer = self.plan()
+        glm = answer["lineas"][0]
+        self.assertEqual((glm["permiso"], glm["linea"], glm["actual"], glm["sucesor"], glm["causa"]),
+                         ("glm", "zai-coding-plan/glm-{}-flash", "zai-coding-plan/glm-5.3-flash", None, "sin-sucesor"))
+        (self.bin / "listing").write_text(LISTING + "zai-coding-plan/glm-5.4-flash-preview\n")
+        (self.state / "catalogo.json").unlink()
+        self.assertEqual(self.plan()["lineas"][0]["causa"], "no-estable")
+        (self.bin / "listing").write_text(LISTING + "zai-coding-plan/glm-5.4-flash\n")
+        (self.state / "catalogo.json").unlink()
+        glm = self.plan()["lineas"][0]
+        self.assertEqual((glm["sucesor"], glm["causa"]), ("zai-coding-plan/glm-5.4-flash", None))
+        # Un id de otra línea o de otro proveedor no es sucesor.
+        (self.bin / "listing").write_text(
+            LISTING + "zai-coding-plan/glm-5.4-flash\nzai-coding-plan/glm-5.4\notro/glm-9.9-flash\n")
+        (self.state / "catalogo.json").unlink()
+        self.assertEqual(self.plan()["lineas"][0]["sucesor"], "zai-coding-plan/glm-5.4-flash")
+
+    def test_aplicar_verde_promueve_y_el_preparar_usa_el_promovido(self):
+        (self.bin / "listing").write_text(LISTING + "zai-coding-plan/glm-5.4-flash\n")
+
+        def banco(env, cwd):
+            return 0, "test_x ... BANCO_E2E case=ingenieria task=t-1 conducta=ok\n\nOK\n"
+        answer = self.plan(aplicar=True, correr_banco=banco, runtime_source="/r")
+        self.assertEqual((answer["accion"], answer["promovido"]), ("promovido", "zai-coding-plan/glm-5.4-flash"))
+        entry = self.leer()["lines"]["zai-coding-plan/glm-{}-flash"]
+        self.assertEqual((entry["actual"], entry["anterior"], entry["estado"]),
+                         ("zai-coding-plan/glm-5.4-flash", "zai-coding-plan/glm-5.3-flash", "promovido"))
+        self.assertIn("zai-coding-plan/glm-5.4-flash reemplazó a zai-coding-plan/glm-5.3-flash", answer["aviso"])
+        # G2 lo lee: un sucesion.json escrito por G3 pasa succession_actual y preparar lo usa.
+        self.beat()
+        self.assertEqual(self.preparar()["modelo"], "zai-coding-plan/glm-5.4-flash")
+
+    def correr_aplicar(self, salida):
+        (self.bin / "listing").write_text(LISTING + "zai-coding-plan/glm-5.4-flash\n")
+        return self.plan(aplicar=True, correr_banco=lambda env, cwd: salida, runtime_source="/r")
+
+    def test_aplicar_rojo_rechaza_con_huella_y_la_huella_bloquea(self):
+        answer = self.correr_aplicar((1, "test_x ... FAIL\nBANCO_E2E case=ingenieria task=t-1 conducta=roja\nFAILED (failures=1)\n"))
+        entry = self.leer()["lines"]["zai-coding-plan/glm-{}-flash"]
+        self.assertEqual((answer["accion"], entry["estado"], entry["intentos"]),
+                         ("rechazado", "rechazado", 1))
+        self.assertTrue(entry["huellaDelCatalogo"])
+        self.assertEqual(self.plan()["lineas"][0]["causa"], "rechazado")
+        # A los 7 días con la misma huella se vuelve a abrir; con otro id en la línea, antes.
+        doc = self.leer()
+        doc["lines"]["zai-coding-plan/glm-{}-flash"]["ultimo"] = 1_800_000_000.0 - 8 * 86400
+        self.escribir(doc)
+        self.assertIsNone(self.plan()["lineas"][0]["causa"])
+
+    def test_aplicar_infraestructura_deja_pendiente_sin_intento(self):
+        answer = self.correr_aplicar((0, "test_x ... skipped 'sin AGENT_WORK_BANCO_REAL'\n\nOK (skipped=1)\n"))
+        entry = self.leer()["lines"]["zai-coding-plan/glm-{}-flash"]
+        self.assertEqual((answer["accion"], entry["estado"], entry["intentos"]), ("pendiente", "pendiente", 0))
+
+    def test_revertir_vuelve_a_anterior_y_no_se_libera_a_los_7_dias(self):
+        (self.bin / "listing").write_text(LISTING + "zai-coding-plan/glm-5.4-flash\n")
+        doc = {"schema": "agent-work.succession.v1", "lines": {"zai-coding-plan/glm-{}-flash": {
+            "actual": "zai-coding-plan/glm-5.4-flash", "anterior": "zai-coding-plan/glm-5.3-flash",
+            "candidato": None, "estado": "promovido", "causa": None, "intentos": 0,
+            "ultimo": 1_800_000_000.0, "huellaDelCatalogo": "x", "evidencia": None}}}
+        self.escribir(doc)
+        answer = self.plan(revertir="zai-coding-plan/glm-{}-flash")
+        entry = self.leer()["lines"]["zai-coding-plan/glm-{}-flash"]
+        self.assertEqual((answer["accion"], entry["actual"], entry["estado"], entry["causa"]),
+                         ("revertido", "zai-coding-plan/glm-5.3-flash", "rechazado", "revertido por el operador"))
+        doc = self.leer()
+        doc["lines"]["zai-coding-plan/glm-{}-flash"]["ultimo"] = 1_800_000_000.0 - 30 * 86400
+        self.escribir(doc)
+        self.assertEqual(self.plan()["lineas"][0]["causa"], "revertido por el operador")
+
+    def test_el_host_ocupado_no_corre_nada(self):
+        (self.bin / "listing").write_text(LISTING + "zai-coding-plan/glm-5.4-flash\n")
+        self.beat(slot="running", taskId="t-1", model="zai-coding-plan/glm-5.3", since=time.time())
+        llamado = []
+        answer = encargo.sucesion(state_root=self.state, checkout=self.checkout,
+                                  opencode_bin=self.bin / "opencode", now=time.time(), aplicar=True,
+                                  correr_banco=lambda env, cwd: llamado.append(1) or (0, "OK"),
+                                  runtime_source="/r")
+        self.assertEqual((answer["accion"], llamado), ("host-ocupado", []))
+        self.assertFalse((self.state / "sucesion.json").exists())
+
+
 class Cerrar(Mac):
     def test_closing_the_default_provider_also_drops_the_default(self):
         # F1 de VEREDICTO-SUA04-G2-r1-bots: cerrar el proveedor del modelo por omisión es el

@@ -36,6 +36,9 @@ from typing import Callable, Iterator, Literal
 
 from contracts import HostBeat, RunDir, SessionRecord
 import contexto
+import hashlib
+import lineas
+from spool import SETTLED as OPERACIONES_CERRADAS
 from modelos import (MODEL_PATTERN, POLICY_FILE, PROVIDER, Billing, Catalog, CatalogStore, CatalogUnavailable,
                      ContextoIncompleto, Explicacion, HostDown, HostMismatch, ModelFilter, ModelId, ModelNotListed,
                      OperatorCitation, PerfilRechazado, PermittedModel, PolicyUnreadable, ProviderClosure,
@@ -527,6 +530,219 @@ def proveedores(*, state_root: Path, checkout: Path, refrescar: bool = False,
                     for provider in undecided))
 
 
+SUCESION_SCHEMA = "agent-work.succession.v1"
+_RECHAZO_BANCO = ("launch-failed", "conducta", "proveedor", "resultado", "mal formado",
+                  "does not yet include access", "sin-host", "flota sin modelo")
+
+
+def clasificar_banco(salida: str, rc: "int | None") -> str:
+    """Qué salió del canario (4.3): verde, rojo por el modelo o infraestructura.
+
+    Verde pide la línea del caso ingenieria y el OK del banco. Rojo pide el FAIL o el ERROR
+    del caso y una marca de que fue el modelo (un rechazo del proveedor, launch-failed,
+    conducta, un resultado mal formado). Todo lo demás —el caso saltado, el banco que no
+    arranca, un timeout (rc None)— es infraestructura y no cuenta como intento."""
+    if rc is None:
+        return "infraestructura"
+    caso = "BANCO_E2E case=ingenieria" in salida or "test_a_profiled_engineering" in salida
+    if "BANCO_E2E case=ingenieria" in salida and rc == 0 and "\nOK" in salida and "skipped" not in salida:
+        return "verde"
+    if caso and ("FAIL" in salida or "ERROR" in salida) and any(m in salida for m in _RECHAZO_BANCO):
+        return "rojo"
+    return "infraestructura"
+
+
+def _leer_sucesion(state_root: Path) -> dict:
+    path = Path(state_root) / "sucesion.json"
+    try:
+        doc = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {"schema": SUCESION_SCHEMA, "lines": {}}
+    if not isinstance(doc, dict) or doc.get("schema") != SUCESION_SCHEMA or not isinstance(doc.get("lines"), dict):
+        return {"schema": SUCESION_SCHEMA, "lines": {}}
+    return doc
+
+
+def _escribir_sucesion(state_root: Path, doc: dict) -> None:
+    """Escritura atómica con candado, como la caché del catálogo: se lee y se escribe con el
+    candado tomado, y el archivo entra por os.replace."""
+    path = Path(state_root) / "sucesion.json"
+    with _policy_lock(path):
+        fd, pending = tempfile.mkstemp(prefix=".sucesion-", dir=path.parent)
+        try:
+            with os.fdopen(fd, "wb") as stream:
+                stream.write((json.dumps(doc, indent=2, ensure_ascii=False) + "\n").encode())
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.replace(pending, path)
+        except BaseException:
+            Path(pending).unlink(missing_ok=True)
+            raise
+
+
+def _huella(ids_linea) -> str:
+    return hashlib.sha256("\n".join(sorted(ids_linea)).encode()).hexdigest()
+
+
+def _plan_linea(grant, catalog: Catalog, entry: dict, now: float) -> dict:
+    """Lo que haría sucesion con la línea de un permiso: su sucesor o la causa de no tenerlo."""
+    line, since = grant.default.line, str(grant.default.since)
+    actual = entry.get("actual") if isinstance(entry.get("actual"), str) else since
+    if lineas.parse(actual) is None or lineas.parse(actual)[0] != line:
+        actual = since
+    listados = catalog.of(grant.provider) if grant.provider is not None else frozenset()
+    admitidos = [str(m) for m in listados if grant.admits(m)]
+    en_linea = [i for i in admitidos if lineas.parse(i) and lineas.parse(i)[0] == line]
+    huella = _huella(en_linea)
+    sucesor = lineas.sucesor(actual, admitidos)
+    causa = None
+    if not listados:
+        causa, sucesor = "sin-sesion", None
+    elif sucesor is not None and entry.get("estado") == "rechazado" and entry.get("candidato") == sucesor:
+        if entry.get("causa") == "revertido por el operador":
+            if entry.get("huellaDelCatalogo") == huella:
+                causa = "revertido por el operador"
+        elif entry.get("huellaDelCatalogo") == huella and now - float(entry.get("ultimo") or 0) < 7 * 86400:
+            causa = "rechazado"
+        if causa:
+            sucesor = None
+    elif sucesor is None:
+        # No-estable: un id de la línea por encima del actual que parse no acepta (un
+        # -preview, una foto fechada): está en el catálogo pero no es sucesor.
+        version_actual = lineas.parse(actual)[1]
+        superiores = []
+        for candidato in admitidos:
+            if lineas.parse(candidato) is not None:
+                continue
+            limpio = re.sub(r"-(preview|exp|alpha|beta|free|latest)\b", "", candidato)
+            parsed = lineas.parse(limpio)
+            if parsed is not None and parsed[0] == line and lineas._above(parsed[1], version_actual):
+                superiores.append(candidato)
+        causa = "no-estable" if superiores else "sin-sucesor"
+    return {"permiso": grant.name, "linea": line, "actual": actual, "sucesor": sucesor,
+            "causa": causa, "huellaDelCatalogo": huella}
+
+
+def _host_ocupado(state_root: Path, now: float) -> bool:
+    """El chequeo del paso 1 de la ventana de SUA-03: el slot del host vivo y sus operaciones
+    abiertas en host.sqlite, en solo lectura."""
+    beat = latido(state_root, now)
+    if not isinstance(beat, HostBeat):
+        return False
+    if beat.slot == "running":
+        return True
+    path = Path(beat.spool) / "host.sqlite"
+    if not path.is_file():
+        return False
+    db = sqlite3.connect(f"{path.resolve().as_uri()}?mode=ro", uri=True)
+    try:
+        abiertas = db.execute(
+            f"SELECT count(*) FROM operations WHERE status NOT IN ({','.join('?' * len(OPERACIONES_CERRADAS))})",
+            OPERACIONES_CERRADAS).fetchone()[0]
+    except sqlite3.Error:
+        return False
+    finally:
+        db.close()
+    return abiertas > 0
+
+
+def _correr_banco_real(env_extra: dict, state_root: Path) -> "tuple[int | None, str]":
+    env = {**os.environ, **env_extra, "LANG": "en_US.UTF-8"}
+    try:
+        hecho = subprocess.run(
+            [sys.executable, "scripts/tests/test_agent_work_banco_e2e.py", "-v", "-k", "profiled_engineering"],
+            cwd=Path(__file__).resolve().parents[2], env=env, capture_output=True, text=True, timeout=1800)
+    except subprocess.TimeoutExpired as error:
+        return None, (error.stdout or b"").decode() if isinstance(error.stdout, bytes) else (error.stdout or "")
+    return hecho.returncode, hecho.stdout + hecho.stderr
+
+
+def sucesion(*, state_root: Path, checkout: Path, aplicar: bool = False, revertir: str | None = None,
+             now: float, opencode_bin: Path = OPENCODE_BIN, correr_banco=None,
+             runtime_source: str | None = None) -> dict:
+    """`encargo.py sucesion [--aplicar] [--revertir <línea>]` (SUA-04, 4.3). Escribe solo
+    sucesion.json, nunca la política. Sin banderas imprime lo que haría."""
+    policy = ProviderPolicy.load(Path(checkout) / POLICY_FILE)
+    if policy.unreadable is not None:
+        return {"ok": False, "causa": policy.unreadable}
+    doc = _leer_sucesion(state_root)
+    if revertir is not None:
+        entry = doc["lines"].get(revertir)
+        if not entry or not entry.get("anterior"):
+            return {"ok": False, "accion": "sin-revertir", "linea": revertir,
+                    "causa": "esa línea no tiene un anterior al que volver"}
+        revertido = entry["actual"]
+        entry.update({"actual": entry["anterior"], "anterior": None, "candidato": revertido,
+                      "estado": "rechazado", "causa": "revertido por el operador", "ultimo": now})
+        # La huella que bloquea al revertido es la del catálogo de hoy (paso 6): solo otro
+        # catálogo lo vuelve a abrir, no el paso de los días.
+        try:
+            catalog = CatalogStore(opencode_bin, state_root).current()
+            grant = next(g for g in policy.grants if g.default is not None and g.default.line == revertir)
+            en_linea = [str(m) for m in catalog.of(grant.provider) if grant.admits(m)
+                        and lineas.parse(str(m)) and lineas.parse(str(m))[0] == revertir]
+            entry["huellaDelCatalogo"] = _huella(en_linea)
+        except Exception:
+            pass
+        _escribir_sucesion(state_root, doc)
+        return {"ok": True, "accion": "revertido", "linea": revertir, "actual": entry["actual"]}
+    catalog = CatalogStore(opencode_bin, state_root).current()
+    planes = [_plan_linea(grant, catalog, doc["lines"].get(grant.default.line, {}), now)
+              for grant in policy.grants if grant.default is not None]
+    respuesta = {"ok": True, "accion": "plan", "lineas": planes}
+    if not aplicar:
+        return respuesta
+    elegido = next((p for p in planes if p["sucesor"]), None)
+    if elegido is None:
+        respuesta["accion"] = "nada-que-probar"
+        return respuesta
+    if _host_ocupado(state_root, now):
+        return {"ok": True, "accion": "host-ocupado",
+                "frase": "el host tiene un encargo en vuelo: no se corre ningún canario"}
+    line = elegido["linea"]
+    entry = dict(doc["lines"].get(line, {}))
+    entry.update({"actual": elegido["actual"], "anterior": entry.get("anterior"),
+                  "candidato": elegido["sucesor"], "estado": "probando", "causa": None,
+                  "intentos": int(entry.get("intentos") or 0), "ultimo": now,
+                  "huellaDelCatalogo": elegido["huellaDelCatalogo"], "evidencia": None})
+    doc["lines"][line] = entry
+    _escribir_sucesion(state_root, doc)
+    evidencia_dir = Path(state_root) / "sucesion-evidencia" / line.replace("/", "_") / elegido["sucesor"].replace("/", "_")
+    evidencia_dir.mkdir(parents=True, exist_ok=True)
+    env = {"AGENT_WORK_BANCO_REAL": "1", "AGENT_WORK_BANCO_MODELO": elegido["sucesor"],
+           "AGENT_WORK_BANCO_GUARDAR": str(evidencia_dir)}
+    if runtime_source or os.environ.get("AGENT_WORK_SUCESION_RUNTIME_SOURCE"):
+        env["AGENT_WORK_RUNTIME_SOURCE"] = runtime_source or os.environ["AGENT_WORK_SUCESION_RUNTIME_SOURCE"]
+    correr = correr_banco or _correr_banco_real
+    rc, salida = correr(env, Path(checkout))
+    (evidencia_dir / "banco.log").write_text(salida, encoding="utf-8")
+    clase = clasificar_banco(salida, rc)
+    doc = _leer_sucesion(state_root)
+    entry = doc["lines"][line]
+    entry["evidencia"] = str(evidencia_dir / "banco.log")
+    if clase == "verde":
+        entry.update({"anterior": entry["actual"], "actual": elegido["sucesor"], "candidato": None,
+                      "estado": "promovido", "causa": None, "ultimo": now})
+        aviso = (f"sucesion: {elegido['sucesor']} reemplazó a {elegido['actual']} en la línea {line}; "
+                 f"evidencia: {entry['evidencia']}")
+        entry["aviso"] = aviso
+        _escribir_sucesion(state_root, doc)
+        return {"ok": True, "accion": "promovido", "linea": line, "promovido": elegido["sucesor"],
+                "anterior": elegido["actual"], "aviso": aviso, "evidencia": entry["evidencia"]}
+    if clase == "rojo":
+        entry.update({"candidato": elegido["sucesor"], "estado": "rechazado",
+                      "causa": "canario rojo por el modelo", "intentos": int(entry.get("intentos") or 0) + 1,
+                      "ultimo": now})
+        _escribir_sucesion(state_root, doc)
+        return {"ok": True, "accion": "rechazado", "linea": line, "candidato": elegido["sucesor"],
+                "evidencia": entry["evidencia"]}
+    entry.update({"candidato": elegido["sucesor"], "estado": "pendiente", "causa": "infraestructura del banco",
+                  "ultimo": now})
+    _escribir_sucesion(state_root, doc)
+    return {"ok": True, "accion": "pendiente", "linea": line, "causa": "infraestructura del banco",
+            "evidencia": entry["evidencia"]}
+
+
 def citar(ref: str, quote: str, prompts: Path) -> "OperatorCitation | str":
     """Las palabras del operador, cotejadas contra el historial de prompts, o la razón por la que no valen.
 
@@ -865,6 +1081,10 @@ def _parser() -> argparse.ArgumentParser:
     state = commands.add_parser("estado", help="el latido del host de encargos, o lo que corrió una tarea")
     state.add_argument("--tarea", metavar="TASKID")
     commands.add_parser("perfiles", help="los perfiles del checkout y los agentes sin perfil, en una línea JSON")
+    sucesion_cmd = commands.add_parser("sucesion", help="la sucesión del modelo por omisión: qué haría, o --aplicar")
+    sucesion_cmd.add_argument("--aplicar", action="store_true", help="corre a lo más un canario y promueve o rechaza")
+    sucesion_cmd.add_argument("--revertir", metavar="LINEA", help="vuelve la línea a su anterior y la deja rechazada")
+    sucesion_cmd.add_argument("--runtime-source", help="AGENT_WORK_RUNTIME_SOURCE para el banco del canario")
     listing = commands.add_parser("proveedores", help="qué proveedores pueden correr, cómo cobran y qué falta")
     listing.add_argument("--refrescar", action="store_true", help="pide a opencode que vuelva a bajar su lista")
     allow = commands.add_parser("permitir", help="escribe un permiso, un filtro o el id de un permiso que existe")
@@ -948,8 +1168,15 @@ def _run_politica(args: argparse.Namespace, where: dict, now: float) -> int:
     return _show(args.command, outcome)
 
 
+def _run_sucesion(args: argparse.Namespace, where: dict, now: float) -> int:
+    respuesta = sucesion(aplicar=args.aplicar, revertir=args.revertir,
+                         runtime_source=args.runtime_source, now=now, **where)
+    print(json.dumps(respuesta, ensure_ascii=False))
+    return 0 if respuesta.get("ok") else 3
+
+
 _COMMANDS = {"preparar": _run_preparar, "estado": _run_estado, "perfiles": _run_perfiles,
-             "proveedores": _run_proveedores,
+             "proveedores": _run_proveedores, "sucesion": _run_sucesion,
              "permitir": _run_politica, "cerrar": _run_politica}
 
 
