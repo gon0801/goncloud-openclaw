@@ -336,6 +336,15 @@ def sha256(data):
     return hashlib.sha256(data).hexdigest()
 
 
+def nombra_procedencia(hallazgos: str) -> bool:
+    """La procedencia que pide el brief de exploración (B7 de G5d): saluda.py y
+    test-saluda.py, cada uno nombrado junto a un número de línea."""
+    return all(
+        re.search(rf"{re.escape(nombre)}[^0-9]{{0,20}}\d+", hallazgos)
+        for nombre in ("saluda.py", "test-saluda.py")
+    )
+
+
 def desenlace_de(snapshot: dict) -> str:
     """Cómo terminó una tarea que acepta los dos desenlaces (R4 de G5c-r3): el
     resultado, o el incidente con su kind."""
@@ -744,6 +753,10 @@ class BancoE2E(unittest.TestCase):
         hallazgos = artefacto.read_text(encoding="utf-8")
         self.assertIn("hola", hallazgos, "el artefacto no nombra lo que saluda devuelve")
         self.assertIn("hello", hallazgos, "el artefacto no nombra lo que la prueba espera")
+        self.assertTrue(
+            nombra_procedencia(hallazgos),
+            "el artefacto no nombra saluda.py y test-saluda.py con su línea",
+        )
         self.assert_run_that_writes_nothing(task_id, "exploracion")
         print(f"BANCO_E2E case=exploracion-positiva task={task_id} resultado=grabado", flush=True)
 
