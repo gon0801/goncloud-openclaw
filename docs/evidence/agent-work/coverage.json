@@ -5,7 +5,8 @@
   "managedRequesterRoutes": [
     {"requester": "ingenieria", "target": "adversary", "kind": "agent", "preparation": "scripts/agent-work/routing.py", "integration": "native tool", "certified": false, "reason": "G preparation tested; native end-to-end evidence is in R and rollout is not enabled"},
     {"requester": "operaciones", "target": "ingenieria", "kind": "agent", "preparation": "scripts/agent-work/routing.py", "integration": "native tool", "certified": false, "reason": "G preparation tested; native end-to-end execution and rollout remain unverified"},
-    {"requester": "main", "target": "mac-local/opencode", "kind": "cli", "preparation": "scripts/agent-work/encargo.py preparar en la Mac y scripts/agent-work/brief.py en la Mini (skill encargo-cli); routing.py no corre en esta ruta", "integration": "native tool and host", "certified": true, "reason": "certificada en hostAdapterCoverage y hostAdapterRoute (forma run-per-task, opencode 1.18.35); atiende pedidos reales de main desde el 2026-10-13: tarea 9ed258fc-59c1-4e72-ba3d-36819bea0eb9, acknowledged y AbsenceVerified con el host sin canario (docs/evidence/agent-work/B22-canarios.md, sección Cierre)"}
+    {"requester": "main", "target": "mac-local/opencode", "kind": "cli", "preparation": "scripts/agent-work/encargo.py preparar en la Mac y scripts/agent-work/brief.py en la Mini (skill encargo-cli); routing.py no corre en esta ruta", "integration": "native tool and host", "certified": true, "reason": "certificada en hostAdapterCoverage y hostAdapterRoute (forma run-per-task, opencode 1.18.35); atiende pedidos reales de main desde el 2026-10-13: tarea 9ed258fc-59c1-4e72-ba3d-36819bea0eb9, acknowledged y AbsenceVerified con el host sin canario (docs/evidence/agent-work/B22-canarios.md, sección Cierre)"},
+    {"requester": "main", "target": "mac-local/claude", "kind": "cli", "preparation": "scripts/agent-work/encargo.py preparar en la Mac (adaptador por proveedor: anthropic va por claude) y scripts/agent-work/brief.py en la Mini (skill encargo-cli); routing.py no corre en esta ruta", "integration": "native tool and host", "certified": true, "reason": "certificada en hostAdapterCoverage y hostAdapterRoute (forma run-per-task, Claude Code 2.1.301, generación 2) con el banco de G7: claude-ingenieria, claude-fuera y claude-revision-rota verdes (docs/evidence/sistema-agentes-unificado/SUA-04-mediciones.md, sección Banco de G7)"}
   ],
   "requesters": ["main", "ingenieria", "adversary", "operaciones", "implementer", "verifier", "reviewer", "scout"],
   "routes": [
@@ -15,11 +16,12 @@
     {"kind": "cli-managed-task", "owner": "host agent-work (opencode por encargo)", "certified": true, "contextGenerations": [1, 2], "evidence": "docs/evidence/sistema-agentes-unificado/SUA-03-mediciones.md (M-16, banco y generación 2)"},
     {"kind": "cli-child", "owner": "opencode task/bash dentro de la corrida del host", "certified": true, "contextGenerations": [1, 2], "evidence": "docs/evidence/sistema-agentes-unificado/SUA-03-mediciones.md (M-16, banco y generación 2)"}
   ],
-  "cliAdapters": ["opencode"],
+  "cliAdapters": ["opencode", "claude"],
   "hosts": [{"id": "mac-local", "platform": "macOS", "status": "certified"}, {"id": "windows-remote", "platform": "Windows", "status": "disabled-unverified"}],
   "hostAdapterCoverage": {
     "mac-local": {
-      "opencode": "certified"
+      "opencode": "certified",
+      "claude": "certified"
     },
     "windows-remote": {
       "opencode": "disabled-host-unverified"
@@ -41,11 +43,31 @@
           "evidence": "docs/evidence/agent-work/B22-canarios.md (M7 y \"Límite medido\")",
           "limitation": "La regla cubre las herramientas de archivo de opencode (read, write, edit, glob) y las rutas que opencode reconoce en un comando. No confina el shell: una redirección o un script escriben donde la cuenta del operador pueda. No existe un confinamiento del proceso (followups.md, fila B22-S7)."
         }
+      },
+      "claude": {
+        "form": "run-per-task",
+        "certifiedCliVersions": {"2.1.301": "docs/evidence/sistema-agentes-unificado/SUA-04-mediciones.md (M-21, M-23, M-24 y banco de G7)"},
+        "contextGenerations": {"2": "docs/evidence/sistema-agentes-unificado/SUA-04-mediciones.md (banco de G7)"},
+        "closureProof": {
+          "boundary": "procesos del uid del operador con rgid del grupo agent-work-enc1, la misma frontera del slot",
+          "evidence": "la del slot (B22-fase0.md, M4); la ruta claude comparte el backend de grupo",
+          "limitation": "La misma del slot: escapa quien llame a un binario setuid que cambia de grupo o quien le pida el trabajo a launchd."
+        },
+        "directoryGuard": {
+          "rule": "sandbox de claude (M-23): Bash escribe en el cwd y en las carpetas de --add-dir (la carpeta de la corrida); --restricted --strict-mcp-config --tools deja en pie solo las herramientas del perfil (M-24: con --setting-sources project el settings del repo corría hooks, sumaba permisos y traía los conectores de la cuenta); dontAsk niega las herramientas fuera de --allowed-tools",
+          "evidence": "M-23 (artifacts/SUA04-G7/RESULTADO.md y p4.jsonl/p5.jsonl) y M-24 (mediciones/m24/RESULTADO.md, restricted.jsonl y restricted-tools.jsonl)",
+          "limitation": "Medido con Bash (sandbox, M-23), Write y Edit fuera de la carpeta (negados por --restricted, M-24 punto 6), TaskCreate y el hijo de Task (banco de G7); el sandbox deja escribir en /tmp (M-24, punto 3). La generación 1 del paquete no se certifica para claude: la ruta nació con la 2."
+        }
       }
     }
   },
   "hostAdapterEvidence": {
     "mac-local": {
+      "claude": [
+        {"path": "docs/evidence/sistema-agentes-unificado/SUA-04-mediciones.md", "test": "BANCO_E2E case=claude-ingenieria task=cc8224df-3b8a-4f26-a212-eeffef6dee74 conducta=ok"},
+        {"path": "docs/evidence/sistema-agentes-unificado/SUA-04-mediciones.md", "test": "BANCO_E2E case=claude-fuera task=6ea134c5-ed7d-4093-96e4-40225ef7b290 fuera=no-existe"},
+        {"path": "docs/evidence/sistema-agentes-unificado/SUA-04-mediciones.md", "test": "BANCO_E2E case=claude-revision-rota task=5d7c5653-a815-4999-8184-498c1b1fa90e verdict=changes repo=igual"}
+      ],
       "opencode": [
         {"path": "docs/evidence/agent-work/B22-fase0.md", "test": "opencode:  /opt/homebrew/bin/opencode --version -> 1.18.35"},
         {"path": "docs/evidence/agent-work/B22-canarios.md", "test": "687955d579ae284dc32272c3663ba4e88cfae159bfde0f3855f3991e70e56cab|381d9dfa-8eb7-4283-ad0b-27cfa727e75e|acknowledged|TaskCreated|AbsenceVerified|"},
@@ -144,6 +166,7 @@
     {"id": "managed:ingenieria->adversary", "state": "managed-prepared", "reason": "ruta gestionada preparada en routing.py y probada de punta a punta en R; apagada hasta certificar", "evidence": [{"path": "scripts/tests/test-agent-work-routing.py", "test": "def test_ingenieria_to_adversary_preserves_target_and_brief"}, {"path": "scripts/tests/test-agent-work-integration.sh", "test": "agents_routing"}], "instructions": [{"path": "agents/ingenieria/agent/workshop-skills/managed-task-routing/SKILL.md", "literal": "--requester ingenieria --target adversary"}]},
     {"id": "managed:operaciones->ingenieria", "state": "managed-prepared", "reason": "ruta gestionada preparada en routing.py y probada de punta a punta en R; apagada hasta certificar", "evidence": [{"path": "scripts/tests/test-agent-work-routing.py", "test": "def test_operaciones_to_ingenieria_keeps_operaciones_as_requester"}, {"path": "scripts/tests/test-agent-work-integration.sh", "test": "agents_routing"}], "instructions": [{"path": "agents/operaciones/agent/workshop-skills/managed-task-routing/SKILL.md", "literal": "--requester operaciones --target ingenieria"}]},
     {"id": "managed:main->mac-local/opencode", "state": "managed-prepared", "reason": "ruta gestionada, certificada y en uso: main encarga con la skill encargo-cli y el host lanza un proceso de opencode por encargo. El vocabulario de migration no tiene un estado para una ruta encendida: managed-prepared es el más cercano y aquí no quiere decir apagada; lo encendido lo dice managedRequesterRoutes.certified", "evidence": [{"path": "scripts/tests/test-agent-work-routing.py", "test": "def test_every_field_that_speaks_of_certification_agrees_with_host_adapter_coverage"}, {"path": "scripts/tests/test-agent-work-modelos.py", "test": "def test_the_repos_coverage_certifies_the_run_per_task_route_for_opencode_1_18_35_and_no_other_version"}], "instructions": [{"path": "agents/main/agent/workshop-skills/encargo-cli/SKILL.md", "literal": "Esta ruta entra solo con \"por CLI\"."}]},
+    {"id": "managed:main->mac-local/claude", "state": "managed-prepared", "reason": "ruta gestionada y certificada con el banco de G7 (SUA-04, 4.7): main encarga con la skill encargo-cli un modelo de anthropic y el host lanza claude por su CLI. managed-prepared como en la de opencode: lo encendido lo dice managedRequesterRoutes.certified", "evidence": [{"path": "scripts/tests/test-agent-work-routing.py", "test": "def test_every_field_that_speaks_of_certification_agrees_with_host_adapter_coverage"}, {"path": "scripts/tests/test-agent-work-claude.py", "test": "def test_el_host_planea_y_arma_el_argv_de_claude"}], "instructions": [{"path": "agents/main/agent/workshop-skills/encargo-cli/SKILL.md", "literal": "Esta ruta entra solo con \"por CLI\"."}]},
     {"id": "adapter:claude_fable", "state": "retired", "reason": "retirado: ningún host lo implementa desde el 2026-10-13; la ruta de Claude por su CLI entra con el id claude (SUA-04, 4.7)", "evidence": [], "instructions": []},
     {"id": "adapter:claude_opus", "state": "retired", "reason": "retirado: ningún host lo implementa desde el 2026-10-13; la ruta de Claude por su CLI entra con el id claude (SUA-04, 4.7)", "evidence": [], "instructions": []},
     {"id": "adapter:kimi_k3", "state": "retired", "reason": "retirado: ningún host lo implementa desde el 2026-10-13; la ruta de Claude por su CLI entra con el id claude (SUA-04, 4.7)", "evidence": [], "instructions": []},

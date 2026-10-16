@@ -26,12 +26,13 @@ import contexto
 import flota
 from host import (ACCEPT_DEADLINE_SECONDS, RESULT_DEADLINE_SECONDS, GIT_REPO_VARS, DeliveryDeferred, Host,
                   PhotoFailed, repo_photo, writes_source)
+from modelos import claude_por_omision
 from modelos import (POLICY_FILE, CatalogStore, CatalogUnavailable, ContextoIncompleto, ExactModel, ModelNotListed,
-                     PerfilRechazado, ProviderNotConfigured, ProviderPolicy, authorize, explicar)
+                     PerfilRechazado, ProviderNotConfigured, ProviderPolicy, authorize, catalogo_claude, explicar)
 from progress_bridge import transfer_host_projection, transfer_projection
 from resources import BoundaryBusy
-from sesion import (COVERAGE_FILE, GroupBoundaryBackend, LaunchHeader, LaunchSpec, MalformedHeader, Package, Route,
-                    opencode_argv, opencode_env, plan_launch, session_directory, session_name)
+from sesion import (ADAPTADORES, COVERAGE_FILE, GroupBoundaryBackend, LaunchHeader, LaunchSpec, MalformedHeader,
+                    Package, Route, adaptador, plan_launch, session_name)
 from spool import atomic_json, canonical, incident_identity
 
 CHECKOUT = Path(__file__).resolve().parents[2]
@@ -372,6 +373,9 @@ def _claim(client, adapter_id, instance_id):
 
 
 RUN_ADAPTER = "opencode"
+"""El adaptador que el host reclamaba antes de G7: queda como el de por omisión."""
+ADAPTERS = ("opencode", "claude")
+"""Los adaptadores que el host reclama, en orden (SUA-04, 4.7)."""
 SLOT_GROUP = "agent-work-enc1"
 CATALOG_RECHECK_SECONDS = 60.0
 
@@ -429,8 +433,8 @@ def contrastar_writes_source(record: SessionRecord, perfil: dict) -> None:
                                  "writesSourceRecorded": grabado["writesSource"]})
 
 
-def claim_run_once(client, *, host, manager, backend, instance_id, deps):
-    """Claim one task and launch its own opencode process inside the slot's group, or refuse it with an
+def claim_run_once(client, *, host, manager, backend, instance_id, deps, adapter_id=RUN_ADAPTER):
+    """Claim one task and launch its own process inside the slot's group, or refuse it with an
     incident. A slot whose group holds processes of no task has no room either: nothing is claimed that
     could not be launched. A replayed claim converges: it finishes a refusal or a launch that a dead host
     left half done, and never launches twice."""
@@ -438,7 +442,7 @@ def claim_run_once(client, *, host, manager, backend, instance_id, deps):
         return None
     if not manager.held() and backend.boundary():
         return None
-    claim = _claim(client, RUN_ADAPTER, instance_id)
+    claim = _claim(client, adapter_id, instance_id)
     if claim is None:
         return None
     capability, assignment = claim["capability"], claim["assignment"]
@@ -448,13 +452,13 @@ def claim_run_once(client, *, host, manager, backend, instance_id, deps):
     brief = fetch_brief(client, claim, run)
     view = manager.reserve(key, session_name(operation), "TaskCreated", claim={
         "hostId": client.host_id, "taskId": claim["taskId"], "generation": claim["generation"],
-        "instanceId": instance_id, "producerId": RUN_ADAPTER, "capability": capability["token"],
-        "adapterId": RUN_ADAPTER})
+        "instanceId": instance_id, "producerId": adapter_id, "capability": capability["token"],
+        "adapterId": adapter_id})
     authorized = AuthorizedOperation(
-        key=key, producer_id=RUN_ADAPTER, capability=capability["token"], session=session_name(operation),
+        key=key, producer_id=adapter_id, capability=capability["token"], session=session_name(operation),
         workspace_ref="", brief_ref=str(brief), brief_digest=assignment["instructionRef"]["digest"][7:],
         input_revision=assignment["inputRevision"], result_contract=assignment["resultContract"],
-        claim_id=claim["claimId"], adapter_id=RUN_ADAPTER, run=run)
+        claim_id=claim["claimId"], adapter_id=adapter_id, run=run)
     registered = host.spool.get(operation)
     refused = json.loads(registered["operation_json"]).get("refused") if registered else None
     if refused is not None:
@@ -463,13 +467,14 @@ def claim_run_once(client, *, host, manager, backend, instance_id, deps):
     if not (waiting and view.state in ("Reserved", "Launching")):
         return HostObservation(registered["status"], registered["assignment_ref"])
     record = SessionRecord.for_operation(host.state_dir, operation)
-    plan = deps.plan(assignment, brief.read_bytes(), run=run, record=record.path, operation=operation)
+    plan = deps.plan(assignment, brief.read_bytes(), run=run, record=record.path, operation=operation,
+                     adapter_id=adapter_id)
     if not isinstance(plan, LaunchSpec):
         why = explicar(plan, registrado=True)
         if registered is not None:
             raise ValueError(f"the launch of a registered operation is now refused: {why.causa}")
         return host.refuse(key, authorized, client.admit_host, {"causa": why.causa, "frase": why.frase})
-    if plan.perfil is not None and plan.config is not None:
+    if plan.perfil is not None:
         # El paquete de la corrida, copiado ANTES de registrar la asignación: el protocolo que la
         # asignación le dice al CLI depende de si su perfil escribe fuente, y un protocolo que cambia
         # entre intentos no puede registrarse dos veces (SUA-03, 4.5). Un host que murió después de
@@ -487,8 +492,13 @@ def claim_run_once(client, *, host, manager, backend, instance_id, deps):
             return host.refuse(key, authorized, client.admit_host, {"causa": why.causa, "frase": why.frase})
         contrastar_writes_source(record, plan.perfil)
         if not record.context.exists():
+            # opencode atestigua su configuración; claude, su adaptador y sus
+            # herramientas de --allowed-tools (no tiene configuración de opencode).
+            herramientas_doc = plan.config if plan.config is not None else {
+                "adapter": plan.adapter_id, "allowedTools": list(plan.herramientas)}
             atomic_json(record.context, {"poteto": contexto.digest_del_paquete(run.context),
-                                         "tools": "sha256:" + hashlib.sha256(canonical(plan.config).encode()).hexdigest(),
+                                         "tools": "sha256:" + hashlib.sha256(
+                                             canonical(herramientas_doc).encode()).hexdigest(),
                                          "writesSource": plan.perfil["writesSource"],
                                          "specialist": plan.perfil["id"],
                                          "generation": plan.package.manifest["generation"],
@@ -521,9 +531,11 @@ def claim_run_once(client, *, host, manager, backend, instance_id, deps):
         if plan.perfil is not None and not plan.perfil["writesSource"] \
                 and assignment["inputRevision"].get("kind") == "code":
             build_clone(assignment["inputRevision"]["repository"], assignment["inputRevision"]["sha"], run.repo)
-        argv = opencode_argv(plan, deps.opencode_bin, task_id=claim["taskId"])
+        el_adaptador = adaptador(plan.adapter_id)
+        argv = el_adaptador.argv(plan, deps.bin_para(plan.adapter_id), task_id=claim["taskId"])
         try:
-            launched = manager.ensure_launched(key, lambda nonce: backend.launch(plan, nonce, argv, opencode_env(plan)))
+            launched = manager.ensure_launched(
+                key, lambda nonce: backend.launch(plan, nonce, argv, el_adaptador.env(plan)))
         except BoundaryBusy as busy:
             atomic_json(record.blocked, {"boundary": list(busy.processes)})
             raise DeliveryDeferred(str(busy)) from busy
@@ -558,12 +570,17 @@ class RunHost:
 
     def __init__(self, client, host, manager, backend, *, instance_id, checkout, state_root, opencode_bin,
                  allowed_root, canary=False, accept_deadline_seconds=ACCEPT_DEADLINE_SECONDS,
-                 result_deadline_seconds=RESULT_DEADLINE_SECONDS, clock=time.time):
+                 result_deadline_seconds=RESULT_DEADLINE_SECONDS, clock=time.time, claude_bin=None):
         self.client, self.host, self.manager, self.backend = client, host, manager, backend
         self.instance_id = instance_id
         self.checkout = Path(checkout)
         self.state_root = Path(state_root)
         self.opencode_bin = Path(opencode_bin)
+        self.claude_bin = Path(claude_bin) if claude_bin else claude_por_omision()
+        self._version_claude = None
+        self._version_claude_en = 0.0
+        self._claim_rechazado_en: dict = {}
+        """Adaptadores cuyo claim el gateway no autorizó, y cuándo (B2 de G7-r3)."""
         self.allowed_root = Path(allowed_root)
         self.canary = canary
         self.accept_deadline_seconds = accept_deadline_seconds
@@ -583,10 +600,45 @@ class RunHost:
             self._catalog, self._catalog_at = self.catalogs.current(), self.clock()
         return self._catalog
 
+    def bin_para(self, adapter_id):
+        """El binario del adaptador de la corrida: opencode o claude."""
+        return self.claude_bin if adapter_id == "claude" else self.opencode_bin
+
+    def catalogo_para(self, adapter_id):
+        """El catálogo con que se autoriza una corrida de ese adaptador: el de
+        opencode, o el de los alias de claude con la versión de su CLI (4.7)."""
+        if adapter_id != "claude":
+            return self.catalog()
+        # Se relee pasada la ventana del catálogo (DeepSeek F7 en #324): un `claude update`
+        # a mitad de vida del host no deja la ruta certificando una versión vieja.
+        if self._version_claude is not None and (
+                self.clock() - self._version_claude_en >= CATALOG_RECHECK_SECONDS):
+            self._version_claude = None
+        if self._version_claude is None:
+            try:
+                done = subprocess.run([str(self.claude_bin), "--version"], capture_output=True, text=True,
+                                      timeout=20)
+                trozos = [t for t in done.stdout.split()
+                          if re.fullmatch(r"[0-9][0-9A-Za-z.+-]{0,63}", t)]
+                if trozos:
+                    self._version_claude = trozos[0]
+                    self._version_claude_en = self.clock()
+            except (OSError, subprocess.TimeoutExpired):
+                pass
+        # Solo se guarda una versión que contestó (CodeRabbit en #324): un --version que
+        # falló una vez no deja la ruta cerrada hasta reiniciar el host.
+        return catalogo_claude(self._version_claude or "sin contestar su versión",
+                               listed_at=self.clock())
+
     def _launched_model(self, operation):
         try:
             argv = json.loads(SessionRecord.locate(self.host.state_dir, operation).argv.read_text())
-            return argv[argv.index("-m") + 1]
+            if "-m" in argv[:-1]:
+                return argv[argv.index("-m") + 1]
+            if "--model" in argv[:-1]:
+                nombre = argv[argv.index("--model") + 1]
+                return nombre if "/" in nombre else f"anthropic/{nombre}"
+            return None
         except (OSError, ValueError, IndexError, TypeError):
             return None
 
@@ -642,18 +694,25 @@ class RunHost:
             return ContextoIncompleto(str(error))
         return Package(manifest, profiles, fuente)
 
-    def plan(self, assignment, brief, *, run, record, operation):
-        """The launch of one claim, or why not. An opencode that does not answer its version has no
+    def plan(self, assignment, brief, *, run, record, operation, adapter_id=RUN_ADAPTER):
+        """The launch of one claim, or why not. A CLI that does not answer its version has no
         certified route. A provider or a model the catalog lacks is looked up once more: the operator may
         just have run `opencode auth login`."""
         try:
             coverage = json.loads((self.checkout / COVERAGE_FILE).read_text(encoding="utf-8"))
         except (OSError, ValueError):
             coverage = {}
-        route = Route.load(coverage, self.client.host_id)
+        route = Route.load(coverage, self.client.host_id, adapter_id)
         package = self.package(brief)
         if not isinstance(package, (Package, type(None))):
             return package
+        if adapter_id == "claude":
+            catalog = self.catalogo_para("claude")
+            return plan_launch(assignment, brief, policy=self.policy, catalog=catalog, route=route,
+                               cli_version=catalog.cli_version, allowed_root=self.allowed_root, run=run,
+                               record=record, operation=operation, canary=self.canary, package=package,
+                               now=datetime.fromtimestamp(self.clock(), tz=timezone.utc),
+                               state_root=self.state_root)
         try:
             catalog = self.catalog(fresh=True)
         except CatalogUnavailable:
@@ -677,19 +736,68 @@ class RunHost:
         return plan
 
     def recheck(self, plan):
-        """The launcher checks again what it was handed: the model that reaches `opencode -m` is the one
+        """The launcher checks again what it was handed: the model that reaches the CLI is the one
         authorize permits with this pass's policy and catalog, whoever built the plan."""
-        if authorize(ExactModel(plan.model.model), self.policy, self.catalog()) != plan.model:
+        if authorize(ExactModel(plan.model.model), self.policy,
+                     self.catalogo_para(plan.adapter_id)) != plan.model:
             raise ValueError(f"{plan.model.model} is not what authorize permits now; nothing was launched")
 
     def claim(self):
-        return claim_run_once(self.client, host=self.host, manager=self.manager, backend=self.backend,
-                              instance_id=self.instance_id, deps=self)
+        rechazo = None
+        intentados = 0
+        for adapter_id in ADAPTERS:
+            rechazado = self._claim_rechazado_en.get(adapter_id)
+            if rechazado is not None and self.clock() - rechazado < CATALOG_RECHECK_SECONDS:
+                continue
+            try:
+                claimed = claim_run_once(self.client, host=self.host, manager=self.manager,
+                                         backend=self.backend, instance_id=self.instance_id, deps=self,
+                                         adapter_id=adapter_id)
+            except RuntimeError as error:
+                # B2 de G7-r3: el gateway autoriza por host una lista de adaptadores
+                # (managedTasks.hosts[<host>].adapters en la Mini). Que uno no esté
+                # autorizado no corta la pasada: se anota una vez, se sigue con los
+                # demás y se reintenta cada CATALOG_RECHECK_SECONDS (la cadencia con
+                # que el host ya relee su catálogo). Otro error sale como siempre.
+                # Solo el rechazo del claim de R (DeepSeek F2 en #324): la misma frase en un
+                # error del plan, del paquete o del lanzamiento sale como siempre.
+                texto = str(error)
+                if ("managedTasks.host.claim" not in texto
+                        or "adapter is not authorized" not in texto):
+                    raise
+                rechazo = error
+                self._claim_rechazado_en[adapter_id] = self.clock()
+                print(f"agent-work: el gateway no autoriza el claim de {adapter_id} en "
+                      f"{self.client.host_id}; se sigue con los demás adaptadores y se "
+                      f"reintenta en {CATALOG_RECHECK_SECONDS:.0f} s", file=sys.stderr, flush=True)
+                continue
+            intentados += 1
+            self._claim_rechazado_en.pop(adapter_id, None)
+            if claimed is not None:
+                return claimed
+        if rechazo is not None and intentados == 0:
+            # Ningún adaptador pasó: R usa la misma frase para un device que no autoriza,
+            # y eso es del host entero, no de un adaptador fuera de la lista.
+            raise rechazo
+        return None
 
     def _session_directory(self, key):
         operation = operation_id(key)
         if operation not in self._opened:
-            opened = session_directory(SessionRecord.locate(self.host.state_dir, operation).path)
+            record = SessionRecord.locate(self.host.state_dir, operation)
+            # M2 de G7-r3: el adaptador sale de lo que el host guardó del claim en
+            # el spool (adapterId de la asignación), no del argv: cualquier cambio
+            # en el argv de un CLI rompería la elección si saliera de ahí.
+            adapter_id = "opencode"
+            fila = self.host.spool.get(operation)
+            if fila is not None:
+                try:
+                    guardado = json.loads(fila["operation_json"]).get("adapterId")
+                except (ValueError, KeyError, TypeError):
+                    guardado = None
+                if guardado in ADAPTADORES:
+                    adapter_id = guardado
+            opened = adaptador(adapter_id).directorio_sesion(record.path)
             if opened is None:
                 return None
             self._opened[operation] = opened
@@ -723,7 +831,7 @@ class RunHost:
             if current is None:
                 continue
             assignment = json.loads(current["operation_json"])
-            if assignment.get("adapterId") != RUN_ADAPTER or "refused" in assignment:
+            if assignment.get("adapterId") not in ADAPTADORES or "refused" in assignment:
                 continue
             try:
                 path = flota.escribir(assignment, state_dir=self.host.state_dir, policy=self.policy)
@@ -1048,6 +1156,7 @@ def main(argv=None):
     parser.add_argument("--workspace-root",
                         help="claim tasks and run one opencode process per task, in a git repo under this root")
     parser.add_argument("--opencode-bin", default="/opt/homebrew/bin/opencode")
+    parser.add_argument("--claude-bin", default=None, help="ruta de claude para la ruta claude (4.7)")
     parser.add_argument("--slot-group",
                         help=f"group whose processes are the slot's boundary (default {SLOT_GROUP}); "
                              "--close-only requires it")
@@ -1096,7 +1205,8 @@ def main(argv=None):
         manager = ResourceManager(host.spool, args.host_id, backend)
         run = RunHost(client, host, manager, backend, instance_id=args.cli_instance_id,
                       checkout=CHECKOUT, state_root=args.state_root or host.state_dir.parent,
-                      opencode_bin=args.opencode_bin, allowed_root=args.workspace_root, canary=args.canary,
+                      opencode_bin=args.opencode_bin, claude_bin=args.claude_bin,
+                      allowed_root=args.workspace_root, canary=args.canary,
                       accept_deadline_seconds=args.accept_deadline_seconds,
                       result_deadline_seconds=args.result_deadline_seconds)
         cli_claim, cli_watch, cli_beat = run.claim, run.watch, run.beat

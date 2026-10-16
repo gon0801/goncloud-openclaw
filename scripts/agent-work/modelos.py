@@ -363,6 +363,22 @@ class Catalog:
         return frozenset(model for model in self.models if model.provider == provider)
 
 
+CLAUDE_ALIASES = ("fable", "opus", "sonnet")
+"""Los ids admitidos de la ruta claude (SUA-04, 4.7): no hay `claude models`, así que
+el catálogo de anthropic sale de los alias que `claude --model` acepta (su --help: un
+alias como sonnet/opus o el nombre completo). Decisión de G7: la lista corta de alias,
+no nombres completos inventados. M-21 midió que `opus`/`sonnet` corren con el plan Max."""
+
+
+def catalogo_claude(cli_version: str, *, listed_at: float) -> Catalog:
+    """El catálogo de la ruta claude: los alias de anthropic con la versión de su CLI."""
+    return Catalog(
+        cli_version,
+        frozenset(ModelId(ProviderId("anthropic"), alias) for alias in CLAUDE_ALIASES),
+        listed_at,
+    )
+
+
 class CatalogUnavailable(RuntimeError):
     """opencode no contestó su versión o su lista de modelos."""
 
@@ -583,10 +599,27 @@ class WorkspaceRefused:
     why: Literal["not-absolute", "outside-root", "not-a-git-toplevel", "missing", "no-commit", "invalid"]
 
 
+def claude_por_omision() -> Path:
+    """El claude de esta Mac: AGENT_WORK_CLAUDE, el del PATH o el de ~/.local/bin, donde lo
+    instala Claude Code. El exec de main corre sin ~/.local/bin en el PATH (canario de G7,
+    2026-10-16), y sin este último paso `which` no lo encontraba."""
+    import shutil
+
+    if os.environ.get("AGENT_WORK_CLAUDE"):
+        return Path(os.environ["AGENT_WORK_CLAUDE"])
+    en_path = shutil.which("claude")
+    if en_path:
+        return Path(en_path)
+    local = Path(os.environ.get("HOME") or Path.home()) / ".local/bin/claude"
+    return local if local.is_file() else Path("claude")
+
+
 @dataclass(frozen=True)
 class RouteNotCertified:
     cli_version: str
     certified_versions: tuple[str, ...]
+    cli: str = "opencode"
+    """El CLI de la ruta: la frase lo nombra (opencode o claude)."""
 
 
 @dataclass(frozen=True)
@@ -676,8 +709,16 @@ def _outside_grant(models: "tuple[ModelId, ...]", policy: ProviderPolicy) -> Mod
 def _by_name(request: ByName, policy: ProviderPolicy, catalog: Catalog) -> "ModelId | Refusal":
     words = tuple(request.words.lower().split())
     permitted = _admitted(policy, catalog)
-    matching = tuple(model for model in sorted(catalog.models, key=str)
-                     if words and all(word in str(model).lower() for word in words))
+
+    def nombra_al_modelo(model: ModelId) -> bool:
+        # El nombre del permiso también nombra a sus modelos ("claude opus" es el opus
+        # de anthropic): sin esto, pedir por el nombre que David usa no encontraría
+        # ningún id, porque el id no lleva ese nombre.
+        grant = policy.grant_for(model.provider)
+        pajar = f"{grant.name if grant else ''} {model}".lower()
+        return bool(words) and all(word in pajar for word in words)
+
+    matching = tuple(model for model in sorted(catalog.models, key=str) if nombra_al_modelo(model))
     candidates = tuple(model for model in matching if model in permitted)
     if len(candidates) == 1:
         return candidates[0]
@@ -844,10 +885,10 @@ def _frase_ambiguo(caso: NameIsAmbiguous) -> tuple[str, tuple[str, ...]]:
 
 def _frase_ruta(caso: RouteNotCertified) -> tuple[str, tuple[str, ...]]:
     if caso.certified_versions:
-        return (f"Ruta certificada para {_lista(caso.certified_versions)}, la Mac tiene opencode {caso.cli_version}.",
+        return (f"Ruta certificada para {_lista(caso.certified_versions)}, la Mac tiene {caso.cli} {caso.cli_version}.",
                 ())
-    return ("La ruta de encargos por opencode todavía no está certificada. "
-            f"La Mac tiene opencode {caso.cli_version}."), ()
+    return (f"La ruta de encargos por {caso.cli} todavía no está certificada. "
+            f"La Mac tiene {caso.cli} {caso.cli_version}."), ()
 
 
 def _frase_generacion(caso: GenerationNotCertified) -> tuple[str, tuple[str, ...]]:

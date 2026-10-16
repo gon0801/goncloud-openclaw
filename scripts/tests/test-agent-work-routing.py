@@ -97,7 +97,7 @@ class AgentsRouting(unittest.TestCase):
                     self.assertEqual(request["assignment"]["target"],
                                      {"kind": "cli", "hostId": host_id, "adapterId": adapter_id})
                     prepared.append(target)
-        self.assertEqual(prepared, ["mac-local/opencode"])
+        self.assertEqual(prepared, ["mac-local/opencode", "mac-local/claude"])
         self.assertEqual(len(refused),
                          len(routing.CLI_ROUTES) * len(self.coverage["cliAdapters"]) - len(prepared))
         with self.assertRaisesRegex(RouteUnavailable, "outside the managed perimeter"):
@@ -127,10 +127,14 @@ class AgentsRouting(unittest.TestCase):
         certified = [(host_id, adapter_id)
                      for host_id, adapters in self.coverage["hostAdapterCoverage"].items()
                      for adapter_id, state in adapters.items() if state == "certified"]
-        self.assertEqual(certified, [("mac-local", "opencode")])
+        # SUA-04 G7: la ruta claude se certificó con el banco de G7 (SUA-04-mediciones.md).
+        self.assertEqual(certified, [("mac-local", "opencode"), ("mac-local", "claude")])
         evidence = self.coverage["hostAdapterEvidence"]
         self.assertEqual({host_id: sorted(adapters) for host_id, adapters in evidence.items()},
-                         {"mac-local": ["opencode"]})
+                         {"mac-local": ["claude", "opencode"]})
+        for item in evidence["mac-local"]["claude"]:
+            self.assertIn(item["test"], (ROOT / item["path"]).read_text(encoding="utf-8"),
+                          f"evidence {item} of mac-local/claude does not exist")
         cited = evidence["mac-local"]["opencode"]
         self.assertEqual(sorted({item["path"] for item in cited}), [
             "docs/evidence/agent-work/B22-canarios.md", "docs/evidence/agent-work/B22-fase0.md",
@@ -167,7 +171,7 @@ class AgentsRouting(unittest.TestCase):
         self.assertLessEqual({(requester, f"{host_id}/{adapter_id}") for requester, host in routing.CLI_ROUTES
                               for host_id, adapter_id in certified if host == host_id}, set(listed))
         self.assertEqual([key for key, route in zip(listed, routes) if route["certified"]],
-                         [("main", "mac-local/opencode")])
+                         [("main", "mac-local/opencode"), ("main", "mac-local/claude")])
 
     def test_coverage_routes_are_the_five_of_the_design_with_their_generation_and_evidence(self):
         # K1 de SUA03-G5b-cierre: las cinco rutas del diseño, cada una con su

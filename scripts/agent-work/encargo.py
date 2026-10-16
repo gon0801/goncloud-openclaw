@@ -25,6 +25,7 @@ import json
 import os
 import re
 import shlex
+import shutil
 import sqlite3
 import subprocess
 import sys
@@ -42,16 +43,52 @@ import contexto
 import hashlib
 import lineas
 from spool import SETTLED as OPERACIONES_CERRADAS
+from modelos import claude_por_omision
 from modelos import (MODEL_PATTERN, POLICY_FILE, PROVIDER, Billing, Catalog, CatalogStore, CatalogUnavailable,
                      ContextoIncompleto, Explicacion, HostDown, HostMismatch, ModelFilter, ModelId, ModelNotListed,
                      OperatorCitation, PerfilRechazado, PermittedModel, PolicyUnreadable, ProviderClosure,
                      ProviderGrant, ProviderId, ProviderNotConfigured, ProviderPolicy, SlotBlocked, UNVERIFIED_REF,
-                     WorkspaceRefused, authorize, explicar, pedido, policy_document, succession_actual)
+                     WorkspaceRefused, authorize, catalogo_claude, explicar, pedido, policy_document,
+                     succession_actual)
 from sesion import (ALLOWED_ROOT, COVERAGE_FILE, EXIT_NO_SCRATCH, EXIT_NO_WORKSPACE, EXIT_OUTSIDE_GROUP, PROFILE_ID,
-                    Route, Workspace, model_in_use, read_events)
+                    Route, Workspace, adaptador, model_in_use, read_events)
 
 HOST_ID = "mac-local"
 ADAPTER_ID = "opencode"
+CLAUDE_BIN = claude_por_omision()
+"""El binario de claude para preguntarle su versión: nunca se corre un modelo desde aquí."""
+
+
+def adaptador_para(provider: str) -> str:
+    """El adaptador por proveedor (SUA-04, 4.7): anthropic va por claude y el resto,
+    por opencode."""
+    return "claude" if provider == "anthropic" else ADAPTER_ID
+
+
+def _ruta_claude_existe(coverage: object) -> bool:
+    return Route.load(coverage, HOST_ID, "claude").status != "absent"
+
+
+def _con_claude(catalog: Catalog, coverage: object) -> Catalog:
+    """El catálogo con los modelos de la ruta claude sumados, cuando esa ruta existe
+    en coverage: anthropic deja de contestar proveedor-sin-sesion (4.7). Sin la ruta,
+    el catálogo es el de opencode, tal cual."""
+    if not _ruta_claude_existe(coverage):
+        return catalog
+    extra = catalogo_claude(catalog.cli_version, listed_at=catalog.listed_at)
+    return Catalog(catalog.cli_version, catalog.models | extra.models, catalog.listed_at)
+
+
+def _version_claude(claude_bin: Path) -> str:
+    """La versión de claude (`claude --version`), o una frase que no certifica nada."""
+    try:
+        done = subprocess.run([str(claude_bin), "--version"], capture_output=True, text=True, timeout=20)
+    except (OSError, subprocess.TimeoutExpired):
+        return "sin contestar su versión"
+    for trozo in done.stdout.split():
+        if re.fullmatch(r"[0-9][0-9A-Za-z.+-]{0,63}", trozo):
+            return trozo
+    return "sin contestar su versión"
 OPERATOR = "David"
 CONTEXTO_DIR = Path("scripts/agent-work/contexto")
 BEAT_ALIVE_SECONDS = 120.0
@@ -197,7 +234,8 @@ def _paquete_del_checkout(checkout: Path) -> "dict | Explicacion":
 
 
 def preparar(repo: Path | None, modelo: str | None, *, perfil: str | None = None, state_root: Path, checkout: Path,
-             now: float, opencode_bin: Path = OPENCODE_BIN, allowed_root: Path = ALLOWED_ROOT,
+             now: float, opencode_bin: Path = OPENCODE_BIN, claude_bin: Path = CLAUDE_BIN,
+             allowed_root: Path = ALLOWED_ROOT,
              deadline_seconds: float = PREPARAR_DEADLINE_SECONDS) -> "Preparado | Explicacion":
     """`encargo.py preparar [--repo <ruta>] [--modelo "<palabras>"] [--perfil <id>]`.
 
@@ -231,30 +269,35 @@ def preparar(repo: Path | None, modelo: str | None, *, perfil: str | None = None
         manifiesto = _paquete_del_checkout(checkout)
         if isinstance(manifiesto, Explicacion):
             return manifiesto
+    try:
+        coverage = json.loads((Path(checkout) / COVERAGE_FILE).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        coverage = {}
     store = CatalogStore(opencode_bin, state_root, budget_seconds=deadline_seconds - GIT_TIMEOUT_SECONDS)
-    catalog = store.current()
+    catalog = _con_claude(store.current(), coverage)
     request = pedido(modelo)
     model = authorize(request, policy, catalog, state_root=state_root)
     if isinstance(model, (ProviderNotConfigured, ModelNotListed)) and now - catalog.listed_at > CATALOG_RECHECK_SECONDS:
         # David pudo acabar de correr `opencode auth login`: se mira una vez más antes de decir que falta.
-        catalog = store.refresh()
+        catalog = _con_claude(store.refresh(), coverage)
         model = authorize(request, policy, catalog, state_root=state_root)
     if not isinstance(model, PermittedModel):
         return explicar(model)
+    adapter_id = adaptador_para(str(model.model.provider))
     workspace = None
     if repo is not None:
         workspace = Workspace.for_repository(str(repo), allowed_root=allowed_root)
         if not isinstance(workspace, Workspace):
             return explicar(workspace)
-    try:
-        coverage = json.loads((Path(checkout) / COVERAGE_FILE).read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        coverage = {}
     beat = latido(state_root, now)
     # Un host canario vivo corre también una ruta todavía sin certificar: su canario es un pedido real.
     canary = isinstance(beat, HostBeat) and beat.canary
-    closed = Route.load(coverage, HOST_ID).open_for(catalog.cli_version,
-                                                    manifiesto["generation"] if manifiesto else None, canary=canary)
+    if adapter_id == "claude":
+        closed = Route.load(coverage, HOST_ID, "claude").open_for(
+            _version_claude(claude_bin), manifiesto["generation"] if manifiesto else None, canary=canary)
+    else:
+        closed = Route.load(coverage, HOST_ID).open_for(catalog.cli_version,
+                                                        manifiesto["generation"] if manifiesto else None, canary=canary)
     if closed is not None:
         return explicar(closed)
     if isinstance(beat, HostDown):
@@ -272,7 +315,7 @@ def preparar(repo: Path | None, modelo: str | None, *, perfil: str | None = None
         if sha is None:
             return explicar(WorkspaceRefused(str(repo), "no-commit"))
         revision = {"kind": "code", "repository": str(workspace.root), "sha": sha}
-    args = ("--host", HOST_ID, "--adapter", ADAPTER_ID, "--model", str(model.model))
+    args = ("--host", HOST_ID, "--adapter", adapter_id, "--model", str(model.model))
     if perfil is not None:
         args += ("--perfil", perfil)
     return Preparado(str(model.model), model.billing, revision, args,
@@ -346,11 +389,19 @@ def estado(task_id: "str | None", *, state_root: Path, checkout: Path,
         return text.replace(capability, "<capacidad>") if capability else text
 
     argv = _json(record.argv)
-    modelo = argv[argv.index("-m") + 1] if isinstance(argv, list) and "-m" in argv[:-1] else None
+    adapter_id = assignment.get("adapterId") if isinstance(assignment.get("adapterId"), str) else ADAPTER_ID
+    el_adaptador = adaptador(adapter_id) if adapter_id in ("opencode", "claude") else adaptador(ADAPTER_ID)
+    modelo = None
+    if isinstance(argv, list) and "-m" in argv[:-1]:
+        modelo = argv[argv.index("-m") + 1]
+    elif isinstance(argv, list) and "--model" in argv[:-1]:
+        # claude recibe el id sin el prefijo del proveedor: el modelo pedido se reconstruye.
+        nombre = argv[argv.index("--model") + 1]
+        modelo = nombre if "/" in nombre else f"anthropic/{nombre}"
     parsed = ModelId.parse(modelo) if modelo else None
     grant = (ProviderPolicy.load(Path(checkout) / POLICY_FILE).grant_for(parsed.provider)
              if isinstance(parsed, ModelId) else None)
-    events = read_events(record.path)
+    events = el_adaptador.leer_eventos(record.path)
     left = _json(record.exit)
     salida = left.get("code") if isinstance(left, dict) and isinstance(left.get("code"), int) else None
     explicacion = None
@@ -375,7 +426,7 @@ def estado(task_id: "str | None", *, state_root: Path, checkout: Path,
             causa = causa_del_proveedor(events.error) if events else None
             if causa and episode in ("launch-failed", "session-closed"):
                 explicacion = replace(explicacion, causa=causa)
-    usado, razon = model_in_use(events, modelo)
+    usado, razon = el_adaptador.modelo_en_uso(events, modelo)
     flota = _json(RunDir(Path(assignment["resultRef"]).parent).fleet) if assignment.get("resultRef") else None
     return EstadoTarea(
         task_id, modelo, grant.billing if grant else None, found["status"],
@@ -663,6 +714,13 @@ def proveedores(*, state_root: Path, checkout: Path, refrescar: bool = False,
         return policy.unreadable
     store = CatalogStore(opencode_bin, state_root)
     catalog = store.refresh(upstream=True) if refrescar else store.current()
+    try:
+        coverage = json.loads((Path(checkout) / COVERAGE_FILE).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        coverage = {}
+    # Con la ruta claude en coverage, anthropic lista sus alias por esa ruta: su
+    # sesión es la de claude, no la de opencode (4.7).
+    catalog = _con_claude(catalog, coverage)
     decided = {grant.provider for grant in policy.grants} | set(policy.closed)
     undecided = sorted({model.provider for model in catalog.models} - decided)
     return (tuple(_grant_row(grant, catalog, state_root) for grant in policy.grants)
@@ -1449,6 +1507,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--checkout", type=Path, default=CHECKOUT, help="checkout de G cuya política se lee o escribe")
     parser.add_argument("--state-root", type=Path, default=STATE_ROOT, help="donde viven host.json y catalogo.json")
     parser.add_argument("--opencode", type=Path, default=OPENCODE_BIN, help="ruta absoluta de opencode")
+    parser.add_argument("--claude", type=Path, default=CLAUDE_BIN, help="ruta de claude, solo para su versión")
     parser.add_argument("--workspace-root", type=Path, default=ALLOWED_ROOT, help="raíz de los repos de encargos")
     commands = parser.add_subparsers(dest="command", required=True)
     prepare = commands.add_parser("preparar", help="dice si un pedido puede correr y con qué argumentos de brief.py")
@@ -1511,7 +1570,7 @@ def _show(command: str, outcome: "tuple[ProviderRow, ...] | ProviderRow | str") 
 
 def _run_preparar(args: argparse.Namespace, where: dict, now: float) -> int:
     return _say(preparar(args.repo, args.modelo, perfil=args.perfil, now=now, allowed_root=args.workspace_root,
-                         **where), now)
+                         claude_bin=args.claude, **where), now)
 
 
 def _run_estado(args: argparse.Namespace, where: dict, now: float) -> int:
