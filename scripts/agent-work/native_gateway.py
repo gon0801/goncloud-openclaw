@@ -663,7 +663,8 @@ class RunHost:
             return plan_launch(assignment, brief, policy=self.policy, catalog=listed, route=route,
                                cli_version=listed.cli_version, allowed_root=self.allowed_root, run=run,
                                record=record, operation=operation, canary=self.canary, package=package,
-                               now=datetime.fromtimestamp(self.clock(), tz=timezone.utc))
+                               now=datetime.fromtimestamp(self.clock(), tz=timezone.utc),
+                               state_root=self.state_root)
 
         plan = planned(catalog)
         if (isinstance(plan, (ProviderNotConfigured, ModelNotListed))
