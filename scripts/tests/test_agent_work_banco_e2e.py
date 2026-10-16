@@ -343,6 +343,13 @@ def sha256(data):
     return hashlib.sha256(data).hexdigest()
 
 
+def generacion_esperada() -> int:
+    """La generación que flota.json tiene que anotar: la del manifiesto vigente,
+    leída del paquete, nunca un literal (con la 2, el literal 1 hizo fallar dos
+    casos buenos del banco)."""
+    return contexto.leer_json(contexto.MANIFIESTO)["generation"]
+
+
 def nombra_procedencia(hallazgos: str) -> bool:
     """La procedencia que pide el brief de exploración (B7 de G5d): saluda.py y
     test-saluda.py, cada uno nombrado junto a un número de línea."""
@@ -628,7 +635,7 @@ class BancoE2E(unittest.TestCase):
         flota_doc = self.reached(lambda: run.fleet if run.fleet.exists() else None, 120,
                                  "el host nunca escribió flota.json")
         document = json.loads(flota_doc.read_text())
-        self.assertEqual((document["specialist"], document["generation"]), (specialist, 1))
+        self.assertEqual((document["specialist"], document["generation"]), (specialist, generacion_esperada()))
         self.assertIsNotNone(document["model"]["id"], f"flota sin modelo usado: {document['model']}")
         self.assertTrue(document["permissions"], "flota sin permisos medidos")
         self.assertEqual(document["attestations"][0], {"what": "poteto", "digest": digests["poteto"]})
