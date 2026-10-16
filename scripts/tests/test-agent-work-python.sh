@@ -5,6 +5,7 @@
 # contrato (los briefs) corren siempre (A5 de SUA03-G5b).
 set -euo pipefail
 cd "$(dirname "$0")/../.."
+python3 scripts/tests/test-agent-work-agentes.py
 python3 scripts/tests/test-agent-work-conducta.py
 python3 scripts/tests/test-agent-work-contexto.py
 python3 scripts/tests/test-agent-work-flota.py
