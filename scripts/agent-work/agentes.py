@@ -11,11 +11,11 @@ from __future__ import annotations
 
 import argparse
 import json
-from pathlib import Path
 import shlex
 import subprocess
 import sys
 import time
+from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import contexto  # noqa: E402
@@ -38,7 +38,9 @@ def descubrir(perfiles: dict, vivos: list, requesters=()) -> list:
         for ruta in perfil.get("routes", ()):
             if ruta.get("agentId"):
                 con_perfil.setdefault(ruta["agentId"], []).append(perfil["id"])
-    sin_perfil = {a["agentId"] for a in perfiles.get("agents", ()) if a.get("status") == "sin-perfil"}
+    sin_perfil = {
+        a["agentId"] for a in perfiles.get("agents", ()) if a.get("status") == "sin-perfil"
+    }
     vivos_ids = {a["id"] for a in vivos}
     filas = []
     for agente_id in sorted(vivos_ids):
@@ -48,7 +50,8 @@ def descubrir(perfiles: dict, vivos: list, requesters=()) -> list:
         if agente_id in requesters and agente_id not in con_perfil and agente_id not in sin_perfil:
             continue
         if agente_id in con_perfil:
-            filas.append({"agentId": agente_id, "estado": "con-perfil", "perfiles": con_perfil[agente_id]})
+            filas.append({"agentId": agente_id, "estado": "con-perfil",
+                          "perfiles": con_perfil[agente_id]})
         elif agente_id in sin_perfil:
             filas.append({"agentId": agente_id, "estado": "sin-perfil"})
         else:
@@ -58,7 +61,8 @@ def descubrir(perfiles: dict, vivos: list, requesters=()) -> list:
     for perfil in perfiles.get("profiles", ()):
         for ruta in perfil.get("routes", ()):
             if ruta.get("agentId") and ruta["agentId"] not in vivos_ids:
-                fila = {"perfil": perfil["id"], "agentId": ruta["agentId"], "estado": "perfil-incompleto"}
+                fila = {"perfil": perfil["id"], "agentId": ruta["agentId"],
+                        "estado": "perfil-incompleto"}
                 if fila not in filas:
                     filas.append(fila)
     return filas
@@ -82,7 +86,8 @@ def lista_viva(mini: str, correr) -> list:
         raise ValueError(f"openclaw agents list falló: {err.strip()}")
     agentes = json.loads(out)
     if not isinstance(agentes, list) or not all(
-            isinstance(a, dict) and isinstance(a.get("id"), str) and isinstance(a.get("workspace"), str)
+            isinstance(a, dict) and isinstance(a.get("id"), str)
+            and isinstance(a.get("workspace"), str)
             for a in agentes):
         raise ValueError("la lista de agentes no tiene la forma esperada")
     return agentes
@@ -90,12 +95,13 @@ def lista_viva(mini: str, correr) -> list:
 
 AYUDANTE = r"""
 import json, sqlite3, sys, os
-req = json.load(sys.stdin)
+req = json.loads(sys.argv[1])
 base = os.path.expanduser("~/.openclaw/state/openclaw.sqlite")
 db = sqlite3.connect("file:" + base + "?mode=ro", uri=True)
 db.row_factory = sqlite3.Row
 tareas = []
-for row in db.execute("select task_id, assignment_json, result_json from managed_tasks order by created_at desc"):
+for row in db.execute("select task_id, assignment_json, result_json"
+                      " from managed_tasks order by created_at desc"):
     try:
         asignacion = json.loads(row["assignment_json"] or "{}")
     except Exception:
@@ -113,11 +119,6 @@ for row in db.execute("select task_id, assignment_json, result_json from managed
                    "agentId": objetivo.get("agentId"),
                    "estado": "result-recorded" if resultado else "registered",
                    "resultado": texto})
-cols = [r[1] for r in db.execute("pragma table_info(conversation_deliveries)")]
-entregas = 0
-for col in [c for c in cols if c.endswith("session_key")]:
-    entregas += db.execute(
-        f"select count(*) from conversation_deliveries where {col} = ?", (req["sesionMain"],)).fetchone()[0]
 agente = req["agentId"]
 try:
     adb = sqlite3.connect("file:" + os.path.expanduser(
@@ -143,6 +144,28 @@ try:
             spawn = True
 except Exception:
     sesiones_agente, hijas, spawn = [], [], False
+
+def entregas_en(ruta, clausula, parametro):
+    # Las entregas viven en la base de cada agente (F7), no en la de estado. Sin la
+    # tabla, salir con error (SystemExit atraviesa los except Exception): un 0 en
+    # silencio diría "sin entregas hacia David".
+    ruta = os.path.expanduser(ruta)
+    try:
+        edb = sqlite3.connect("file:" + ruta + "?mode=ro", uri=True)
+        columnas = [c[1] for c in edb.execute("pragma table_info(conversation_deliveries)")]
+        if "source_session_key" not in columnas:
+            sys.exit("sin conversation_deliveries.source_session_key en " + ruta)
+        return edb.execute("select count(*) from conversation_deliveries where " + clausula,
+                           parametro).fetchone()[0]
+    except Exception:
+        sys.exit("no se pudo leer conversation_deliveries de " + ruta)
+
+dueno = req["sesionMain"].split(":")[1]
+entregas = entregas_en(f"~/.openclaw/agents/{dueno}/agent/openclaw-agent.sqlite",
+                       "source_session_key like ?", (req["sesionMain"] + "%",))
+for hija in hijas:
+    entregas += entregas_en(f"~/.openclaw/agents/{agente}/agent/openclaw-agent.sqlite",
+                            "source_session_key = ?", (hija,))
 print(json.dumps({"tareas": tareas, "entregas": entregas, "sesionesHijas": hijas,
                   "sesionesAgente": sesiones_agente, "spawn": spawn}))
 """
@@ -151,7 +174,9 @@ print(json.dumps({"tareas": tareas, "entregas": entregas, "sesionesHijas": hijas
 def _foto_memoria(correr, workspace: str) -> str:
     orden = (f"cd {shlex.quote(workspace)} && find memory -type f -print0 | sort -z | "
              "xargs -0 shasum -a 256")
-    rc, out, err = correr(["sh", "-c", orden])
+    # El orden entero como UN argumento citado (F6): el ssh une el argv con espacios y
+    # el shell remoto lo vuelve a partir, así que suelto se machacea.
+    rc, out, err = correr(["sh", "-c", shlex.quote(orden)])
     if rc != 0:
         raise ValueError(f"la foto de memory/ falló: {err.strip()}")
     return out
@@ -159,9 +184,11 @@ def _foto_memoria(correr, workspace: str) -> str:
 
 def _estado_remoto(correr, sesion_main: str, agent_id: str, marcador: str,
                    sesiones_previas=(), tarea_reportada=None) -> dict:
-    rc, out, err = correr(["python3", "-c", AYUDANTE], entrada=json.dumps(
-        {"sesionMain": sesion_main, "agentId": agent_id, "marcador": marcador,
-         "sesionesPrevias": list(sesiones_previas), "tareaReportada": tarea_reportada}))
+    pedido = {"sesionMain": sesion_main, "agentId": agent_id, "marcador": marcador,
+              "sesionesPrevias": list(sesiones_previas), "tareaReportada": tarea_reportada}
+    # Como _traer (extraer-nativo.py): el código va por stdin y los datos como un
+    # argumento ya citado (F6), porque el argv llega unido con espacios al shell remoto.
+    rc, out, err = correr(["python3", "-", shlex.quote(json.dumps(pedido))], entrada=AYUDANTE)
     if rc != 0:
         raise ValueError(f"la lectura de la tarea falló: {err.strip()}")
     return json.loads(out)
@@ -185,12 +212,15 @@ def _task_id_reportado(salida: str):
     return None
 
 
-MENSAJE = """Sonda de SUA-04 (no avises a David, no escribas a Telegram, no uses sessions_spawn).
-
-1. Escribe el brief con brief.py {perfil} en la Mini: pide contestar exactamente {marcador} y nada más.
-2. Manda UNA tarea gestionada con managed_tasks_submit, target {{"kind": "agent", "agentId": "{agente}"}}, resultContract ready.v1.
-3. Admítela con managed_tasks_admit.
-"""
+MENSAJE = (
+    "Sonda de SUA-04 (no avises a David, no escribas a Telegram, no uses sessions_spawn).\n"
+    "\n"
+    "1. Escribe el brief con brief.py {perfil} en la Mini: "
+    "pide contestar exactamente {marcador} y nada más.\n"
+    "2. Manda UNA tarea gestionada con managed_tasks_submit, "
+    'target {{"kind": "agent", "agentId": "{agente}"}}, resultContract ready.v1.\n'
+    "3. Admítela con managed_tasks_admit.\n"
+)
 
 
 def sondear(agent_id: str, *, mini: str, correr, perfiles: dict, marca: str,
@@ -216,7 +246,7 @@ def sondear(agent_id: str, *, mini: str, correr, perfiles: dict, marca: str,
         sesiones_previas = estado0.get("sesionesAgente") or []
         texto = MENSAJE.format(perfil=f"--perfil {perfil}" if perfil else "(sin --perfil)",
                                marcador=marcador, agente=agent_id)
-        rc, _, err = correr(["sh", "-c", f"cat > {shlex.quote(mensaje_remoto)}"], entrada=texto)
+        rc, _, err = correr(["sh", "-c", shlex.quote("cat > " + mensaje_remoto)], entrada=texto)
         if rc != 0:
             fila["causa"] = f"no se pudo escribir el mensaje en la Mini: {err.strip()}"
             return fila
@@ -234,7 +264,8 @@ def sondear(agent_id: str, *, mini: str, correr, perfiles: dict, marca: str,
             return fila
         reportada = _task_id_reportado(out)
         inicio = reloj()
-        estado = _estado_remoto(correr, sesion_main, agent_id, marcador, sesiones_previas, reportada)
+        estado = _estado_remoto(correr, sesion_main, agent_id, marcador,
+                                sesiones_previas, reportada)
         while True:
             # Solo la hija de esta tarea (F1): el ayudante puede traer sesiones ajenas.
             reportado_id = reportada or fila["taskId"]
@@ -252,6 +283,12 @@ def sondear(agent_id: str, *, mini: str, correr, perfiles: dict, marca: str,
                               and marcador in (t.get("resultado") or "")), None)
             if tarea is not None:
                 fila["taskId"], fila["estado"] = tarea["taskId"], tarea["estado"]
+                # La hija de la tarea reconocida por su marcador también es de la sonda
+                # (F8): el ayudante deja sesionesHijas vacía sin taskId del pedido, así
+                # que el filtro se repite sobre la lista completa con el id ya conocido.
+                reportado_id = reportada or fila["taskId"]
+                hijas = [k for k in (estado.get("sesionesAgente") or [])
+                         if reportado_id and reportado_id in k] or hijas
                 if tarea["estado"] == "result-recorded":
                     fila["marcador"] = marcador in (tarea.get("resultado") or "")
                     break
@@ -259,12 +296,16 @@ def sondear(agent_id: str, *, mini: str, correr, perfiles: dict, marca: str,
                 if not nuevas and estado.get("spawn"):
                     fila["causa"] = "main usó sessions_spawn en vez de la tarea gestionada"
                 elif tarea is None and not reportada:
-                    fila["causa"] = "la tarea no llegó: main no mandó una tarea gestionada a este agente"
+                    fila["causa"] = ("la tarea no llegó: main no mandó una tarea "
+                                     "gestionada a este agente")
                 else:
                     fila["causa"] = "la tarea no llegó a result-recorded en el tope"
                 break
             dormir(5)
-            estado = _estado_remoto(correr, sesion_main, agent_id, marcador, sesiones_previas, reportada)
+            # El taskId ya reconocido también viaja al ayudante (F8): filtra hijas en el
+            # origen aunque main nunca haya reportado el suyo.
+            estado = _estado_remoto(correr, sesion_main, agent_id, marcador,
+                                    sesiones_previas, reportada or fila["taskId"])
         fila["entregas"] = estado["entregas"]
         despues = _foto_memoria(correr, vivos[agent_id]["workspace"])
         fila["memoriaIgual"] = antes == despues
@@ -293,7 +334,8 @@ def main(argv=None) -> int:
     d = comandos.add_parser("descubrir", help="la lista viva contra lo que G conoce, solo lectura")
     d.add_argument("--mini", help="user@host de la Mini (ssh); sin él se usa --agentes-json")
     d.add_argument("--agentes-json", type=Path, help="una lista de agentes ya leída, para pruebas")
-    s = comandos.add_parser("sondear", help="la sonda de ida y vuelta a un agente (la corre el coordinador)")
+    s = comandos.add_parser(
+        "sondear", help="la sonda de ida y vuelta a un agente (la corre el coordinador)")
     s.add_argument("agent_id")
     s.add_argument("--mini", required=True, help="user@host de la Mini")
     s.add_argument("--tope", type=float, default=300.0)
@@ -313,11 +355,13 @@ def _main(args) -> int:
         elif args.mini:
             vivos = lista_viva(args.mini, _ssh(args.mini))
         else:
-            print(json.dumps({"ok": False, "causa": "pasa --mini o --agentes-json"}, ensure_ascii=False))
+            print(json.dumps({"ok": False, "causa": "pasa --mini o --agentes-json"},
+                             ensure_ascii=False))
             return 3
         coverage = contexto.leer_json(RAIZ / COVERAGE)
-        print(json.dumps({"ok": True, "agentes": descubrir(perfiles, vivos, coverage.get("requesters", ()))},
-                         ensure_ascii=False))
+        salida = {"ok": True,
+                  "agentes": descubrir(perfiles, vivos, coverage.get("requesters", ()))}
+        print(json.dumps(salida, ensure_ascii=False))
         return 0
     marca = str(int(time.time()))
     fila = sondear(args.agent_id, mini=args.mini, correr=_ssh(args.mini), perfiles=perfiles,
