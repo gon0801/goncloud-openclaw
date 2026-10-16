@@ -6,6 +6,7 @@ import importlib.util
 import json
 import os
 import re
+from datetime import datetime, timezone
 from pathlib import Path
 import subprocess
 import sys
@@ -49,16 +50,23 @@ if mode == 'lost-ack' and method == 'runbook.progress.event':
 if mode == 'warning-prefix':
     print('Config warning: optional plugin was skipped')
 if method == 'runbook.progress.get':
-    lanes = [{'id':'B3'}] if mode == 'open-race' else []
-    if mode == 'worker-conflict':
-        lanes = [{'id':'B3','worker':{'id':'new-worker'},'ultimo_evento':{'at':'2026-09-30T12:02:00Z'}}]
-    if mode == 'worker-safe-conflict':
-        lanes = [{'id':'B3','worker':None,'ultimo_evento':{'at':'2026-09-30T11:59:00Z'}}]
-    if mode == 'worker-fractional-conflict':
-        lanes = [{'id':'B3','worker':{'id':'worker-1'},'ultimo_evento':{'at':'2026-09-30T12:02:00.500Z'}}]
-    if mode == 'worker-native-conflict':
-        lanes = [{'id':'B3','worker':{'id':'old-worker'},'ultimo_evento':{'at':'2026-09-30T12:02:00Z'}}]
-    print(json.dumps({'ok':True,'revision':7,'doc':{'schema':'runbook-progress.v1','corrida':'run-1','fase':'9','lead':{'actualizado':'now'},'carriles':lanes}}))
+    if mode == 'unknown-sin-registro':
+        print(json.dumps({'ok':False,'razon':'desconocida','sinRegistro':True}))
+    elif mode == 'unknown-plain':
+        print(json.dumps({'ok':False,'razon':'desconocida'}))
+    elif mode == 'legacy-no-revision':
+        print(json.dumps({'ok':True,'doc':{'schema':'runbook-progress.v1','corrida':'run-1','fase':'9','carriles':[]}}))
+    else:
+        lanes = [{'id':'B3'}] if mode == 'open-race' else []
+        if mode == 'worker-conflict':
+            lanes = [{'id':'B3','worker':{'id':'new-worker'},'ultimo_evento':{'at':'2026-09-30T12:02:00Z'}}]
+        if mode == 'worker-safe-conflict':
+            lanes = [{'id':'B3','worker':None,'ultimo_evento':{'at':'2026-09-30T11:59:00Z'}}]
+        if mode == 'worker-fractional-conflict':
+            lanes = [{'id':'B3','worker':{'id':'worker-1'},'ultimo_evento':{'at':'2026-09-30T12:02:00.500Z'}}]
+        if mode == 'worker-native-conflict':
+            lanes = [{'id':'B3','worker':{'id':'old-worker'},'ultimo_evento':{'at':'2026-09-30T12:02:00Z'}}]
+        print(json.dumps({'ok':True,'revision':7,'doc':{'schema':'runbook-progress.v1','corrida':'run-1','fase':'9','lead':{'actualizado':'now'},'carriles':lanes}}))
 elif mode in ('open-race', 'open-race-mismatch') and method == 'runbook.progress.event' and params['kind'] == 'run.opened':
     print(json.dumps({'ok':False,'reason':'corrida ya existe'}))
 elif mode == 'legacy-stale' and method == 'runbook.progress.event' and params['kind'] == 'run.opened':
@@ -327,6 +335,60 @@ else:
         events = [x["params"] for x in self.calls() if x["method"] == "runbook.progress.event"]
         self.assertEqual(events[0], events[1])
 
+    def test_unknown_run_without_registration_archives_queue(self):
+        # SUA-06 §4.3: get desconocida + sinRegistro archiva la cola entera y
+        # termina en silencio (exit 0), una sola línea por stderr.
+        identifier = json.loads(self.ready().stdout)["id"]
+        self.mode.write_text("unknown-sin-registro")
+        result = self.cli("publish", "--corrida", "run-1")
+        base = self.state / "runs" / "run-1"
+        archivo = base / ("archivo-" + datetime.now(timezone.utc).strftime("%Y-%m-%d"))
+        self.assertIn("cola archivada", result.stderr)
+        self.assertFalse((base / "queue" / (identifier + ".json")).exists())
+        self.assertTrue((archivo / (identifier + ".json")).exists())
+        self.assertEqual(
+            json.loads(self.cli("publish", "--corrida", "run-1").stdout)["published"], 0)
+
+    def test_legacy_only_doc_keeps_queue_and_warns_once_per_state_change(self):
+        # ok:true sin revision es el doc legado: la cola NO se archiva y la línea
+        # de stderr sale una vez por cambio de estado (marcador .sin-revision).
+        identifier = json.loads(self.ready().stdout)["id"]
+        base = self.state / "runs" / "run-1"
+        queued = base / "queue" / (identifier + ".json")
+        marker = base / ".sin-revision"
+        self.mode.write_text("legacy-no-revision")
+        first = self.cli("publish", "--corrida", "run-1")
+        self.assertEqual(first.stderr.count("sin revisión administrada"), 1)
+        self.assertTrue(queued.exists())
+        self.assertTrue(marker.exists())
+        second = self.cli("publish", "--corrida", "run-1")
+        self.assertEqual(second.stderr.count("sin revisión administrada"), 0)
+        self.assertTrue(queued.exists())
+        # El gateway pasa a administrada: la cola se publica y el marcador desaparece.
+        self.mode.write_text("ok")
+        self.cli("publish", "--corrida", "run-1")
+        self.assertTrue((base / "sent" / (identifier + ".json")).exists())
+        self.assertFalse(queued.exists())
+        self.assertFalse(marker.exists(), "el marcador sobrevivió al paso a administrada")
+        # De vuelta a sinRevision: la línea sale otra vez.
+        otro = json.loads(self.ready("--ronda", "2").stdout)["id"]
+        self.mode.write_text("legacy-no-revision")
+        third = self.cli("publish", "--corrida", "run-1")
+        self.assertEqual(third.stderr.count("sin revisión administrada"), 1)
+        self.assertTrue((base / "queue" / (otro + ".json")).exists())
+
+    def test_unknown_without_field_keeps_queue_and_fails(self):
+        # desconocida SIN campo puede ser una corrida viva con el candado
+        # ocupado: mismo ruido acotado de hoy, cola en su lugar, exit 1.
+        identifier = json.loads(self.ready().stdout)["id"]
+        self.mode.write_text("unknown-plain")
+        failed = self.cli("publish", "--corrida", "run-1", ok=False)
+        self.assertIn("get no devolvió documento y revisión aceptados", failed.stderr)
+        self.assertTrue((self.state / "runs" / "run-1" / "queue" / (identifier + ".json")).exists())
+        sin_archivo = self.state / "runs" / "run-1" / (
+            "archivo-" + datetime.now(timezone.utc).strftime("%Y-%m-%d"))
+        self.assertFalse(sin_archivo.exists())
+
     def test_historical_evidence_records_provenance(self):
         self.input.write_text("LISTO legacy abbreviated\n")
         self.ready(ok=False)
@@ -473,7 +535,7 @@ else:
         self.assertTrue(metadata.exists())
         self.assertTrue((queue / "opened-old.json").exists())
         with mock.patch.object(client, "gateway", return_value={"ok": False, "reason": "corrida ya existe"}), \
-             mock.patch.object(client, "get", return_value={"revision": 1, "doc": doc}):
+             mock.patch.object(client, "get", return_value={"estado": "administrada", "revision": 1, "doc": doc}):
             client.publish(args)
         self.assertFalse((queue / "opened-old.json").exists())
         self.assertTrue((base / "superseded" / "opened-old.json").exists())
@@ -514,7 +576,8 @@ else:
             return {"ok": True, "revision": 2}
 
         with mock.patch.object(client, "gateway", side_effect=remote), \
-             mock.patch.object(client, "get", return_value={"revision": 1, "doc": {"corrida": "run-1", "carriles": [{"id": "B4"}]}}):
+             mock.patch.object(client, "get", return_value={"estado": "administrada", "revision": 1,
+                                                            "doc": {"corrida": "run-1", "carriles": [{"id": "B4"}]}}):
             client.publish(args)
         self.assertEqual(calls, ["opened-current"])
         self.assertFalse((queue / "opened-old.json").exists())
