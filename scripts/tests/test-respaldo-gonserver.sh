@@ -7,7 +7,7 @@
 #   3. Datos que no son gzip o llegan truncados: sale 3 y no queda archivo ni temporal.
 #   4. Retención: 2 de cada prefijo en openclaw (uno no poda al otro); el mismo día reemplaza.
 #   5. hermes: hermes-backup en hermes/ (2) y el nombre viejo claw-backup en claw/ (8).
-#   5b. Fecha del nombre: acepta de hoy-60 a hoy+1 (también cruzando mes y año); fuera de
+#   5b. Fecha del nombre: acepta de hoy-60 a hoy (también cruzando mes y año); fuera de
 #       eso sale 2 sin escribir nada.
 #   5c. Tope de tamaño: lo que pasa de RECIBE_MAX_BYTES sale 4 sin archivo ni temporal;
 #       justo el tope entra; deja de leer en el tope, no escribe el envío entero.
@@ -63,10 +63,10 @@ done
 
 # 3
 for malo in basura truncado.tar.gz; do
-  recibir openclaw openclaw-backup-20261016.tar.gz "$SB/$malo"; rc=$?
+  recibir openclaw openclaw-backup-20261014.tar.gz "$SB/$malo"; rc=$?
   [ "$rc" -eq 3 ] || fail "aceptó un archivo $malo (rc=$rc)"
   grep -q "corrupto" "$SB/err" || fail "rechazo de $malo sin causa"
-  [ -e "$B/openclaw/openclaw-backup-20261016.tar.gz" ] && fail "quedó el archivo $malo"
+  [ -e "$B/openclaw/openclaw-backup-20261014.tar.gz" ] && fail "quedó el archivo $malo"
   ls -A "$B/openclaw" | grep -q '\.tmp' && fail "quedó un temporal tras rechazar $malo"
 done
 [ -s "$SB/out" ] && fail "un rechazo imprimió algo en stdout: $(cat "$SB/out")"
@@ -95,8 +95,9 @@ done
 [ -e "$B/claw/claw-backup-20261002.tar.gz" ] || fail "claw/ borró uno de los 8 más nuevos"
 
 # 5b
-for caso in "20261015 20261016 si" "20261015 20260816 si" "20261015 20261017 no" "20261015 20260815 no" \
-            "20261015 20991231 no" "20270101 20261102 si" "20270101 20261101 no" "20270101 20270102 si"; do
+for caso in "20261015 20261015 si" "20261015 20261016 no" "20261015 20260816 si" "20261015 20260815 no" \
+            "20261015 20991231 no" "20270101 20261102 si" "20270101 20261101 no" "20270101 20270101 si" \
+            "20270101 20270102 no"; do
   # shellcheck disable=SC2086  # cada caso son tres palabras
   set -- $caso
   rm -rf "$SB/fechas"

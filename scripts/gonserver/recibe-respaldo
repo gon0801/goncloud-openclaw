@@ -11,7 +11,8 @@
 #             claw-backup-AAAAMMDD.tar.gz en $RECIBE_BASE/claw (8) para que el script
 #             anterior de la PC siga funcionando hasta que lo reemplacen.
 #
-# La fecha del nombre tiene que caer entre hoy-60 y hoy+1 según el reloj del servidor:
+# La fecha del nombre tiene que caer entre hoy-60 y hoy según el reloj del servidor (UTC,
+# adelante de la Mini y la PC, así que un cliente sano nunca manda una fecha futura):
 # la poda guarda los más nuevos por nombre, así que unos cuantos nombres con fecha futura
 # borrarían todas las copias reales y se quedarían para siempre.
 #
@@ -50,8 +51,8 @@ dia() {
 }
 fecha="${nombre##*-}"; fecha="${fecha%.tar.gz}"
 hoy=$(dia "${RECIBE_HOY:-$(date +%Y%m%d)}"); n=$(dia "$fecha")
-if [ "$n" -gt $((hoy + 1)) ] || [ "$n" -lt $((hoy - 60)) ]; then
-  echo "ERROR: fecha fuera de rango en '$nombre' (se aceptan de hoy-60 a hoy+1)" >&2; exit 2
+if [ "$n" -gt "$hoy" ] || [ "$n" -lt $((hoy - 60)) ]; then
+  echo "ERROR: fecha fuera de rango en '$nombre' (se aceptan de hoy-60 a hoy)" >&2; exit 2
 fi
 
 mkdir -p "$dir"
