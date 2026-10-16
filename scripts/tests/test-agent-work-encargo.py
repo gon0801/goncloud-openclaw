@@ -1224,6 +1224,59 @@ class Sucesion(Mac):
         self.assertEqual((entry["actual"], entry["estado"]), ("zai-coding-plan/glm-5.4-flash", "promovido"))
 
 
+class Diario(Mac):
+    """SUA-04 (4.9): `encargo.py diario`, la pasada que corre el mismo launchd de 4.3: sucesion
+    --aplicar y después fuentes --aviso, cada uno aislado, en una sola línea JSON."""
+
+    AHORA = datetime(2026, 10, 16, 12, tzinfo=timezone.utc)
+
+    def diario(self):
+        with mock.patch.object(encargo.time, "time", return_value=self.AHORA.timestamp()):
+            return self.cli("diario")
+
+    def test_diario_corre_las_dos_y_contesta_una_linea(self):
+        code, out, err = self.diario()
+        self.assertEqual((code, err), (0, ""))
+        self.assertEqual(len(out.splitlines()), 1, out + err)
+        respuesta = json.loads(out)
+        self.assertEqual(set(respuesta), {"ok", "sucesion", "fuentes"})
+        self.assertIs(respuesta["ok"], True)
+        # Sin sucesor en la línea de glm, la mitad de sucesion no corre ningún canario.
+        self.assertEqual((respuesta["sucesion"]["ok"], respuesta["sucesion"]["accion"]),
+                         (True, "nada-que-probar"))
+        self.assertIs(respuesta["fuentes"]["ok"], True)
+        # El aviso tal como lo deja fuentes HOY (G5 cableará el envío): con las fuentes del
+        # fixture (todo vence en 2027-01-14, a 90 días) nada vence, no hay quema y queda el
+        # pendiente de G5.
+        self.assertEqual(respuesta["fuentes"]["aviso"],
+                         {"vencen": [], "avisadoHoy": False, "ultimoAviso": None,
+                          "avisoPendiente": "aviso pendiente de G5"})
+        self.assertFalse((self.state / "fuentes.json").exists())
+
+    def test_diario_un_sucesion_que_lanza_no_impide_fuentes_y_sale_con_el_peor(self):
+        with mock.patch.object(encargo, "sucesion", side_effect=RuntimeError("canario explotó")):
+            code, out, err = self.diario()
+        self.assertEqual(code, 3)
+        self.assertEqual(len(out.splitlines()), 1, out + err)
+        respuesta = json.loads(out)
+        self.assertIs(respuesta["ok"], False)
+        self.assertIs(respuesta["sucesion"]["ok"], False)
+        self.assertIn("canario explotó", respuesta["sucesion"]["causa"])
+        self.assertIs(respuesta["fuentes"]["ok"], True)
+
+    def test_diario_fuentes_que_falla_sale_con_el_peor(self):
+        (self.checkout / "scripts" / "agent-work" / "contexto" / "perfiles.v1.json").write_text("no es json{")
+        code, out, err = self.diario()
+        self.assertEqual(code, 3)
+        self.assertEqual(len(out.splitlines()), 1, out + err)
+        respuesta = json.loads(out)
+        self.assertIs(respuesta["ok"], False)
+        self.assertEqual((respuesta["sucesion"]["ok"], respuesta["sucesion"]["accion"]),
+                         (True, "nada-que-probar"))
+        self.assertIs(respuesta["fuentes"]["ok"], False)
+        self.assertIn("no se pudo leer perfiles.v1.json del checkout", respuesta["fuentes"]["causa"])
+
+
 import sqlite3 as _sqlite3
 
 
@@ -1579,15 +1632,14 @@ class ClosedStaysClosed(Mac):
 class PlistDeSucesion(unittest.TestCase):
     def test_el_plist_de_sucesion_trae_argumentos_que_encargo_acepta(self):
         # F9 de #319: --checkout y --state-root son del parser raíz y van antes del
-        # subcomando; después de "sucesion" argparse los rechaza y el launchd no hace nada.
+        # subcomando; después de "diario" argparse los rechaza y el launchd no hace nada.
         import plistlib
         plist = ROOT / "scripts" / "mac" / "ai.goncloud.agent-work-sucesion.plist"
         with plist.open("rb") as archivo:
             argv = plistlib.load(archivo)["ProgramArguments"]
         self.assertTrue(argv[1].endswith("encargo.py"))
         args = encargo._parser().parse_args(argv[2:])
-        self.assertEqual(args.command, "sucesion")
-        self.assertTrue(args.aplicar)
+        self.assertEqual(args.command, "diario")
 
 
 if __name__ == "__main__":

@@ -920,6 +920,30 @@ def sucesion(*, state_root: Path, checkout: Path, aplicar: bool = False, reverti
                 "evidencia": entry["evidencia"]}
 
 
+def diario(*, state_root: Path, checkout: Path, now: float,
+           opencode_bin: Path = OPENCODE_BIN) -> dict:
+    """`encargo.py diario` (SUA-04, 4.9): la pasada completa que corre el mismo launchd de 4.3,
+    ahora también con fuentes. Corre `sucesion --aplicar` y después `fuentes --aviso`, cada uno
+    aislado: si el primero contesta ok False o lanza, el segundo corre igual, la única línea de
+    salida dice qué pasó en cada uno y el código de salida es el peor de los dos."""
+
+    def aislada(pasada):
+        try:
+            return pasada()
+        except Exception as error:
+            # Aislamiento total: un leg que revienta por cualquier cosa (no solo lo que
+            # _run_fuentes espera) no puede tumbar al otro ni la línea del launchd.
+            return {"ok": False, "causa": str(error)}
+
+    respuesta_sucesion = aislada(lambda: sucesion(aplicar=True, revertir=None, runtime_source=None,
+                                                  now=now, state_root=state_root,
+                                                  checkout=checkout, opencode_bin=opencode_bin))
+    respuesta_fuentes = aislada(lambda: fuentes(checkout=checkout, state_root=state_root,
+                                                aviso=True, now=now))
+    return {"ok": respuesta_sucesion.get("ok") is True and respuesta_fuentes.get("ok") is True,
+            "sucesion": respuesta_sucesion, "fuentes": respuesta_fuentes}
+
+
 def citar(ref: str, quote: str, prompts: Path) -> "OperatorCitation | str":
     """Las palabras del operador, cotejadas contra el historial de prompts, o la razón por la que no valen.
 
@@ -1384,6 +1408,8 @@ def _parser() -> argparse.ArgumentParser:
     sucesion_cmd.add_argument("--aplicar", action="store_true", help="corre a lo más un canario y promueve o rechaza")
     sucesion_cmd.add_argument("--revertir", metavar="LINEA", help="vuelve la línea a su anterior y la deja rechazada")
     sucesion_cmd.add_argument("--runtime-source", help="AGENT_WORK_RUNTIME_SOURCE para el banco del canario")
+    commands.add_parser(
+        "diario", help="la pasada del launchd: sucesion en aplicar y el aviso de fuentes")
     listing = commands.add_parser("proveedores", help="qué proveedores pueden correr, cómo cobran y qué falta")
     listing.add_argument("--refrescar", action="store_true", help="pide a opencode que vuelva a bajar su lista")
     allow = commands.add_parser("permitir", help="escribe un permiso, un filtro o el id de un permiso que existe")
@@ -1494,9 +1520,15 @@ def _run_sucesion(args: argparse.Namespace, where: dict, now: float) -> int:
     return 0 if respuesta.get("ok") else 3
 
 
+def _run_diario(args: argparse.Namespace, where: dict, now: float) -> int:
+    respuesta = diario(now=now, **where)
+    print(json.dumps(respuesta, ensure_ascii=False))
+    return 0 if respuesta["ok"] else 3
+
+
 _COMMANDS = {"preparar": _run_preparar, "estado": _run_estado, "perfiles": _run_perfiles,
              "fuentes": _run_fuentes, "proveedores": _run_proveedores, "sucesion": _run_sucesion,
-             "solicitar": _run_solicitar,
+             "diario": _run_diario, "solicitar": _run_solicitar,
              "permitir": _run_politica, "cerrar": _run_politica}
 
 
