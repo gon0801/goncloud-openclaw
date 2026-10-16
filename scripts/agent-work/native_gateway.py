@@ -578,6 +578,8 @@ class RunHost:
         self.claude_bin = Path(claude_bin) if claude_bin else Path(
             os.environ.get("AGENT_WORK_CLAUDE") or shutil.which("claude") or "claude")
         self._version_claude = None
+        self._claim_rechazado_en: dict = {}
+        """Adaptadores cuyo claim el gateway no autorizó, y cuándo (B2 de G7-r3)."""
         self.allowed_root = Path(allowed_root)
         self.canary = canary
         self.accept_deadline_seconds = accept_deadline_seconds
@@ -731,9 +733,27 @@ class RunHost:
 
     def claim(self):
         for adapter_id in ADAPTERS:
-            claimed = claim_run_once(self.client, host=self.host, manager=self.manager,
-                                     backend=self.backend, instance_id=self.instance_id, deps=self,
-                                     adapter_id=adapter_id)
+            rechazado = self._claim_rechazado_en.get(adapter_id)
+            if rechazado is not None and self.clock() - rechazado < CATALOG_RECHECK_SECONDS:
+                continue
+            try:
+                claimed = claim_run_once(self.client, host=self.host, manager=self.manager,
+                                         backend=self.backend, instance_id=self.instance_id, deps=self,
+                                         adapter_id=adapter_id)
+            except Exception as error:
+                # B2 de G7-r3: el gateway autoriza por host una lista de adaptadores
+                # (managedTasks.hosts[<host>].adapters en la Mini). Que uno no esté
+                # autorizado no corta la pasada: se anota una vez, se sigue con los
+                # demás y se reintenta cada CATALOG_RECHECK_SECONDS (la cadencia con
+                # que el host ya relee su catálogo). Otro error sale como siempre.
+                if "adapter is not authorized" not in str(error):
+                    raise
+                self._claim_rechazado_en[adapter_id] = self.clock()
+                print(f"agent-work: el gateway no autoriza el claim de {adapter_id} en "
+                      f"{self.client.host_id}; se sigue con los demás adaptadores y se "
+                      f"reintenta en {CATALOG_RECHECK_SECONDS:.0f} s", file=sys.stderr, flush=True)
+                continue
+            self._claim_rechazado_en.pop(adapter_id, None)
             if claimed is not None:
                 return claimed
         return None
@@ -742,12 +762,19 @@ class RunHost:
         operation = operation_id(key)
         if operation not in self._opened:
             record = SessionRecord.locate(self.host.state_dir, operation)
-            try:
-                argv = json.loads(record.argv.read_text())
-            except (OSError, ValueError):
-                argv = []
-            el_adaptador = adaptador("claude" if "--model" in argv else "opencode")
-            opened = el_adaptador.directorio_sesion(record.path)
+            # M2 de G7-r3: el adaptador sale de lo que el host guardó del claim en
+            # el spool (adapterId de la asignación), no del argv: cualquier cambio
+            # en el argv de un CLI rompería la elección si saliera de ahí.
+            adapter_id = "opencode"
+            fila = self.host.spool.get(operation)
+            if fila is not None:
+                try:
+                    guardado = json.loads(fila["operation_json"]).get("adapterId")
+                except (ValueError, KeyError, TypeError):
+                    guardado = None
+                if guardado in ADAPTADORES:
+                    adapter_id = guardado
+            opened = adaptador(adapter_id).directorio_sesion(record.path)
             if opened is None:
                 return None
             self._opened[operation] = opened

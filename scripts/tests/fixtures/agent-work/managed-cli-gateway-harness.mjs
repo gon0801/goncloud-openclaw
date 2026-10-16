@@ -32,7 +32,8 @@ if (!root || !stateDir || !token) {
 const requesterAgentId = process.env.CROSS_REQUESTER_AGENT_ID || "ingenieria";
 const sessionKey = process.env.CROSS_REQUESTER_SESSION_KEY || "agent:ingenieria:main";
 const hostId = process.env.CROSS_HOST_ID || "e2e-host";
-const hostAdapter = process.env.CROSS_HOST_ADAPTER || "fixture-cli-a"  // id de juguete (SUA-04, 4.6);
+const hostAdapters = (process.env.CROSS_HOST_ADAPTER || "fixture-cli-a")  // ids de juguete (SUA-04, 4.6);
+  .split(",").map((id) => id.trim()).filter(Boolean);  // lista separada por comas (SUA-04 G7-r3, B2)
 const countingProvider = process.env.CROSS_PROVIDER === "loopback";
 const scriptedCorrection = process.env.CROSS_PROVIDER_SCRIPT === "review-correction";
 const scriptedRoot = process.env.CROSS_PROVIDER_SCRIPT === "root-reconcile";
@@ -278,7 +279,7 @@ const config = {
   managedTasks: {
     enabled: process.env.CROSS_MANAGED_ENABLED !== "0", instructionRoot: stateDir, runTimeoutSeconds: 60, profile,
     ...(rootRequesters ? { rootRequesters: [requesterAgentId] } : {}),
-    hosts: { [hostId]: { deviceId: deviceIdentity.deviceId, adapters: [hostAdapter] } },
+    hosts: { [hostId]: { deviceId: deviceIdentity.deviceId, adapters: hostAdapters } },
   },
 };
 const { client, server } = await gateway.startGatewayWithClient({

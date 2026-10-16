@@ -15,13 +15,14 @@ import types
 import unittest
 from datetime import datetime, timezone
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts" / "agent-work"))
 import contexto  # noqa: E402
 import modelos  # noqa: E402
 import sesion  # noqa: E402
-from contracts import RunDir  # noqa: E402
+from contracts import OperationKey, RunDir, SessionRecord, operation_id  # noqa: E402
 from sesion import LaunchSpec, Package, Route, Workspace  # noqa: E402
 
 FIXTURES = ROOT / "scripts/tests/fixtures/agent-work/claude"
@@ -312,12 +313,12 @@ class HostClaude(unittest.TestCase):
         )
         self.claude_falso.chmod(0o755)
 
-    def test_el_host_planea_y_arma_el_argv_de_claude(self):
+    def run_host(self, *, clock=None, host=None):
         from native_gateway import RunHost
 
-        run_host = RunHost(
+        return RunHost(
             types.SimpleNamespace(host_id="mac-local"),
-            None,
+            host,
             None,
             None,
             instance_id="enc-1",
@@ -327,7 +328,11 @@ class HostClaude(unittest.TestCase):
             claude_bin=self.claude_falso,
             allowed_root=self.tmp,
             canary=True,
+            clock=clock or (lambda: 1000.0),
         )
+
+    def test_el_host_planea_y_arma_el_argv_de_claude(self):
+        run_host = self.run_host()
         (self.tmp / "run").mkdir(exist_ok=True)
         plan = run_host.plan(
             {"inputRevision": {"kind": "artifact"}, "resultContract": "ready.v1"},
@@ -343,6 +348,92 @@ class HostClaude(unittest.TestCase):
         self.assertEqual(argv[0], str(self.claude_falso))
         self.assertEqual(argv[argv.index("--model") + 1], "opus")
         self.assertEqual(run_host.bin_para("opencode"), Path("/bin/true"))
+
+    def test_un_claim_no_autorizado_no_corta_la_pasada(self):
+        # B2 de G7-r3: el gateway autoriza por host una lista de adaptadores; si
+        # opencode no esta en la de este host, su rechazo no puede matar el claim
+        # de claude (y al reves en vivo: la Mini hoy solo autoriza opencode).
+        import native_gateway
+
+        reloj = {"t": 1000.0}
+        run_host = self.run_host(clock=lambda: reloj["t"])
+        pedidos = []
+
+        def claim_falso(client, *, host, manager, backend, instance_id, deps, adapter_id):
+            pedidos.append(adapter_id)
+            if adapter_id == "opencode":
+                raise RuntimeError(
+                    "native projection Gateway rejected request managedTasks.host.claim: "
+                    "Managed host device or adapter is not authorized"
+                )
+            return f"reclamada-{adapter_id}"
+
+        with mock.patch.object(native_gateway, "claim_run_once", claim_falso):
+            self.assertEqual(run_host.claim(), "reclamada-claude")
+            self.assertEqual(pedidos, ["opencode", "claude"])
+            # En la misma ventana no se vuelve a pedir el adaptador rechazado.
+            pedidos.clear()
+            self.assertEqual(run_host.claim(), "reclamada-claude")
+            self.assertEqual(pedidos, ["claude"])
+            # Pasada la ventana de reintento, se vuelve a probar.
+            reloj["t"] += native_gateway.CATALOG_RECHECK_SECONDS + 1
+            pedidos.clear()
+            self.assertEqual(run_host.claim(), "reclamada-claude")
+            self.assertEqual(pedidos, ["opencode", "claude"])
+
+    def test_un_error_de_otra_clase_en_el_claim_sigue_saliendo(self):
+        import native_gateway
+
+        run_host = self.run_host()
+
+        def claim_roto(client, *, host, manager, backend, instance_id, deps, adapter_id):
+            raise RuntimeError("el gateway no contesto")
+
+        with mock.patch.object(native_gateway, "claim_run_once", claim_roto):
+            with self.assertRaisesRegex(RuntimeError, "el gateway no contesto"):
+                run_host.claim()
+
+    def test_session_directory_sale_del_adapter_del_claim_no_del_argv(self):
+        # M2 de G7-r3: un record de opencode cuyo argv trae --model se lee con
+        # opencode: el adaptador sale de lo que el host guardo del claim.
+        spool_falso = types.SimpleNamespace(
+            get=lambda operation: {"operation_json": json.dumps({"adapterId": "opencode"})}
+        )
+        state_dir = self.tmp / "spool"
+        host_falso = types.SimpleNamespace(state_dir=state_dir, spool=spool_falso)
+        run_host = self.run_host(host=host_falso)
+        key = OperationKey("mac-local", "t-1", 1, "enc-1")
+        record = SessionRecord.locate(state_dir, operation_id(key))
+        record.path.mkdir(parents=True)
+        (record.argv).write_text(json.dumps(["/bin/claude", "--model", "opus"]), encoding="utf-8")
+        (record.events).write_text(
+            json.dumps(
+                {
+                    "type": "system",
+                    "subtype": "init",
+                    "cwd": "/carpeta-de-claude",
+                    "model": "claude-sonnet-5-5",
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        (record.stderr).write_text(
+            "timestamp=2026-10-13T00:57:58.663Z level=INFO run=x message=created "
+            'id=ses_abc directory=/carpeta-de-opencode path="" workspaceID=undefined\n',
+            encoding="utf-8",
+        )
+        self.assertEqual(run_host._session_directory(key), "/carpeta-de-opencode")
+
+
+class Harness(unittest.TestCase):
+    def test_el_harness_autoriza_la_lista_de_adaptadores(self):
+        # B2 (b) de G7-r3: CROSS_HOST_ADAPTER acepta una lista separada por comas.
+        harness = (
+            ROOT / "scripts/tests/fixtures/agent-work/managed-cli-gateway-harness.mjs"
+        ).read_text(encoding="utf-8")
+        self.assertIn('.split(",")', harness)
+        self.assertIn("adapters: hostAdapters", harness)
 
 
 if __name__ == "__main__":

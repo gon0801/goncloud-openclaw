@@ -486,7 +486,11 @@ class BancoE2E(unittest.TestCase):
         self.addCleanup(self.clean_slot)
         subprocess.run([TMUX, "-L", self.socket, "-f", "/dev/null", "new-session", "-d", "-s", "keeper", "sleep 600"],
                        check=True, cwd=self.root)
-        self.gateway = LoopGateway(self.runtime, self.root, extra_env={"CROSS_HOST_ADAPTER": ADAPTER})
+        # El banco de claude autoriza los dos adaptadores (B2 de G7-r3): el host
+        # reclama opencode y claude, y el gateway del arnés tiene que autorizar
+        # los dos para que el claim de claude ocurra con el host real.
+        gateway_adapters = "opencode,claude" if ADAPTER == "claude" else ADAPTER
+        self.gateway = LoopGateway(self.runtime, self.root, extra_env={"CROSS_HOST_ADAPTER": gateway_adapters})
         self.addCleanup(self.gateway.close)
         self.log = self.root / "host.log"
         self.addCleanup(self.stop_host)
