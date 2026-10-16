@@ -30,6 +30,7 @@ No hay tabla de modelos en esta skill. Qué modelos existen, cuáles están perm
    ```
    python3 ~/.local/share/agent-work/brief.py --root /Users/gon/.openclaw/workspace/managed-instructions <briefArgs> <<'BRIEF'
    <qué hacer, en qué repo (ruta absoluta de la Mac), qué no tocar, si hace commit o no>
+   No comentes, descartes ni empujes nada en GitHub: eso lo hace solo el coordinador.
    Entrega el resultado ready.v1 con typedPayload {"evidenceRef": "<archivo>"} y el artefacto <archivo>, como lo explica el archivo de asignación (campo protocol).
    BRIEF
    ```
