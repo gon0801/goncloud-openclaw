@@ -610,7 +610,10 @@ def aplicar_en_la_mini(publicacion: Path, home: Path, agentes_json: Path | None)
             # "igual" no refresca el digest: el del estado es el de la última escritura
             # del publicador, y es el que la reversa valida (4.3 CAS).
             nuevos_bloques[identificador] = sha256hex(bloques[identificador])
-            respaldo_retiro.unlink(missing_ok=True)
+            # La vuelta limpia TODOS los respaldos de retiro (F9): uno viejo que
+            # sobreviva mentiría un retiro que ya no existe.
+            for viejo in {*respaldos_retiro, respaldo_retiro}:
+                viejo.unlink(missing_ok=True)
             continue
         respaldo = suya / gen / "workspaces" / f"{identificador}.AGENTS.md"
         respaldo.parent.mkdir(parents=True, exist_ok=True)
@@ -625,7 +628,8 @@ def aplicar_en_la_mini(publicacion: Path, home: Path, agentes_json: Path | None)
         salida_agentes[identificador] = "publicado"
         nuevos_workspaces[identificador] = releido
         nuevos_bloques[identificador] = sha256hex(bloques[identificador])
-        respaldo_retiro.unlink(missing_ok=True)
+        for viejo in {*respaldos_retiro, respaldo_retiro}:
+            viejo.unlink(missing_ok=True)
 
     vivos = {agente["id"] for agente in agentes}
     traidos = (
