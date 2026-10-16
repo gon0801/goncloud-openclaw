@@ -152,6 +152,16 @@ def event_id(kind, corrida, carril, intento, ronda):
     return "evt-" + hashlib.sha256(key).hexdigest()[:32]
 
 
+def es_hallazgos(content):
+    """Si la evidencia es un documento hallazgos.v1: un objeto con ese schema y su lista."""
+    try:
+        documento = json.loads(content)
+    except ValueError:
+        return False
+    return (isinstance(documento, dict) and documento.get("schema") == "hallazgos.v1"
+            and isinstance(documento.get("findings"), list))
+
+
 def record(args):
     corrida = check(args.corrida, RUN_RE, "corrida")
     carril = check(args.carril, ID_RE, "carril")
@@ -179,7 +189,11 @@ def record(args):
         raise ValueError("source inválido")
     if not args.historical and kind == "round.ready" and not re.search(r"(?m)^LISTO " + re.escape(sha) + r"(?:\s|$)", content):
         raise ValueError("evidencia LISTO no corresponde al SHA")
-    if not args.historical and kind == "round.verdict" and not re.search(r"(?m)^VEREDICTO(?:\s|$)", content):
+    if (not args.historical and kind == "round.verdict"
+            and not re.search(r"(?m)^VEREDICTO(?:\s|$)", content)
+            and not (verdict == "cambios" and es_hallazgos(content))):
+        # El artefacto de un changes es un hallazgos.v1 (SUA-05, 4.2): es su propia marca,
+        # porque ninguna línea de un JSON puede empezar con VEREDICTO (DeepSeek F3 en #328).
         raise ValueError("falta VEREDICTO en evidencia")
     base = run_dir(args, corrida)
     evidence_path = base / "evidence" / (identifier + ".json")

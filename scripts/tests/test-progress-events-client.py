@@ -179,6 +179,27 @@ else:
                  "--ronda", "3", "--sha", SHA, "--verdict", "aprobado",
                  "--evidence-file", str(self.input))
 
+    def test_a_changes_verdict_takes_its_hallazgos_v1_as_evidence(self):
+        # DeepSeek F3 en #328: el artefacto de un changes es un hallazgos.v1 (JSON) y ninguna
+        # línea de un JSON empieza con VEREDICTO; la cola lo acepta como evidencia de cambios.
+        hallazgos = {"schema": "hallazgos.v1", "findings": [
+            {"id": "H1", "bloqueante": True, "archivo": "saluda.py", "linea": 2,
+             "resumen": "devuelve hola", "reproduce": "python3 test-saluda.py"}]}
+        self.input.write_text(json.dumps(hallazgos, indent=2) + "\n")
+        result = self.cli("record-verdict", "--corrida", "run-1", "--carril", "B3",
+                          "--intento", "try-1", "--ronda", "7", "--sha", SHA,
+                          "--verdict", "changes", "--evidence-file", str(self.input))
+        identifier = json.loads(result.stdout)["id"]
+        event = json.loads((self.state / "runs" / "run-1" / "queue" / (identifier + ".json")).read_text())
+        self.assertEqual(event["verdict"], "cambios")
+        # Un approved sigue pidiendo su línea VEREDICTO, y un JSON que no es hallazgos.v1 no pasa.
+        for verdict, texto in (("approved", json.dumps(hallazgos)), ("changes", '{"otra": "cosa"}')):
+            with self.subTest(verdict=verdict):
+                self.input.write_text(texto + "\n")
+                self.cli("record-verdict", "--corrida", "run-1", "--carril", "B3",
+                         "--intento", "try-1", "--ronda", "8", "--sha", SHA,
+                         "--verdict", verdict, "--evidence-file", str(self.input), ok=False)
+
     def test_invalid_identifiers_do_not_escape_state_dir(self):
         self.ready("--carril", "../B3", ok=False)
         self.cli("publish", "--corrida", "../run-1", ok=False)
