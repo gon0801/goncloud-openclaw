@@ -111,7 +111,7 @@ class CutoverLiveTest(unittest.TestCase):
         self.state = self.root / "state.json"
 
     def entry(self, **changes):
-        entry = {"id": "loop:x", "legacyCrons": ["vigia-viejo"], "host": "mini", "adapter": "claude_opus",
+        entry = {"id": "loop:x", "legacyCrons": ["vigia-viejo"], "host": "mini", "adapter": "fixture-cli-a",  # id de juguete (SUA-04, 4.6)
                  "deviceId": "device", "instructionRoot": str(self.root), "spools": [str(self.root / "spool")]}
         entry.update(changes)
         cutover_live.prepare(self.state, entry)
@@ -161,22 +161,22 @@ class CutoverLiveTest(unittest.TestCase):
 
     def test_revert_removes_only_its_adapter_when_the_host_keeps_another(self):
         gateway = FakeGateway([job()], managed={"enabled": True, "instructionRoot": str(self.root),
-                                                "hosts": {"mini": {"deviceId": "device", "adapters": ["codex"]}}})
+                                                "hosts": {"mini": {"deviceId": "device", "adapters": ["fixture-cli-b"]}}})
         self.entry()
         self.assertEqual(self.apply(gateway), "transferred")
-        self.assertEqual(gateway.managed["hosts"]["mini"]["adapters"], ["claude_opus", "codex"])
+        self.assertEqual(gateway.managed["hosts"]["mini"]["adapters"], ["fixture-cli-a", "fixture-cli-b"])
         self.assertEqual(cutover_live.revert(self.state, gateway, sleep=lambda _: None), "reverted; old crons re-enabled")
-        self.assertEqual((gateway.managed["enabled"], gateway.managed["hosts"]["mini"]["adapters"]), (True, ["codex"]))
+        self.assertEqual((gateway.managed["enabled"], gateway.managed["hosts"]["mini"]["adapters"]), (True, ["fixture-cli-b"]))
         self.assertTrue(gateway.jobs[0]["enabled"])
 
     def test_revert_drops_a_host_left_without_adapters_while_another_host_stays_open(self):
         gateway = FakeGateway([job()], managed={"enabled": True, "instructionRoot": str(self.root),
-                                                "hosts": {"pc": {"deviceId": "pc-device", "adapters": ["codex"]}}})
+                                                "hosts": {"pc": {"deviceId": "pc-device", "adapters": ["fixture-cli-b"]}}})
         self.entry()
         self.assertEqual(self.apply(gateway), "transferred")
         self.assertEqual(cutover_live.revert(self.state, gateway, sleep=lambda _: None), "reverted; old crons re-enabled")
         self.assertEqual((gateway.managed["enabled"], gateway.managed["hosts"]),
-                         (True, {"pc": {"deviceId": "pc-device", "adapters": ["codex"]}}))
+                         (True, {"pc": {"deviceId": "pc-device", "adapters": ["fixture-cli-b"]}}))
 
     def test_a_revert_interrupted_between_its_steps_resumes_without_patching_again(self):
         gateway = FakeGateway([job()])
@@ -210,9 +210,9 @@ class CutoverLiveTest(unittest.TestCase):
 
     def test_freeze_closes_all_admission_without_a_state_file(self):
         gateway = FakeGateway([job()], managed={"enabled": True, "instructionRoot": str(self.root),
-                                                "hosts": {"mini": {"deviceId": "device", "adapters": ["codex"]}}})
+                                                "hosts": {"mini": {"deviceId": "device", "adapters": ["fixture-cli-b"]}}})
         self.assertEqual(self.cli(gateway, "freeze"), (0, "frozen", ""))
-        self.assertEqual((gateway.managed["enabled"], gateway.managed["hosts"]["mini"]["adapters"]), (False, ["codex"]))
+        self.assertEqual((gateway.managed["enabled"], gateway.managed["hosts"]["mini"]["adapters"]), (False, ["fixture-cli-b"]))
 
     def test_an_old_cron_the_gateway_does_not_have_refuses_instead_of_leaving_two_emitters(self):
         gateway = FakeGateway([job("vigia-real", "jreal")])

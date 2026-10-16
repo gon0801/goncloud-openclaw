@@ -16,8 +16,8 @@ El runtime autentica al solicitante y devuelve el resultado a esta misma sesión
 Inspecciona el resultado con managed_tasks_inspect y consume el recibo con managed_tasks_resolve.
 Si se pierde una respuesta, repite la misma clave para recuperar el encargo.
 
-Para CLI remoto, --target windows-remote/codex solo se admite cuando host y adaptador figuren certified en coverage.json.
-Actualmente esta combinación está deshabilitada; no prometas ejecución remota.
+Para CLI remoto no hay hoy ningún destino: los adaptadores que no son opencode salieron de coverage.json (SUA-04, 4.6) porque ningún host los implementa, y un destino `--target <host>/<adaptador>` solo se admite cuando host y adaptador figuren certified en coverage.json.
+No prometas ejecución remota.
 
 Fuera del perímetro gestionado conserva la ruta vigente.
 Si una operación gestionada es rechazada, informa el bloqueo sin reenviarla por sessions_spawn, sessions_send ni CLI directo.

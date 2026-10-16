@@ -25,7 +25,7 @@ from routing import prepare_request  # noqa: E402
 
 FIXTURE = ROOT / "scripts/tests/fixtures/agent-work/managed-cli-gateway-harness.mjs"
 LOOP_SESSION = "agent:main:encargos-loop"
-HOST_ID, ADAPTER = "mac-local", "claude_opus"
+HOST_ID, ADAPTER = "mac-local", "fixture-cli-b"  # id de juguete (SUA-04, 4.6): ningún host implementa claude_opus
 # Same bytes as the harness fixture brief, so its artifact resolver accepts the digest.
 BRIEF = b"Review the fixture change and return one verdict.\n"
 CRON_REFUSAL = "Managed task requires a durable requester session, not an isolated cron run"

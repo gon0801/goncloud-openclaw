@@ -32,7 +32,7 @@ if (!root || !stateDir || !token) {
 const requesterAgentId = process.env.CROSS_REQUESTER_AGENT_ID || "ingenieria";
 const sessionKey = process.env.CROSS_REQUESTER_SESSION_KEY || "agent:ingenieria:main";
 const hostId = process.env.CROSS_HOST_ID || "e2e-host";
-const hostAdapter = process.env.CROSS_HOST_ADAPTER || "codex";
+const hostAdapter = process.env.CROSS_HOST_ADAPTER || "fixture-cli-a"  // id de juguete (SUA-04, 4.6);
 const countingProvider = process.env.CROSS_PROVIDER === "loopback";
 const scriptedCorrection = process.env.CROSS_PROVIDER_SCRIPT === "review-correction";
 const scriptedRoot = process.env.CROSS_PROVIDER_SCRIPT === "root-reconcile";

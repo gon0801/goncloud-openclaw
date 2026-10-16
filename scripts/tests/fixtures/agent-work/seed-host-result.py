@@ -72,7 +72,7 @@ def main():
         input_revision=spec["revision"],
         result_contract="review.v1",
         claim_id=spec["claimId"],
-        adapter_id=spec.get("adapterId", "codex"),
+        adapter_id=spec.get("adapterId", "fixture-cli-a")  # id de juguete (SUA-04, 4.6),
     ), lambda *_: None, gateway.admit_host)
     host.report(spec["hostId"], {
         "schema": "agent-work.result.v1",

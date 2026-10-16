@@ -1,13 +1,11 @@
 {
   "schema": "agent-work-coverage.v1",
-  "source": "agents/main/agent/workshop-skills/agent-dispatch/SKILL.md en la base 84efcb0 de G, y para cronJobs y modelWakes la foto docs/evidence/agent-work/SUA-00-M09b-cron-snapshot.json. Los siete cliAdapters que no son opencode salieron del registro de trabajadores de la ruta de corrida (workers.v1.json), que se borró de G el 2026-10-13 en ee7afcab (PR #291); ningún host los atiende",
+  "source": "agents/main/agent/workshop-skills/agent-dispatch/SKILL.md en la base 84efcb0 de G, y para cronJobs y modelWakes la foto docs/evidence/agent-work/SUA-00-M09b-cron-snapshot.json. Los siete cliAdapters que no son opencode salieron del registro de trabajadores de la ruta de corrida (workers.v1.json), que se borró de G el 2026-10-13 en ee7afcab (PR #291); ningún host los atiende, y SUA-04 (4.6) los retiró de este inventario: quedan solo en sus filas adapter: de migration",
   "status": "certified",
   "managedRequesterRoutes": [
     {"requester": "ingenieria", "target": "adversary", "kind": "agent", "preparation": "scripts/agent-work/routing.py", "integration": "native tool", "certified": false, "reason": "G preparation tested; native end-to-end evidence is in R and rollout is not enabled"},
     {"requester": "operaciones", "target": "ingenieria", "kind": "agent", "preparation": "scripts/agent-work/routing.py", "integration": "native tool", "certified": false, "reason": "G preparation tested; native end-to-end execution and rollout remain unverified"},
-    {"requester": "ingenieria", "target": "windows-remote/codex", "kind": "cli", "preparation": "scripts/agent-work/routing.py", "integration": "native tool and host", "certified": false, "reason": "G preparation tested; hostAdapterCoverage keeps windows-remote/codex disabled until a certified real host"},
-    {"requester": "main", "target": "mac-local/opencode", "kind": "cli", "preparation": "scripts/agent-work/encargo.py preparar en la Mac y scripts/agent-work/brief.py en la Mini (skill encargo-cli); routing.py no corre en esta ruta", "integration": "native tool and host", "certified": true, "reason": "certificada en hostAdapterCoverage y hostAdapterRoute (forma run-per-task, opencode 1.18.35); atiende pedidos reales de main desde el 2026-10-13: tarea 9ed258fc-59c1-4e72-ba3d-36819bea0eb9, acknowledged y AbsenceVerified con el host sin canario (docs/evidence/agent-work/B22-canarios.md, sección Cierre)"},
-    {"requester": "main", "target": "mac-local/claude_opus", "kind": "cli", "preparation": "scripts/agent-work/routing.py", "integration": "native tool and host", "certified": false, "reason": "routing.py prepara la petición de main a un CLI de mac-local; queda deshabilitada mientras mac-local/claude_opus no esté certified, y ningún host atiende ese adaptador: el que entregaba a una sesión adoptada se retiró el 2026-10-13 por decisión de David"}
+    {"requester": "main", "target": "mac-local/opencode", "kind": "cli", "preparation": "scripts/agent-work/encargo.py preparar en la Mac y scripts/agent-work/brief.py en la Mini (skill encargo-cli); routing.py no corre en esta ruta", "integration": "native tool and host", "certified": true, "reason": "certificada en hostAdapterCoverage y hostAdapterRoute (forma run-per-task, opencode 1.18.35); atiende pedidos reales de main desde el 2026-10-13: tarea 9ed258fc-59c1-4e72-ba3d-36819bea0eb9, acknowledged y AbsenceVerified con el host sin canario (docs/evidence/agent-work/B22-canarios.md, sección Cierre)"}
   ],
   "requesters": ["main", "ingenieria", "adversary", "operaciones", "implementer", "verifier", "reviewer", "scout"],
   "routes": [
@@ -17,27 +15,13 @@
     {"kind": "cli-managed-task", "owner": "host agent-work (opencode por encargo)", "certified": true, "contextGenerations": [1, 2], "evidence": "docs/evidence/sistema-agentes-unificado/SUA-03-mediciones.md (M-16, banco y generación 2)"},
     {"kind": "cli-child", "owner": "opencode task/bash dentro de la corrida del host", "certified": true, "contextGenerations": [1, 2], "evidence": "docs/evidence/sistema-agentes-unificado/SUA-03-mediciones.md (M-16, banco y generación 2)"}
   ],
-  "cliAdapters": ["claude_fable", "claude_opus", "kimi_k3", "kimi_coding", "codex", "zcode", "grok", "opencode"],
+  "cliAdapters": ["opencode"],
   "hosts": [{"id": "mac-local", "platform": "macOS", "status": "certified"}, {"id": "windows-remote", "platform": "Windows", "status": "disabled-unverified"}],
   "hostAdapterCoverage": {
     "mac-local": {
-      "claude_fable": "disabled-operator-setup-pending",
-      "claude_opus": "disabled-operator-setup-pending",
-      "kimi_k3": "disabled-operator-setup-pending",
-      "kimi_coding": "disabled-operator-setup-pending",
-      "codex": "disabled-operator-setup-pending",
-      "zcode": "disabled-operator-setup-pending",
-      "grok": "disabled-operator-setup-pending",
       "opencode": "certified"
     },
     "windows-remote": {
-      "claude_fable": "disabled-host-unverified",
-      "claude_opus": "disabled-host-unverified",
-      "kimi_k3": "disabled-host-unverified",
-      "kimi_coding": "disabled-host-unverified",
-      "codex": "disabled-host-unverified",
-      "zcode": "disabled-host-unverified",
-      "grok": "disabled-host-unverified",
       "opencode": "disabled-host-unverified"
     }
   },
@@ -159,9 +143,14 @@
     {"id": "route:user-adopted-session", "state": "legacy-until-adoption", "reason": "ruta retirada el 2026-10-13: main ya no adopta una sesión del operador ni teclea en ella, porque el host lanza su propio proceso de opencode por encargo (skill encargo-cli); el loop externo viejo queda fuera del perímetro hasta T12", "evidence": [], "instructions": [], "adoption": "T12"},
     {"id": "managed:ingenieria->adversary", "state": "managed-prepared", "reason": "ruta gestionada preparada en routing.py y probada de punta a punta en R; apagada hasta certificar", "evidence": [{"path": "scripts/tests/test-agent-work-routing.py", "test": "def test_ingenieria_to_adversary_preserves_target_and_brief"}, {"path": "scripts/tests/test-agent-work-integration.sh", "test": "agents_routing"}], "instructions": [{"path": "agents/ingenieria/agent/workshop-skills/managed-task-routing/SKILL.md", "literal": "--requester ingenieria --target adversary"}]},
     {"id": "managed:operaciones->ingenieria", "state": "managed-prepared", "reason": "ruta gestionada preparada en routing.py y probada de punta a punta en R; apagada hasta certificar", "evidence": [{"path": "scripts/tests/test-agent-work-routing.py", "test": "def test_operaciones_to_ingenieria_keeps_operaciones_as_requester"}, {"path": "scripts/tests/test-agent-work-integration.sh", "test": "agents_routing"}], "instructions": [{"path": "agents/operaciones/agent/workshop-skills/managed-task-routing/SKILL.md", "literal": "--requester operaciones --target ingenieria"}]},
-    {"id": "managed:ingenieria->windows-remote/codex", "state": "managed-prepared", "reason": "ruta a un CLI remoto preparada; se rechaza mientras el host windows-remote no esté certificado", "evidence": [{"path": "scripts/tests/test-agent-work-routing.py", "test": "def test_remote_cli_requires_certified_host_adapter"}, {"path": "scripts/tests/test-agent-work-integration.sh", "test": "agents_routing"}], "instructions": [{"path": "agents/ingenieria/agent/workshop-skills/managed-task-routing/SKILL.md", "literal": "--target windows-remote/codex"}]},
     {"id": "managed:main->mac-local/opencode", "state": "managed-prepared", "reason": "ruta gestionada, certificada y en uso: main encarga con la skill encargo-cli y el host lanza un proceso de opencode por encargo. El vocabulario de migration no tiene un estado para una ruta encendida: managed-prepared es el más cercano y aquí no quiere decir apagada; lo encendido lo dice managedRequesterRoutes.certified", "evidence": [{"path": "scripts/tests/test-agent-work-routing.py", "test": "def test_every_field_that_speaks_of_certification_agrees_with_host_adapter_coverage"}, {"path": "scripts/tests/test-agent-work-modelos.py", "test": "def test_the_repos_coverage_certifies_the_run_per_task_route_for_opencode_1_18_35_and_no_other_version"}], "instructions": [{"path": "agents/main/agent/workshop-skills/encargo-cli/SKILL.md", "literal": "Esta ruta entra solo con \"por CLI\"."}]},
-    {"id": "managed:main->mac-local/claude_opus", "state": "managed-prepared", "reason": "routing.py prepara la petición; deshabilitada mientras mac-local/claude_opus no esté certified, y ningún host atiende ese adaptador", "evidence": [{"path": "scripts/tests/test-agent-work-routing.py", "test": "def test_main_cli_route_stays_disabled_until_mac_local_is_certified"}], "instructions": [{"path": "agents/main/agent/workshop-skills/agent-dispatch/SKILL.md", "literal": "La ruta de `main` a un CLI de la Mac"}]},
+    {"id": "adapter:claude_fable", "state": "retired", "reason": "retirado: ningún host lo implementa desde el 2026-10-13; la ruta de Claude por su CLI entra con el id claude (SUA-04, 4.7)", "evidence": [], "instructions": []},
+    {"id": "adapter:claude_opus", "state": "retired", "reason": "retirado: ningún host lo implementa desde el 2026-10-13; la ruta de Claude por su CLI entra con el id claude (SUA-04, 4.7)", "evidence": [], "instructions": []},
+    {"id": "adapter:kimi_k3", "state": "retired", "reason": "retirado: ningún host lo implementa desde el 2026-10-13; la ruta de Claude por su CLI entra con el id claude (SUA-04, 4.7)", "evidence": [], "instructions": []},
+    {"id": "adapter:kimi_coding", "state": "retired", "reason": "retirado: ningún host lo implementa desde el 2026-10-13; la ruta de Claude por su CLI entra con el id claude (SUA-04, 4.7)", "evidence": [], "instructions": []},
+    {"id": "adapter:codex", "state": "retired", "reason": "retirado: ningún host lo implementa desde el 2026-10-13; la ruta de Claude por su CLI entra con el id claude (SUA-04, 4.7)", "evidence": [], "instructions": []},
+    {"id": "adapter:zcode", "state": "retired", "reason": "retirado: ningún host lo implementa desde el 2026-10-13; la ruta de Claude por su CLI entra con el id claude (SUA-04, 4.7)", "evidence": [], "instructions": []},
+    {"id": "adapter:grok", "state": "retired", "reason": "retirado: ningún host lo implementa desde el 2026-10-13; la ruta de Claude por su CLI entra con el id claude (SUA-04, 4.7)", "evidence": [], "instructions": []},
     {"id": "wake:vigilante tmux por quietud o cierre", "state": "perimeter-guarded", "reason": "la quietud o el cierre de una sesión gestionada no despiertan un modelo ni la relanzan", "evidence": [{"path": "scripts/tests/test-tmux-activity-watch.sh", "test": "ok (2a-managed)"}], "instructions": []},
     {"id": "wake:hook Stop de Claude Code", "state": "perimeter-guarded", "reason": "Stop sin informe en una sesión gestionada sale sin despertar un modelo", "evidence": [{"path": "scripts/tests/test-tmux-activity-watch.sh", "test": "ok (3-managed)"}], "instructions": []},
     {"id": "file:scripts/mac/claude-stop-openclaw-event.sh", "state": "perimeter-guarded", "reason": "sale sin despertar si la sesión es gestionada (AGENT_WORK_MANAGED=1)", "evidence": [{"path": "scripts/tests/test-tmux-activity-watch.sh", "test": "ok (3-managed)"}], "instructions": []},
