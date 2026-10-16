@@ -189,16 +189,20 @@ print(json.dumps({"tareas": tareas, "entregas": entregas, "sesionesHijas": hijas
 
 
 AYUDANTE_LECTURA = """
-# LEER_ARTEFACTO: solo lectura, la ruta entra por stdin.
+# LEER_ARTEFACTO: solo lectura; el código va por stdin y la ruta como dato citado.
 import json, sys
-print(open(json.load(sys.stdin)["ruta"], encoding="utf-8").read(), end="")
+print(open(json.loads(sys.argv[1])["ruta"], encoding="utf-8").read(), end="")
 """
 
 
 def _leer_artefacto(correr, ruta: str) -> str:
     """El contenido del artefacto que el result nombra, por ssh y en solo lectura (B1):
-    el marcador va en el archivo, no en result_json, que trae la ruta."""
-    rc, out, err = correr(["python3", "-c", AYUDANTE_LECTURA], entrada=json.dumps({"ruta": ruta}))
+    el marcador va en el archivo, no en result_json, que trae la ruta. El código viaja
+    por stdin (python3 -, como el resto del ayudante): un -c sin citar lo rompe el shell
+    de login de la Mini, que es zsh (B1 de G4b-r3)."""
+    rc, out, err = correr(
+        ["python3", "-", shlex.quote(json.dumps({"ruta": ruta}))], entrada=AYUDANTE_LECTURA
+    )
     if rc != 0:
         raise ValueError(err.strip() or "sin salida")
     return out

@@ -3,6 +3,7 @@
 
 import json
 import os
+import shutil
 import sqlite3
 import subprocess
 import sys
@@ -115,6 +116,16 @@ class FakeMini:
     def __call__(self, argv, entrada=None, timeout=None):
         self.llamadas.append((argv, entrada))
         texto = " ".join(argv)
+        if "-c" in argv:
+            # El ssh real une el argv y lo corre el shell de login de la Mini, que es
+            # zsh: un -c sin citar se rompe ahí aunque aquí parezca un argv (B1 de G4b-r3).
+            shell = shutil.which("zsh") or shutil.which("sh")
+            if shell:
+                sintaxis = subprocess.run(
+                    [shell, "-n", "-c", texto], capture_output=True, text=True
+                )
+                if sintaxis.returncode != 0:
+                    return 1, "", sintaxis.stderr.strip()
         if "agents list" in texto:
             return (
                 0,
@@ -147,7 +158,7 @@ class FakeMini:
                     "",
                 )
             return 0, json.dumps({"taskId": "t-sonda"} if self.reporta else {}), ""
-        if "LEER_ARTEFACTO" in texto:
+        if entrada and "LEER_ARTEFACTO" in entrada:
             if self.artefacto_falta:
                 return 1, "", "No such file or directory"
             return 0, "SONDA-7\n" if self.con_marcador else "otro texto\n", ""
