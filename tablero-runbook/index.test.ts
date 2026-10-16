@@ -1345,6 +1345,46 @@ it("v2-native-workers: el HTML del tablero es identico por RPC y HTTP", async ()
     }
   });
 
+  it("raices: responsiva 390 (B1) — tabla en contenedor con overflow y textos partibles; la fecha vive en title", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "tablero-p4-b1-"));
+    try {
+      escribirProyeccion(dir, "root-03", docProyeccion());
+      const host = await cargar({ stateDir: dir });
+      const lista = await llamarRuta(host.rutas, "/runbook/tablero/raices");
+      const detalle = await llamarRuta(host.rutas, "/runbook/tablero/raices/root-03");
+      assert.equal(lista.statusCode, 200);
+      assert.equal(detalle.statusCode, 200);
+
+      const cssLista = lista.body.match(/<style>([\s\S]*?)<\/style>/)?.[1] ?? "";
+      const cssDetalle = detalle.body.match(/<style>([\s\S]*?)<\/style>/)?.[1] ?? "";
+      assert.ok(cssLista.length > 0 && cssDetalle.length > 0, "falta el <style>");
+      for (const css of [cssLista, cssDetalle]) {
+        // El contenedor de la tabla nunca empuja el body: se desplaza adentro.
+        assert.ok(
+          css.includes(".envolver{overflow-x:auto;max-width:100%}"),
+          "la tabla debe vivir en un contenedor con overflow-x y max-width:100%",
+        );
+        // Ningún estilo fija un ancho mínimo: nada puede estirar el documento más que el viewport.
+        assert.ok(!css.includes("min-width"), "el CSS no debe fijar min-width");
+        // Los textos largos parten en cualquier carácter en vez de empujar el ancho.
+        assert.ok(
+          css.includes(".sub,footer,td{overflow-wrap:anywhere}"),
+          "los bloques de texto deben partir con overflow-wrap:anywhere",
+        );
+      }
+      // m1: la tabla envuelta de verdad (marcado del contenedor alrededor de <table>).
+      assert.ok(
+        /<div class="envolver"><table>/.test(lista.body) && /<div class="envolver"><table>/.test(detalle.body),
+        "la tabla debe estar dentro del contenedor .envolver",
+      );
+      // m1: la fecha cruda con milisegundos no se pinta; viaja en title.
+      assert.ok(!/plan 1 · época 1 · \d{4}-\d{2}-\d{2}T/.test(detalle.body), "el ISO crudo no debe verse en la línea meta");
+      assert.ok(detalle.body.includes('title="2026-10-13T12:00:00Z"'), "la fecha completa debe viajar en title");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it("raices: CSP con el sha256 del script inline servido", async () => {
     const dir = mkdtempSync(join(tmpdir(), "tablero-p4-csp-"));
     try {

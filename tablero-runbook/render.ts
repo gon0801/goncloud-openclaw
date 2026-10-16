@@ -397,7 +397,9 @@ const REFRESH_HTML = `<meta http-equiv="refresh" content="300"><div id="conexion
 const CSS_RAICES = `.vieja{color:#8b93a7}
 .desconocido{color:#8b93a7}
 #conexion{background:#8a1c1c;color:#fff;padding:10px 14px;border-radius:8px;margin:0 0 14px;font-weight:600}
-.envolver{overflow-x:auto}
+/* B1: solo la tabla se desplaza; el documento nunca excede el viewport. */
+.envolver{overflow-x:auto;max-width:100%}
+.sub,footer,td{overflow-wrap:anywhere}
 .progreso{display:flex;gap:24px;flex-wrap:wrap;margin:14px 0 20px}
 .p-rot{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:#8b93a7;margin-bottom:4px}
 .p-item .barra{max-width:160px;margin:4px 0 2px}
@@ -523,7 +525,7 @@ export function renderRaiz(stem: string, archivo: ArchivoRaiz, ahora: number): s
     )
     .join("\n");
   return paginaRaices(`raíz ${t(stem, 80)}`, `<h1>raíz ${t(stem, 80)}</h1>
-<p class="sub">plan ${t(doc.planRevision)} · época ${t(doc.controlEpoch)} · ${t(doc.generatedAt, 40)} (${frescuraRaiz(doc.generatedAt, doc.freshness.staleAfterMs, ahora)})</p>
+<p class="sub">plan ${t(doc.planRevision)} · época ${t(doc.controlEpoch)} · <span title="${t(doc.generatedAt, 40)}">${frescuraRaiz(doc.generatedAt, doc.freshness.staleAfterMs, ahora)}</span></p>
 <div class="progreso">
 ${barraRotulada("declarado", doc.progress.declared)}
 ${barraRotulada("observado", doc.progress.observed)}
