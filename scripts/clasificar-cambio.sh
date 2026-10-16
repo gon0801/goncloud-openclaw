@@ -45,11 +45,11 @@
 #     allowlist (el mismo cambio que reescribe la llave no puede usarla para
 #     abrirse la puerta del fast). La ruta del workflow la marca este script
 #     por nombre, no leyendolo: es config de CI.
-#   - las rutas que un checker de la bateria lee como dato (hoy el corpus
-#     docs/evidence/corpus-rendiciones.tsv) viven en la lista en datos
-#     scripts/ci-rutas-control.txt y clasifican completo ANTES de consultar
-#     la allowlist aunque casen con ella: cambiar el dato tiene que disparar
-#     el checker que lo lee.
+#   - las rutas que un checker de la bateria lee como dato (la lista en datos
+#     scripts/ci-rutas-control.txt: el corpus de rendiciones, los registros de
+#     progreso, la evidencia .jsonl y los datos de agent-work) clasifican
+#     completo ANTES de consultar la allowlist aunque casen con ella: cambiar
+#     el dato tiene que disparar el checker que lo lee.
 #   - renombres: origen Y destino deben ser fast para que el cambio sea fast.
 #   - symlinks, gitlinks (submodulos) y cualquier modo no regular son
 #     completo: en --name-status se ven como A/T y la allowlist no mira modos.

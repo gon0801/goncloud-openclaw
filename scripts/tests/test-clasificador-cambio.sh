@@ -21,10 +21,16 @@
 #      un symlink nuevo en arbol de docs se ve igual que un .md. La politica
 #      nombra explicitamente symlinks en el carril completo.
 #   8. La lista en datos scripts/ci-rutas-control.txt extiende los archivos de
-#      control: las rutas que un checker de la bateria lee como entrada (hoy
-#      docs/evidence/corpus-rendiciones.tsv) clasifican completo aunque case
-#      la allowlist, y la lista misma es de control (la llave no abre su
-#      propia puerta). SUA-05 4.6.
+#      control: las rutas que un checker de la bateria lee como entrada (el
+#      corpus de rendiciones, los registros de progreso, la evidencia .jsonl y
+#      los datos de agent-work) clasifican completo aunque case la allowlist,
+#      y la lista misma es de control (la llave no abre su propia puerta).
+#      SUA-05 4.6.
+#   9. La lista no se mantiene a mano: el guard final recorre scripts/tests/
+#      exigiendo que cada literal de ruta del repo que case la allowlist case
+#      alguna entrada de la lista; un checker nuevo sobre un archivo del
+#      carril rapido pone la bateria en rojo hasta que entra. SUA-05 4.6,
+#      #325 F6.
 #
 # Uso: bash scripts/tests/test-clasificador-cambio.sh
 set -u
@@ -109,10 +115,10 @@ veredicto_es() { # nombre esperado repo allowlist base head
   ok "$nombre -> $esperado"
 }
 
-# (2) docs permitidos: la allowlist clasifica el conjunto de cierre tipico.
+# (2) docs permitidos: la allowlist clasifica el conjunto de cierre tipico; el
+# .json de progreso quedo como dato de control (caso control-progreso-json).
 d=$T/docs-permitidos; sembrar "$d"
 printf 'plan 2\n'                 > "$d/Plans.md"
-printf '{"fase":15}\n'            > "$d/.saikit/progress/15.json"
 printf 'sesion 15\n'              > "$d/.saikit/progress/15-sesiones.txt"
 printf 'medicion\n'               > "$d/docs/evidence/fase15-ci-performance.md"
 printf 'log de recibo\n'          > "$d/docs/evidence/gate-recibo-logs-run9.txt"
@@ -296,10 +302,13 @@ b=$(git -C "$d" rev-parse HEAD); h=$b
 ( cd "$d" && bash "$RAIZ/$CLASIFICADOR" --allowlist "$T/plano" --base "$b" --head "$h" >/dev/null 2>&1 )
 [ $? -eq 2 ] && ok "allowlist-directorio -> exit 2" || falla "allowlist-directorio: espero exit 2"
 
-# (2) contrato con la allowlist REAL: los 4 paths del cierre de la fase.
+# (2) contrato con la allowlist REAL: los 4 paths del cierre de la fase. El
+# .json de progreso quedo como dato de control (caso control-progreso-json),
+# asi que el cuarto path aqui es un .json de evidencia: los .json de
+# docs/evidence que no lee ningun checker siguen fast.
 d=$T/contrato-real-4-paths; sembrar "$d"
 printf 'plan 5\n'                 > "$d/Plans.md"
-printf '{"fase":15}\n'            > "$d/.saikit/progress/15.json"
+printf 'medicion fase 15\n'       > "$d/docs/evidence/fase15-medicion.json"
 printf 'sesion 15\n'              > "$d/.saikit/progress/15-sesiones.txt"
 printf 'evidencia fase 15\n'      > "$d/docs/evidence/fase15-ci-performance.md"
 commit_todo "$d"
@@ -373,6 +382,27 @@ printf 'row_id\tfinding_idx\n1\t3\n' > "$d/docs/evidence/corpus-rendiciones.tsv"
 commit_todo "$d"
 veredicto_es corpus-rendiciones completo "$d" "$ALLOWLIST_REAL" "$(git -C "$d" rev-parse HEAD~1)" "$(git -C "$d" rev-parse HEAD)"
 
+# (8) cada patron nuevo de la lista, con la allowlist REAL: tocar SOLO un
+# archivo del patron clasifica completo aunque la allowlist lo dejaria pasar
+# (docs/evidence/**/*.json, docs/evidence/**/*.jsonl y .saikit/progress/*.json
+# casan todas).
+d=$T/control-progreso-json; sembrar "$d"
+printf '{"fase":5}\n' > "$d/.saikit/progress/progreso-fase.json"
+commit_todo "$d"
+veredicto_es control-progreso-json completo "$d" "$ALLOWLIST_REAL" "$(git -C "$d" rev-parse HEAD~1)" "$(git -C "$d" rev-parse HEAD)"
+
+d=$T/control-evidencia-jsonl; sembrar "$d"
+mkdir -p "$d/docs/evidence/privacidad"
+printf '{"linea":1}\n' > "$d/docs/evidence/privacidad/algo.jsonl"
+commit_todo "$d"
+veredicto_es control-evidencia-jsonl completo "$d" "$ALLOWLIST_REAL" "$(git -C "$d" rev-parse HEAD~1)" "$(git -C "$d" rev-parse HEAD)"
+
+d=$T/control-agent-work-coverage; sembrar "$d"
+mkdir -p "$d/docs/evidence/agent-work"
+printf '{"ok":true}\n' > "$d/docs/evidence/agent-work/coverage.json"
+commit_todo "$d"
+veredicto_es control-agent-work-coverage completo "$d" "$ALLOWLIST_REAL" "$(git -C "$d" rev-parse HEAD~1)" "$(git -C "$d" rev-parse HEAD)"
+
 # (8) la lista en datos es archivo de control: mismo montaje adversarial que
 # los casos control-* de arriba (allowlist '**' en la BASE), tocando SOLO la
 # lista. Sin la regla, este cambio saldria fast.
@@ -383,6 +413,127 @@ printf 'docs/evidence/corpus-rendiciones.tsv\n' > "$d/scripts/ci-rutas-control.t
 commit_todo "$d"
 veredicto_es control-scripts-ci-rutas-control-txt completo "$d" "$d/scripts/ci-fast-allowlist.txt" \
   "$(git -C "$d" rev-parse HEAD~1)" "$(git -C "$d" rev-parse HEAD)"
+
+# (9) el guard de la lista: recorre scripts/tests/ (*.sh, *.py, *.mjs) buscando
+# literales de ruta del repo que casen la allowlist REAL y exige que cada uno
+# case alguna entrada de scripts/ci-rutas-control.txt. No cuentan las lineas de
+# comentario, las ocurrencias precedidas por '/' (arboles temporales bajo $R/,
+# $d o mktemp: "$d/docs/evidence/x" no es una ruta del repo), las menciones que
+# no terminan en extension de archivo ni los .md/.txt de docs/evidence/
+# (decision de #325 F6: se quedan en el carril rapido y se listan abajo en vez
+# de exigirlos).
+RUTAS_CONTROL_GUARD=$RAIZ/scripts/ci-rutas-control.txt
+[ -f "$RUTAS_CONTROL_GUARD" ] || { echo "FAIL: falta $RUTAS_CONTROL_GUARD"; exit 1; }
+
+guard_patron_a_regex() { # <patron>: replica patron_a_regex de clasificar-cambio.sh
+  # Mismo motor que la allowlist: '**/' casa cualquier profundidad INCLUIDA
+  # cero, '*' no cruza '/', '?' es un caracter que no es '/'. Si este motor
+  # divergiera del del clasificador, los casos (2) y (8) de arriba lo cantan.
+  local p=$1 out='' i c sig
+  for ((i = 0; i < ${#p}; i++)); do
+    c=${p:i:1}
+    case $c in
+      '*') sig=${p:i+1:1}
+           if [ "$sig" = '*' ]; then
+             sig=${p:i+2:1}
+             if [ "$sig" = '/' ]; then out+='([^/]+/)*'; i=$((i + 2))
+             else out+='.*'; i=$((i + 1)); fi
+           else out+='[^/]*'; fi ;;
+      '?') out+='[^/]' ;;
+      .\[\\\^\$\(\)\+\{\|) out+="\\$c" ;;
+      *) out+=$c ;;
+    esac
+  done
+  printf '%s' "$out"
+}
+
+guard_casa_archivo() { # <ruta> <archivo de reglas>: 0 si ALGUNA regla casa la ruta
+  local patron
+  while IFS= read -r patron || [ -n "$patron" ]; do
+    patron=${patron#${patron%%[![:space:]]*}}
+    patron=${patron%${patron##*[![:space:]]}}
+    case $patron in ''|'#'*) continue ;; esac
+    if [[ $1 =~ ^$(guard_patron_a_regex "$patron")$ ]]; then return 0; fi
+  done < "$2"
+  return 1
+}
+
+guard_vigilados=0
+guard_descartados=0
+guard_excluidos=''
+guard_faltan=''
+for t in scripts/tests/*.sh scripts/tests/*.py scripts/tests/*.mjs; do
+  [ -f "$t" ] || continue
+  nl=0
+  while IFS= read -r linea || [ -n "$linea" ]; do
+    nl=$((nl + 1))
+    sangria=${linea#"${linea%%[![:space:]]*}"}
+    case $sangria in '#'*|'//'*) continue ;; esac
+    case $linea in *docs/evidence/*|*.saikit/*) ;; *) continue ;; esac
+    l=${#linea}
+    i=0
+    while [ "$i" -lt "$l" ]; do
+      ini=-1
+      if [ $((l - i)) -ge 14 ] && [ "${linea:i:14}" = 'docs/evidence/' ]; then ini=$i; pre=14
+      elif [ $((l - i)) -ge 8 ] && [ "${linea:i:8}" = '.saikit/' ]; then ini=$i; pre=8
+      else i=$((i + 1)); continue; fi
+      j=$((ini + pre))
+      while [ "$j" -lt "$l" ]; do
+        case ${linea:j:1} in [A-Za-z0-9._/*?-]) j=$((j + 1)) ;; *) break ;; esac
+      done
+      token=${linea:ini:j-ini}
+      case ${token##*.} in
+        json|jsonl|tsv|html|sh|py|mjs) ;;
+        md|txt)
+          case $token in
+            docs/evidence/*)
+              # F6: cualquier .md/.txt bajo docs/evidence/ (a cualquier
+              # profundidad) se queda en el carril rapido y el guard lo lista.
+              case "|$guard_excluidos|" in *"|$token|"*) ;; *)
+                guard_excluidos="${guard_excluidos:+$guard_excluidos|}$token" ;; esac
+              i=$j; continue ;;
+          esac ;;
+        *) i=$j; continue ;;
+      esac
+      prev=' '
+      [ "$ini" -gt 0 ] && prev=${linea:$((ini - 1)):1}
+      case $prev in
+        /|[A-Za-z0-9._*?-]) i=$j; continue ;;
+      esac
+      case $token in
+        docs/evidence/*.md|docs/evidence/*.txt)
+          case "|$guard_excluidos|" in *"|$token|"*) ;; *)
+            guard_excluidos="${guard_excluidos:+$guard_excluidos|}$token" ;; esac ;;
+        *)
+          if guard_casa_archivo "$token" "$ALLOWLIST_REAL"; then
+            guard_vigilados=$((guard_vigilados + 1))
+            guard_casa_archivo "$token" "$RUTAS_CONTROL_GUARD" \
+              || guard_faltan="$guard_faltan$token $t:$nl
+"
+          else
+            guard_descartados=$((guard_descartados + 1))
+          fi ;;
+      esac
+      i=$j
+    done
+  done < "$t"
+done
+if [ -n "$guard_faltan" ]; then
+  while IFS= read -r aviso; do
+    [ -n "$aviso" ] || continue
+    falla "$aviso"
+  done < <(printf '%s\n' "$guard_faltan" | LC_ALL=C sort | awk '
+      { sitio = $2; if (lit != $1) {
+          if (lit != "") printf "guard-lista-control: %s (%s) no casa ninguna entrada de scripts/ci-rutas-control.txt\n", lit, sitios
+          lit = $1; sitios = sitio }
+        else sitios = sitios ", " sitio }
+      END { if (lit != "") printf "guard-lista-control: %s (%s) no casa ninguna entrada de scripts/ci-rutas-control.txt\n", lit, sitios }')
+else
+  ok "guard de la lista de control: $guard_vigilados literal(es) de ruta vigilados casan scripts/ci-rutas-control.txt"
+  printf '  guard: excluidos por extension (md/txt de docs/evidence/, #325 F6): %s\n' \
+    "$(printf '%s' "$guard_excluidos" | sed 's/|/, /g')"
+  [ "$guard_descartados" -eq 0 ] || printf '  guard: %d ocurrencia(s) descartada(s) por no casar la allowlist (ya clasifican completo solas)\n' "$guard_descartados"
+fi
 
 if [ "$fails" -gt 0 ]; then
   echo "ROJO: $fails caso(s) del clasificador en fallo"
