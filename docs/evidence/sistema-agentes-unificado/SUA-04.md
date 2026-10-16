@@ -8,7 +8,7 @@ integración de OpenClaw (`7b3db54226bf`, el que corre en la Mini). G es este re
 
 ## Qué entregó
 
-- **El modelo por omisión sube solo.** Cada permiso de `proveedores-permitidos.json` puede llevar una línea (`zai-coding-plan/glm-{}-flash`) y un `defaultGrant`. Ya no hay un `DEFAULT_MODEL` global. Cada noche, `encargo.py diario` (launchd `ai.goncloud.agent-work-sucesion`, 05:30) corre `sucesion --aplicar`. Si el catálogo trae un sucesor estable de la línea, lo prueba con el caso de ingeniería del banco real y lo promueve en `sucesion.json`, sin tocar la política, y le avisa a David. Un canario rojo lo deja `rechazado`, y `sucesion --revertir` vuelve al anterior.
+- **El modelo por omisión sube solo.** La raíz de `proveedores-permitidos.json` lleva `defaultGrant` (el permiso del modelo por omisión) y cada permiso puede llevar su `default` con la línea (`zai-coding-plan/glm-{}-flash`) y desde dónde. Ya no hay un `DEFAULT_MODEL` global. Cada noche, `encargo.py diario` (launchd `ai.goncloud.agent-work-sucesion`, 05:30) corre `sucesion --aplicar`. Si el catálogo trae un sucesor estable de la línea, lo prueba con el caso de ingeniería del banco real y lo promueve en `sucesion.json`, sin tocar la política, y le avisa a David. Un canario rojo lo deja `rechazado`, y `sucesion --revertir` vuelve al anterior.
 - **Las rutas nativas suben solas desde goncloud-hermes.** `claw_autoupdate` (04:50 en la Mini) prueba el sucesor antes de promover. G solo lo registra en `coverage.json`.
 - **Agentes que entran y salen.** `agentes.py descubrir` y `sondear` detectan las altas y los retiros de la Mini. `encargo.py perfiles --mini` muestra el estado de cada uno, y el publicador retira y devuelve agentes con respaldo.
 - **La ruta "encargo nativo a un agente" cierra de punta a punta.** `brief.py --agente --contrato` trae el protocolo del trabajador y `reporte.py` arma el resultado que R acepta.
@@ -27,13 +27,13 @@ integración de OpenClaw (`7b3db54226bf`, el que corre en la Mini). G es este re
 | I11. Un alta posterior recibe y devuelve una tarea | **Cumplido en la ruta nativa a un agente.** M-18d y M-18e verdes: `result-recorded`, 0 entregas, `memory/` igual. Medida, no certificada. | SUA-04-mediciones.md (M-18); `coverage.json` (`routes`, `native-managed-agent`) |
 | I11. Alta incompleta visible; competencia y memoria preservadas | **Cumplido.** `perfiles --mini` y `descubrir`; un alta no cambia a los demás (prueba de I19 "nuevo destino"); la sonda mide `memory/`. | `test-agent-work-agentes.py`, `test-agent-work-publicar.py` |
 | I19. Crash entre aplicar y verificar | **Cumplido** si se reaplica la misma generación. Con una edición del dueño de por medio, no se certifica (#323). Con otra generación, falla cerrado; queda como fila. | `test-agent-work-publicar.py`; `followups.md` (SUA-04/I19) |
-| I19. Revocación permanece tras reversa; apply sin attest; nuevo destino | **Cumplido.** | `test-agent-work-publicar.py`, `test-agent-work-encargo.py` |
+| I19. Revocación permanece tras reversa; apply sin attest; nuevo destino | **Cumplido**, con una salvedad: `sucesion --revertir` deja la huella vieja si no encuentra el permiso, una rama sin prueba (fila SUA-04/sucesión CLI). | `test-agent-work-publicar.py`, `test-agent-work-encargo.py` |
 
 ## Las rutas y la ventana viva
 
 - **`mac-local/claude` certificada** con el banco de G7: ingeniería con conducta ok, `fuera=no-existe`, y revisión del repo roto con `verdict=changes repo=igual`. Además, **un canario vivo por `main`** quedó verde: tarea `b8c5a12d` con `claude-opus-5-5`, `acknowledged` y `AbsenceVerified`.
 - `coverage.json`: cada ruta nombra su `modelSuccession` (la CLI, `encargo.py sucesion`; las nativas, `claw_autoupdate`) con su evidencia. La ruta `native-managed-agent` queda medida y sin certificar.
-- En vivo, el 2026-10-16: el host pasó a `main` (`25f6d941`); el gateway de la Mini autoriza `claude` en `mac-local` (config patch, tomado en caliente); se cargó el launchd `diario` y su primera corrida salió en 0; la skill `encargo-cli` quedó publicada. El vigilante `tmux-activity-watch` sigue apagado a propósito: el instalador corrió sin cargar launchd.
+- En vivo, el 2026-10-16: el host pasó a `main` (`25f6d941`); el gateway de la Mini autoriza `claude` en `mac-local` (config patch, tomado en caliente); el launchd `diario` se cargó a mano con `launchctl bootstrap gui/501 ~/Library/LaunchAgents/ai.goncloud.agent-work-sucesion.plist` y su primera corrida salió en 0; la skill `encargo-cli` quedó publicada. El vigilante `tmux-activity-watch` sigue apagado a propósito: el instalador corrió con `LAUNCHCTL_BIN=/usr/bin/true`, así que no cargó ni descargó nada.
 
 ## Los PR
 

@@ -201,8 +201,10 @@ class AgentsRouting(unittest.TestCase):
                 sucesion = ruta["modelSuccession"]
                 dueno = "encargo.py sucesion" if ruta["kind"].startswith("cli-") else "claw_autoupdate.py"
                 self.assertIn(dueno, sucesion["owner"])
-                evidencia = sucesion["evidence"].split(" (")[0]
-                self.assertTrue((ROOT / evidencia).is_file(), evidencia)
+                evidencia, _, ids = sucesion["evidence"].partition(" (")
+                texto = (ROOT / evidencia).read_text(encoding="utf-8")
+                for medicion in re.findall(r"M-\d+", ids):
+                    self.assertRegex(texto, rf"(?m)^## .*\b{medicion}\b", f"{medicion} no está en {evidencia}")
         nativa = {ruta["kind"]: ruta for ruta in self.coverage["routes"]}["native-managed-agent"]
         self.assertIn("M-18d", nativa["evidence"])
         self.assertFalse(nativa["certified"])
