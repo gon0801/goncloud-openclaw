@@ -48,7 +48,7 @@ Palabras con un solo sentido en este documento. Las de SUA-01 a SUA-03 siguen ig
 
 ### Los siete adaptadores sin host
 
-`coverage.json` lista en `cliAdapters` y en `hostAdapterCoverage` (en `mac-local` y en `windows-remote`) `claude_fable`, `claude_opus`, `kimi_k3`, `kimi_coding`, `codex`, `zcode` y `grok` en `disabled-operator-setup-pending`. Ningún host los atiende desde el 2026-10-13. Los usan como fixtures `test-agent-work-routing.py:79-99` (`len(refused) == 15`), `:173-184`, `:604-608`, `test_agent_work_main_cli_loop_e2e.py:28,159` y los e2e de cutover. `managedRequesterRoutes` mantiene `main -> mac-local/claude_opus` deshabilitada.
+`coverage.json` lista en `cliAdapters` y en `hostAdapterCoverage` `claude_fable`, `claude_opus`, `kimi_k3`, `kimi_coding`, `codex`, `zcode` y `grok`: en `mac-local` con `disabled-operator-setup-pending`, y en `windows-remote` con `disabled-host-unverified`. Ningún host los atiende desde el 2026-10-13. Los usan como fixtures `test-agent-work-routing.py:79-99` (`len(refused) == 15`), `:173-184`, `:604-608`, `test_agent_work_main_cli_loop_e2e.py:28,159` y los e2e de cutover. `managedRequesterRoutes` mantiene `main -> mac-local/claude_opus` deshabilitada.
 
 ### Claude por su CLI
 
@@ -111,9 +111,9 @@ El estado vive fuera de G, en `<state_root>/sucesion.json` (`agent-work.successi
 1. Lee el catálogo (`CatalogStore.current`).
 2. Calcula el sucesor de `actual` en su línea entre los ids que el permiso admite (`ModelFilter`). Un id no estable no es sucesor. Un proveedor sin sesión no tiene sucesor y la causa queda escrita.
 3. Sin `--aplicar`, imprime lo que haría y sale.
-4. Con `--aplicar` y un sucesor nuevo: lanza **un canario** con ese modelo exacto, el caso `ingenieria` del banco (la tarea de `saluda.py` con su conducta, en su propio Gateway y su grupo; M-16). El modelo entra así: el banco gana `AGENT_WORK_BANCO_MODELO=<proveedor>/<modelo>`, y con ella `ask` pasa `--modelo <ese id exacto>` a `preparar`, que lo autoriza como `ExactModel` y lo pone en `briefArgs` como `--model`. El caso comprueba además que `flota.json` trae ese `model.id`, para que un canario no salga verde con otro modelo. Ese cambio del banco entra en G3. Si sale verde, `estado: promovido`, `anterior` guarda el `actual` de antes, `actual` pasa al sucesor y la evidencia guarda el log del caso. Si sale rojo por el modelo (incluido un `launch-failed` porque el plan del proveedor no lo incluye), `estado: rechazado` con la causa y la `huellaDelCatalogo`. Ese id no se vuelve a probar mientras la huella sea la misma y no hayan pasado 7 días desde `ultimo`. Un fallo de infraestructura del banco (slot ocupado, opencode que no contesta, el banco que no arranca) no rechaza: deja `pendiente` y no cuenta como intento.
+4. Con `--aplicar` y un sucesor nuevo: lanza **un canario** con ese modelo exacto, el caso `ingenieria` del banco (la tarea de `saluda.py` con su conducta, en su propio Gateway y su grupo; M-16). El modelo entra así: el banco gana `AGENT_WORK_BANCO_MODELO=<proveedor>/<modelo>`, y con ella `ask` pasa `--modelo <ese id exacto>` a `preparar`, que lo autoriza como `ExactModel` y lo pone en `briefArgs` como `--model`. El caso comprueba además que `flota.json` trae ese `model.id`, para que un canario no salga verde con otro modelo. Ese cambio del banco entra en G3. Si sale verde, `estado: promovido`, `anterior` guarda el `actual` de antes, `actual` pasa al sucesor y la evidencia guarda el log del caso. Si sale rojo por el modelo (incluido un `launch-failed` porque el plan del proveedor no lo incluye), `estado: rechazado` con la causa y la `huellaDelCatalogo`. Ese id no se vuelve a probar mientras la huella sea la misma y no hayan pasado 7 días desde `ultimo`. Un id con causa `revertido por el operador` (paso 6) es la excepción: no se vuelve a probar con la misma huella, pase el tiempo que pase. Un fallo de infraestructura del banco (slot ocupado, opencode que no contesta, el banco que no arranca) no rechaza: deja `pendiente` y no cuenta como intento.
 5. Como mucho una promoción por corrida, y nunca mientras el host tenga un encargo en vuelo (el mismo chequeo del paso 1 de la ventana de SUA-03).
-6. `encargo.py sucesion --revertir <línea>` vuelve `actual` a `anterior` con el mismo candado y deja el id revertido como `rechazado`, con causa `revertido por el operador` y su huella. Así una promoción revertida no se vuelve a promover sola con el mismo catálogo.
+6. `encargo.py sucesion --revertir <línea>` vuelve `actual` a `anterior` con el mismo candado y deja el id revertido como `rechazado`, con causa `revertido por el operador` y su huella. Así una promoción revertida no se vuelve a promover sola con el mismo catálogo, ni a los 7 días: solo un catálogo con otra huella (un id nuevo en la línea) la vuelve a abrir.
 
 El modelo por omisión cambia solo para los encargos nuevos. Un intento en vuelo conserva su `PermittedModel` y su `flota.v1` lo registra. Un relevo de `main` (una corrección con `continue`) es un hijo de la misma raíz en R y lleva el modelo que pida su `preparar` (SUA-02). Esto se mide, no se construye.
 
@@ -130,7 +130,7 @@ No se construye nada. SUA-04:
 
 ### 4.5 Altas y retiros de agentes
 
-`scripts/agent-work/agentes.py descubrir` (de solo lectura, por ssh como el publicador) compara `openclaw agents list --json` de la Mini con lo que G conoce: las rutas de los perfiles y la lista raíz `agents` de `perfiles.v1.json`. Contesta una línea por agente con su estado:
+`scripts/agent-work/agentes.py descubrir` (de solo lectura, por ssh como el publicador) compara `openclaw agents list --json` de la Mini con lo que G conoce: las rutas de los perfiles, la lista raíz `agents` de `perfiles.v1.json` y los solicitantes de `coverage.json` (`requesters`, hoy `main`). Un solicitante no es un trabajador: no es alta ni sin perfil, y la prueba `test_the_nineteen_live_agents_have_a_profile_or_are_marked_without_one` ya lo trata así. Contesta una línea por agente con su estado:
 
 | Estado | Cuándo |
 |---|---|
@@ -201,7 +201,7 @@ Lo nuevo en código es `solicitar`, y que `--ref` acepte `tg:<session_id>:<seq>`
 
 ### 4.9 Fuentes por caducidad
 
-`encargo.py fuentes` lista por perfil cada fuente con `validUntil` y los días que le quedan. Lo corre el mismo launchd de 4.3. Una fuente con menos de 30 días avisa a David una vez por semana, con la lista. Renovar es un PR: se relee la fuente en su revisión nueva, se actualizan `revision` y `validUntil`, y si cambió su contenido se vuelven a correr las sondas de competencia de los perfiles que la usan (banco para la ruta por CLI, sondas nativas para el resto). No hay renovación automática: una fuente nueva puede cambiar lo que el perfil sabe, y eso pide su competencia otra vez.
+`encargo.py fuentes` lista por perfil cada fuente con `validUntil` y los días que le quedan, y también el `validUntil` de la competencia de cada ruta. En los cinco perfiles de la ruta por CLI, la competencia vence el mismo día que sus fuentes (2027-01-14), y `contexto.admite` rechaza el perfil por cualquiera de las dos. Lo corre el mismo launchd de 4.3. Una fuente con menos de 30 días avisa a David una vez por semana, con la lista. Renovar es un PR: se relee la fuente en su revisión nueva, se actualizan `revision` y `validUntil`, y se vuelven a correr las sondas de competencia de los perfiles que la usan: el banco para la ruta por CLI y las sondas nativas para el resto. Esto se hace siempre, haya cambiado o no el contenido de la fuente, porque la competencia vence con ella y sin una sonda nueva no se renueva. No hay renovación automática: una fuente nueva puede cambiar lo que el perfil sabe, y eso pide su competencia otra vez.
 
 ### 4.10 Generaciones, atestación, reversa e I19
 
@@ -238,6 +238,7 @@ Las mediciones del coordinador:
 | M-20 | La primera corrida real de `claw_autoupdate` (log de launchd) | Mini, solo lectura | Los que mande el propio autoupdate |
 | M-21 | Fase 0 de Claude por su CLI (los cuatro puntos de 4.7): **medida el 2026-10-16, verde** | Mac, suscripción de David | 0 |
 | M-22 | Una promoción real en la ruta por CLI, o el banco con una línea de fixture | Mac | 1, el aviso de la promoción |
+| M-23 | El sandbox de Claude Code encierra a Bash en el cwd y en `--add-dir`: **medida el 2026-10-16, verde** | Mac | 0 |
 
 ## 6. El corte en rebanadas
 
@@ -248,7 +249,7 @@ Las mediciones del coordinador:
 | G3 | `encargo.py sucesion`, `sucesion.json`, el canario con el caso del banco, el aviso, el launchd en `scripts/mac/` | modelos, encargo, banco sin la variable, instalar-mac | Sí: instalar el launchd |
 | G4 | `agentes.py descubrir` y `sondear`, `perfiles` con los estados nuevos, el retiro en el publicador | contexto, publicar, encargo, routing | Sí: M-18 |
 | G5 | `solicitar` y `--ref tg:` (B22-S6), la skill `encargo-cli` | encargo, routing | Sí: publicar la skill de `main` |
-| G6 | `fuentes` y su aviso; las pruebas de I19 (crash y revocación) | contexto, publicar, modelos | No |
+| G6 | `fuentes` y su aviso; las pruebas de I19 (crash y revocación) | contexto, publicar, modelos, encargo | No |
 | G7 | Claude por su CLI (M-21 verde): el `Adaptador` del host, `opencode` sin cambios y `claude`; su banco y su canario | sesión, host, encargo, banco | Sí: host al día |
 | G8 | Cierre: `coverage.json` (`modelSuccession`, la evidencia de la ruta nativa a un agente), filas y recibo `SUA-04.md` | routing, contrato | No |
 
