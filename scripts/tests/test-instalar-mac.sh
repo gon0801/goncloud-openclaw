@@ -24,6 +24,13 @@ mkdir -p "$T/bin"
 cat >"$T/bin/launchctl-falso" <<STUB
 #!/bin/sh
 printf '%s\n' "LAUNCHCTL \$*" >> "$LAUNCHLOG"
+# print de la sucesion: con semilla en \$T/print-sucesion.txt esta cargada y su
+# volcado es la semilla; sin semilla no esta cargada (exit 1). Otros print (el
+# vigilante) siguen contestando cargado (exit 0).
+if [ "\$1" = print ] && printf '%s\n' "\$*" | grep -q ai.goncloud.agent-work-sucesion; then
+  if [ -f "$T/print-sucesion.txt" ]; then cat "$T/print-sucesion.txt"; exit 0; fi
+  exit 1
+fi
 # bootstrap que falla N veces (N en \$T/fallar-bootstrap): simula un bootout que
 # todavia no termino.
 if [ "\$1" = bootstrap ] && [ -s "$T/fallar-bootstrap" ]; then
@@ -94,6 +101,45 @@ printf '%s' "$out" | grep -q "instalado" || fail "no imprime que quedo instalado
 grep -qF "$HOME/bin/tmux-activity-watch.sh" "$PL" || fail "el plist no apunta al HOME instalado"
 grep -qF "/Users/dn" "$PL" && fail "el plist trae /Users/dn a fuego"
 
+# (3b) la sucesion diaria de SUA-04 (4.3): sin R construido no se instala (B1); con el, sí.
+PL2="$HOME/Library/LaunchAgents/ai.goncloud.agent-work-sucesion.plist"
+[ ! -f "$PL2" ] || fail "sin R construido el plist de sucesion no debia instalarse"
+printf '%s' "$out" | grep -q "sin R construido" || fail "no dijo que falta el R construido: $out"
+mkdir -p "$HOME/dev/wt/r-sua02-c-gate" && printf 'x\n' > "$HOME/dev/wt/r-sua02-c-gate/openclaw.mjs"
+out="$(bash "$INST" 2>&1)" || fail "instalar con R construido fallo: $out"
+[ -f "$PL2" ] || fail "falta el plist de sucesion generado"
+grep -qF "$HOME/dev/wt/r-sua02-c-gate" "$PL2" || fail "el plist de sucesion no trae AGENT_WORK_SUCESION_RUNTIME_SOURCE con el HOME"
+grep -qF "$HOME/dev/wt/agent-work-host/scripts/agent-work/encargo.py" "$PL2" || fail "el plist de sucesion no corre encargo.py del checkout del host"
+grep -qF "<string>sucesion</string>" "$PL2" || fail "el plist de sucesion no llama sucesion"
+grep -qF "<integer>5</integer>" "$PL2" || fail "el plist de sucesion no es a las 05"
+grep -qF "<integer>30</integer>" "$PL2" || fail "el plist de sucesion no es a las :30"
+grep -qF "en_US.UTF-8" "$PL2" || fail "el plist de sucesion no fija LANG"
+grep -qF "$HOME/Library/Logs/goncloud/agent-work-sucesion.log" "$PL2" || fail "el plist de sucesion no deja su log"
+grep -qF "/Users/dn" "$PL2" && fail "el plist de sucesion trae /Users/dn a fuego"
+grep -q "bootstrap gui/59999" "$LAUNCHLOG" || fail "no cargo la sucesion con gui/59999"
+# Semilla del print de la sucesion: a partir de aqui el stub la reporta cargada
+# con el runtime por omision, igual que el archivo instalado; las corridas
+# siguientes no deben relanzarla (caso 5).
+cat >"$T/print-sucesion.txt" <<SEMILLA
+	domain = gui/59999 {
+		"environment" => {
+			"AGENT_WORK_SUCESION_RUNTIME_SOURCE" => "$HOME/dev/wt/r-sua02-c-gate"
+		}
+	}
+SEMILLA
+
+# (3c) F2 (ronda 3): AGENT_WORK_SUCESION_RUNTIME mueve el runtime del canario en
+# el plist de sucesion generado; hoy la plantilla manda y el entorno se ignora.
+export HOME="$T/casa3c"; mkdir -p "$HOME"
+mkdir -p "$HOME/dev/wt/r-canario" && printf 'x\n' >"$HOME/dev/wt/r-canario/openclaw.mjs"
+out="$(AGENT_WORK_SUCESION_RUNTIME="$HOME/dev/wt/r-canario" bash "$INST" 2>&1)" \
+  || fail "instalar con runtime de canario propio fallo: $out"
+PL2C="$HOME/Library/LaunchAgents/ai.goncloud.agent-work-sucesion.plist"
+grep -qF "$HOME/dev/wt/r-canario" "$PL2C" || fail "el plist de sucesion no trae el runtime de AGENT_WORK_SUCESION_RUNTIME"
+grep -qF "r-sua02-c-gate" "$PL2C" && fail "el plist de sucesion trae el runtime por omision pese al entorno"
+grep -qF "/Users/dn" "$PL2C" && fail "el plist de sucesion trae /Users/dn a fuego"
+export HOME="$T/casa"
+
 # (4) el vigilante se carga con el uid inyectado.
 grep -q "bootstrap gui/59999" "$LAUNCHLOG" || fail "no cargo el vigilante con gui/59999"
 
@@ -134,6 +180,31 @@ nb="$(grep -c bootstrap "$LAUNCHLOG")"
 bash "$INST" >/dev/null 2>&1 || fail "no reintento el bootstrap tras un fallo"
 [ "$(grep -c bootstrap "$LAUNCHLOG")" -ge $((nb + 2)) ] || fail "no reintento el bootstrap"
 rm -f "$T/fallar-bootstrap"
+
+# (5e) F3 (ronda 3): la sucesion cargada cuyo archivo instalado difiere del
+# generado se recarga (bootout y bootstrap, como el vigilante); hoy basta con
+# que este cargada y no se recarga.
+printf 'viejo\n' >"$PL2"
+bash "$INST" >/dev/null 2>&1 || fail "instalar con el plist de sucesion pisado fallo"
+lin_bo="$(grep -n "bootout gui/59999/ai.goncloud.agent-work-sucesion" "$LAUNCHLOG" | tail -1 | cut -d: -f1)"
+[ -n "$lin_bo" ] || fail "no recargo la sucesion: falta bootout gui/59999/ai.goncloud.agent-work-sucesion"
+lin_bs="$(grep -n "bootstrap gui/59999.*ai.goncloud.agent-work-sucesion" "$LAUNCHLOG" | tail -1 | cut -d: -f1)"
+[ -n "$lin_bs" ] || fail "no recargo la sucesion: falta el bootstrap tras el bootout"
+[ "$lin_bs" -gt "$lin_bo" ] || fail "el bootstrap de la sucesion no va despues del bootout"
+# el plist pisado vuelve a ser el generado (misma sustitucion que usa el script).
+esp="$T/esp.plist"; esc="$(printf '%s' "$HOME" | sed 's/[&|\\]/\\&/g')"
+sed "s|/Users/dn|$esc|g" scripts/mac/ai.goncloud.agent-work-sucesion.plist >"$esp"
+cmp -s "$esp" "$PL2" || fail "el plist de sucesion pisado no volvio al generado"
+rm -f "$esp"
+
+# (5f) F3 (ronda 3): --verificar mira tambien lo cargado: un volcado print con
+# runtime viejo falla nombrando el plist de sucesion; con el volcado sano, verde.
+mv "$T/print-sucesion.txt" "$T/print-sucesion.sana"
+printf 'domain = gui/59999 {\n\t"AGENT_WORK_SUCESION_RUNTIME_SOURCE" => "/Users/viejo/r-viejo"\n}\n' >"$T/print-sucesion.txt"
+out="$(bash "$INST" --verificar 2>&1)" && fail "verificar paso con la sucesion cargada contra un runtime viejo"
+printf '%s' "$out" | grep -q "ai.goncloud.agent-work-sucesion" || fail "verificar no nombra el plist de sucesion cargado viejo: $out"
+mv "$T/print-sucesion.sana" "$T/print-sucesion.txt"
+bash "$INST" --verificar >/dev/null 2>&1 || fail "verificar fallo con la sucesion cargada sana"
 
 # (6) --verificar: verde instalado, rojo nombrando el archivo tocado o ausente.
 bash "$INST" --verificar >/dev/null 2>&1 || fail "verificar fallo sobre instalacion sana"

@@ -148,6 +148,35 @@ La sonda la corre el coordinador desde la Mac: una vez para cada alta, y una vez
 
 **El retiro.** Un agente `retirado` deja de recibir bloque en la publicación siguiente. El publicador ya rechaza una publicación que no trae un bloque por agente vivo, y no exige bloque para un agente que no está. Lo que falta es que el estado (`.sua-contexto.json`) olvide el bloque del agente que ya no está, con su respaldo, como hace con una skill que sale del manifiesto (C8 de SUA-03). Un perfil cuya ruta queda sin agente se ve como `perfil-incompleto` en `agentes.py descubrir` y en `encargo.py perfiles`, que son los que conocen la lista viva. No se rechaza en `contexto.admite`, que no la conoce. Tampoco hace falta: en SUA-03 la admisión por perfil solo existe en la ruta por CLI, que no depende de los agentes de la Mini, y en las nativas el rechazo por encargo es de SUA-09O (conflicto 4 de SUA-03). I11 pide que el perfil incompleto se vea, y se ve.
 
+### 4.5b El protocolo del trabajador nativo (de M-18)
+
+M-18 (2026-10-16, `~/.local/state/sua-loop/mediciones/m18/RESULTADO.md`) mostró que la ruta "encargo nativo a un agente" no cierra. `main` hace bien su parte: escribe el brief con `brief.py --perfil` y manda una tarea gestionada (`target.kind=agent`) con `managed_tasks_submit` y `managed_tasks_admit`. R admite la tarea y lanza el hijo en el agente destino. Pero el hijo no sabe reportar. La herramienta `managed_tasks_report` solo dice `{ result: unknown }`, y R exige (`managed-task.json.ts:84-97` y `validateResult` en `managed-task.worker.ts`):
+
+- `kind: "produced"`;
+- `payload`, con la forma del contrato (`ready.v1`: `{evidenceRef}`; `review.v1`: `{verdict, evidenceRef}` o `{verdict, findingsRef}`);
+- `artifactRef`;
+- `digest`, igual a `"sha256:" +` el sha256 de `managedTaskJson(payload)` (`stableStringify`);
+- `observedRevision`, igual a la `inputRevision` de la asignación.
+
+Un modelo no arma eso a mano. En la ruta por CLI, el host le da al trabajador su protocolo en la asignación. En la nativa, nadie se lo da.
+
+Diseño:
+
+1. **`brief.py` con destino agente** (`--perfil` sin `--host`, más el `--agente <id>` nuevo) hace cuatro cosas:
+   - Escribe en la cabecera una línea `tarea: <uuid>`.
+   - Agrega, después de la sección del perfil, una sección `<!-- protocolo inicio -->` … `<!-- protocolo fin -->` con el comando exacto para reportar: `python3 ~/.local/share/agent-work/reporte.py --root <instructionRoot> --tarea <uuid> --contrato <contrato> --artefacto <ruta absoluta> [--veredicto approved|changes]`. Le indica que le pase a `managed_tasks_report` exactamente `{"result": <la salida de ese comando>}`.
+   - Le indica que deje su artefacto en su workspace, con un nombre que lleve el uuid.
+   - Imprime, además de `instructionRef`, el `target` (`{"kind": "agent", "agentId": <id>}`) y el `inputRevision`, que es la propia instrucción: `{"kind": "artifact", "ref": "artifact:<sha>", "digest": "sha256:<sha>"}`. `main` pega los tres tal cual, como hoy pega `instructionRef` en la ruta por CLI.
+2. **`reporte.py`**, biblioteca estándar, que se instala junto a `brief.py` en la Mini:
+   - Busca en `<instructionRoot>` el archivo de la instrucción cuya cabecera trae `tarea: <uuid>` y saca su sha, que es su nombre.
+   - Arma el `payload` del contrato. En `ready.v1` es `{"evidenceRef": <ruta del artefacto>}`. En `review.v1`, `--veredicto approved` da `{"verdict": "approved", "evidenceRef": <artefacto>}` y `changes` da `{"verdict": "changes", "findingsRef": <artefacto>}`.
+   - Calcula el `digest` con el mismo canónico que R. Una prueba fija que coincide con `stableStringify` sobre casos con llaves en desorden, unicode y números.
+   - Imprime el `result` completo, con `observedRevision` igual a la instrucción.
+   - Si no encuentra la instrucción, si el artefacto no existe o si el contrato no es uno de los dos, sale con error y su frase, y no imprime un `result`.
+3. **La skill de `main` para encargos nativos**: `agent-dispatch` gana una sección corta "Encargo nativo a un agente (tarea gestionada)". Explica cómo correr `brief.py --perfil <p> --agente <id>`, que se pegan los tres fragmentos en `managed_tasks_submit` y que después va `managed_tasks_admit`. Cuando David no lo pide así, `sessions_spawn` sigue siendo la forma normal de delegar. Esta sección es la que usa la sonda.
+4. **La sonda (`agentes.py sondear`)** lee el `taskId` del texto del turno de `main` (cualquier uuid que acompañe a "taskId" o a `managed_tasks_submit`). Si la tarea llegó pero no tiene resultado, la causa es "la tarea llegó (<id>) pero el agente no reportó resultado", y no "main no mandó". La sesión del hijo de esa tarea se borra al final. Corrige además F11 y F12 de #318.
+5. **M-18 se repite** con todo esto publicado en la Mini: `brief.py` y `reporte.py` en `~/.local/share/agent-work/`, y la skill `agent-dispatch` de `main`. Con M-18 verde, `coverage.json` registra la ruta `native-managed-agent` como medida, con su evidencia.
+
 ### 4.6 Los siete adaptadores
 
 - Salen de `cliAdapters`, de `hostAdapterCoverage` (en los dos hosts) y de las rutas `managedRequesterRoutes` y `migration` que los nombran: `claude_fable`, `kimi_k3`, `kimi_coding`, `codex`, `zcode` y `grok`. Cada uno con su fila en `migration` ("retirado: ningún host lo implementa desde el 2026-10-13").
@@ -248,6 +277,7 @@ Las mediciones del coordinador:
 | G2 | `lineas.py`, `default` por permiso, `defaultGrant`, adiós `DEFAULT_MODEL`, `proveedores` con línea y efectivo | modelos, encargo, lineas | Sí: el host al día (ventana) |
 | G3 | `encargo.py sucesion`, `sucesion.json`, el canario con el caso del banco, el aviso, el launchd en `scripts/mac/` | modelos, encargo, banco sin la variable, instalar-mac | Sí: instalar el launchd |
 | G4 | `agentes.py descubrir` y `sondear`, `perfiles` con los estados nuevos, el retiro en el publicador | contexto, publicar, encargo, routing | Sí: M-18 |
+| G4b | El protocolo del trabajador nativo (4.5b): `brief.py --agente`, `reporte.py`, la sección de `agent-dispatch` y la sonda que no da causas falsas | routing, agentes, una prueba del canónico contra R | Sí: publicar `brief.py`, `reporte.py` y la skill, y repetir M-18 |
 | G5 | `solicitar` y `--ref tg:` (B22-S6), la skill `encargo-cli` | encargo, routing | Sí: publicar la skill de `main` |
 | G6 | `fuentes` y su aviso; las pruebas de I19 (crash y revocación) | contexto, publicar, modelos, encargo | No |
 | G7 | Claude por su CLI (M-21 verde): el `Adaptador` del host, `opencode` sin cambios y `claude`; su banco y su canario | sesión, host, encargo, banco | Sí: host al día |
