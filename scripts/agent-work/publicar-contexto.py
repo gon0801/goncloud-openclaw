@@ -614,11 +614,33 @@ def aplicar_en_la_mini(publicacion: Path, home: Path, agentes_json: Path | None)
         nuevos_workspaces[identificador] = releido
         nuevos_bloques[identificador] = sha256hex(bloques[identificador])
 
+    vivos = {agente["id"] for agente in agentes}
+    for identificador in sorted((set(estado["bloques"]) | set(estado["workspaces"])) - vivos):
+        # El retiro (SUA-04, 4.5): un agente que ya no está en la lista viva sale del estado
+        # con su respaldo, como una skill que sale del manifiesto. Su bloque en disco no se
+        # toca: el workspace ya no es de este publicador. La reversa lo devuelve al estado.
+        respaldo = suya / gen / "agentes-retirados" / f"{identificador}.json"
+        respaldo.parent.mkdir(parents=True, exist_ok=True)
+        escribir_atomico(
+            respaldo,
+            canonico(
+                {
+                    "bloques": estado["bloques"].get(identificador),
+                    "workspaces": estado["workspaces"].get(identificador),
+                }
+            )
+            + b"\n",
+        )
+        nuevos_bloques.pop(identificador, None)
+        nuevos_workspaces.pop(identificador, None)
+        salida_agentes[identificador] = "retirado"
+
     cambios = (
         conflictos > 0
         or "publicado" in salida_skills.values()
         or "quitado" in salida_skills.values()
         or ("publicado" in salida_agentes.values())
+        or ("retirado" in salida_agentes.values())
     )
     # El estado anterior de la generación es el estado tal como estaba antes de esta
     # --aplicar: se reescribe cuando la generación publicada es otra, y se queda como
@@ -762,6 +784,21 @@ def revertir_en_la_mini(home: Path, agentes_json: Path | None) -> int:
             nuevo["workspaces"][identificador] = estado["workspaces"][identificador]
         else:
             nuevo["workspaces"].pop(identificador, None)
+
+    retirados_dir = suya / gen / "agentes-retirados"
+    if retirados_dir.is_dir():
+        for respaldo in sorted(retirados_dir.glob("*.json")):
+            identificador = respaldo.name[: -len(".json")]
+            if identificador in rutas:
+                continue
+            # El agente retirado por esta generación vuelve al estado (SUA-04, 4.5).
+            datos = leer_json(respaldo)
+            if datos.get("bloques") is not None:
+                nuevo["bloques"][identificador] = datos["bloques"]
+            if datos.get("workspaces") is not None:
+                nuevo["workspaces"][identificador] = datos["workspaces"]
+            salida_agentes[identificador] = "revertido"
+            respaldo.unlink()
 
     if conflictos:
         # Reversa parcial: el estado sigue en la generación revertida, con lo publicado

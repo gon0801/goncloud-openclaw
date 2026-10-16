@@ -277,6 +277,35 @@ class PublicadorNativo(unittest.TestCase):
         self.assertEqual(len(lineas), 1, resultado.stdout)
         return resultado.returncode, json.loads(lineas[0])
 
+    def test_un_agente_retirado_sale_del_estado_y_la_reversa_lo_devuelve(self):
+        # SUA-04 (4.5): la publicación ya no exige bloque para un agente que no está; lo que
+        # faltaba es que el estado lo olvide, con su respaldo, y que revertir lo devuelva.
+        self.armar()
+        self.publicar("leer")
+        codigo, _ = self.publicar("aplicar")
+        self.assertEqual(codigo, 0)
+        sin_pers = self.tmp / "agents-sin-pers.json"
+        sin_pers.write_text(
+            json.dumps([a for a in self.agentes if a["id"] != "pers"]) + "\n", encoding="utf-8"
+        )
+        self.armar_generacion(2)
+        self.publicar("leer", agentes_json=sin_pers)
+        codigo, salida = self.publicar("aplicar", agentes_json=sin_pers)
+        self.assertEqual((codigo, salida["agentes"]["pers"]), (0, "retirado"))
+        estado = self.estado_del_home()
+        self.assertNotIn("pers", estado["bloques"])
+        self.assertNotIn("pers", estado["workspaces"])
+        respaldo = (
+            self.home / ".openclaw" / "sua-contexto" / "2" / "agentes-retirados" / "pers.json"
+        )
+        self.assertTrue(respaldo.exists())
+        codigo, salida = self.publicar("revertir", agentes_json=sin_pers)
+        self.assertEqual((codigo, salida["agentes"]["pers"]), (0, "revertido"))
+        estado = self.estado_del_home()
+        self.assertIn("pers", estado["bloques"])
+        self.assertIn("pers", estado["workspaces"])
+        self.assertFalse(respaldo.exists())
+
     def revertir_con_copia_que_falla(self):
         """La reversa en proceso con la copia rota a medias (C6 de SUA03-G5c): el
         fallo se inyecta en copytree y no depende de permisos, así que también
