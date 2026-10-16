@@ -482,6 +482,9 @@ class AgentsRouting(unittest.TestCase):
             rows[row["id"]] = row
         required = {f"requester:{name}" for name in self.coverage["requesters"]}
         required |= {f"route:{route['kind']}" for route in self.coverage["routes"]}
+        # La sesión adoptada salió de routes en el cierre de SUA-03 y su fila
+        # queda como retirada, no como una sexta ruta.
+        required |= {"route:user-adopted-session"}
         required |= {f"managed:{route['requester']}->{route['target']}"
                      for route in self.coverage["managedRequesterRoutes"]}
         required |= {f"wake:{entry['name']}" for entry in wakes}
