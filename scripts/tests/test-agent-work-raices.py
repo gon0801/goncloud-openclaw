@@ -9,6 +9,7 @@ es un falso que graba los textos y contesta lo que la prueba fija. Nada toca la 
 import fcntl
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -749,6 +750,81 @@ class WatchConRaices(unittest.TestCase):
         self.assertEqual(codigo, 0)
         clase.assert_called_once_with("/data/raices")
         self.assertIs(bombeo.call_args.kwargs["raices_publisher"], clase.return_value)
+
+
+class CronRaices(unittest.TestCase):
+    """El job raices-pasada de la Mini como dato versionado (SUA-06 4.2, M4).
+
+    Los placeholders <checkout>, <stateDir> y <ownerTelegramChat> los resuelve el
+    coordinador al instalar; lo que vive en el repo es la declaración. Si alguien
+    renombra una bandera del CLI, construir_parser rompe aquí.
+    """
+
+    RUTA = ROOT / "docs/crons/raices-pasada.json"
+
+    def setUp(self):
+        self.texto = self.RUTA.read_text(encoding="utf-8")
+        self.doc = json.loads(self.texto)
+
+    def test_las_claves_exactas_por_nivel(self):
+        self.assertEqual(
+            set(self.doc),
+            {
+                "schema",
+                "name",
+                "declarationKey",
+                "host",
+                "every",
+                "session",
+                "delivery",
+                "timeoutSeconds",
+                "failureAlert",
+                "payload",
+            },
+        )
+        self.assertEqual(
+            set(self.doc["failureAlert"]),
+            {"channel", "accountId", "to", "after", "cooldown", "mode"},
+        )
+        self.assertEqual(set(self.doc["payload"]), {"kind", "argv"})
+
+    def test_los_literales_del_cron(self):
+        self.assertEqual(self.doc["schema"], "sistema-agentes.cron.v1")
+        self.assertEqual(self.doc["name"], "raices-pasada")
+        self.assertEqual(self.doc["declarationKey"], self.doc["name"])
+        self.assertEqual(self.doc["host"], "mini")
+        self.assertEqual(self.doc["every"], "5m")
+        self.assertEqual(self.doc["session"], "isolated")
+        self.assertEqual(self.doc["delivery"], "none")
+        self.assertEqual(self.doc["timeoutSeconds"], 240)
+        self.assertEqual(self.doc["payload"]["kind"], "command")
+        self.assertEqual(self.doc["failureAlert"]["after"], 1)
+        self.assertEqual(self.doc["failureAlert"]["cooldown"], "1h")
+
+    def test_el_argv_arranca_con_env_y_apunta_al_script(self):
+        argv = self.doc["payload"]["argv"]
+        self.assertEqual(argv[0:3], ["env", "AGENT_WORK_AVISOS=1", "python3"])
+        self.assertEqual(argv[4], "pasar")
+        self.assertTrue(argv[3].endswith("scripts/agent-work/proyeccion.py"))
+        self.assertTrue((ROOT / "scripts/agent-work/proyeccion.py").is_file())
+
+    def test_los_placeholders_son_solo_los_tres_y_nada_absoluto(self):
+        self.assertEqual(
+            set(re.findall(r"<[^>]+>", self.texto)),
+            {"<checkout>", "<stateDir>", "<ownerTelegramChat>"},
+        )
+        self.assertNotIn("/Users/", self.texto)
+
+    def test_construir_parser_acepta_el_argv_del_cron(self):
+        with tempfile.TemporaryDirectory() as temp:
+            resuelto = self.texto.replace("<checkout>", str(ROOT)).replace("<stateDir>", temp)
+            argv = json.loads(resuelto)["payload"]["argv"]
+            argumentos = proyeccion.construir_parser().parse_args(argv[4:])
+            self.assertEqual(argumentos.comando, "pasar")
+            self.assertEqual(argumentos.stale_after_ms, 3600000)
+            self.assertEqual(argumentos.intervalo_ms, 300000)
+            self.assertEqual(argumentos.consolidado_ms, 1800000)
+            self.assertEqual(argumentos.dir, Path(temp) / "raices")
 
 
 if __name__ == "__main__":

@@ -1,0 +1,32 @@
+{
+  "schema": "sistema-agentes.cron.v1",
+  "name": "raices-pasada",
+  "declarationKey": "raices-pasada",
+  "host": "mini",
+  "every": "5m",
+  "session": "isolated",
+  "delivery": "none",
+  "timeoutSeconds": 240,
+  "failureAlert": {
+    "channel": "telegram",
+    "accountId": "default",
+    "to": "<ownerTelegramChat>",
+    "after": 1,
+    "cooldown": "1h",
+    "mode": "announce"
+  },
+  "payload": {
+    "kind": "command",
+    "argv": [
+      "env",
+      "AGENT_WORK_AVISOS=1",
+      "python3",
+      "<checkout>/scripts/agent-work/proyeccion.py",
+      "pasar",
+      "--dir",
+      "<stateDir>/raices",
+      "--stale-after-ms",
+      "3600000"
+    ]
+  }
+}
