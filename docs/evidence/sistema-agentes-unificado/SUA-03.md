@@ -20,7 +20,7 @@ Mini y el trabajo lo lanza OpenClaw.
 | Invariante | Estado | Dónde está la evidencia |
 |---|---|---|
 | I08 en la ruta por CLI y en el hijo de una CLI | **Cumplido.** Una generación sin certificar cierra la ruta (`generacion-no-certificada`) y una competence sin pasar cierra el perfil, salvo canario | `coverage.json` (`hostAdapterRoute` y `routes`) y SUA-03-mediciones.md, M-16 de las dos generaciones |
-| I08 en las tres rutas nativas | **Aplazado a SUA-04, por diseño** (4.11, conflicto 4). Entrega y conducta quedan certificadas; la ausencia no impide admitir la ruta en SUA-03 | Este recibo, la fila de followups de la competence por diseño y SUA-03-mediciones.md, M-17c |
+| I08 en las tres rutas nativas | **Aplazado a SUA-04, por diseño** (4.11, conflicto 4). La entrega y la conducta quedan medidas (M-17c y las 10 sondas de competencia), sin certificar; la ausencia no impide admitir la ruta en SUA-03 | Este recibo, la fila de followups de la competence por diseño y SUA-03-mediciones.md, M-17c |
 | I09 | **Cumplido en lo que pide el diseño para SUA-03.** Cada perfil admite por ruta y por contrato, y una fuente vencida lo deja sin admitir sin tocar a los demás | `perfiles.v1.json` y las pruebas de contexto |
 | I11 | **Cumplido.** Un bloque editado a mano es conflicto y no se pisa; una edición entre leer y aplicar es conflicto; revertir nunca deshace una edición posterior | Las pruebas de publicar-contexto y la ventana de publicación (gen1 y gen2 sin conflictos) |
 
