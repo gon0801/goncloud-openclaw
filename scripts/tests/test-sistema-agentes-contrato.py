@@ -34,6 +34,14 @@ FUERA_DE_CASOS = {
     "efectos.json",
     "transiciones.json",
     "clases.json",
+    # Snapshots RootSnapshot de proyeccion-derivar (SUA-06 4.1): insumos de la prueba
+    # del derivador, no documentos de ningún esquema del contrato.
+    "raiz-sin-criterios.json",
+    "raiz-estados.json",
+    "excepciones.json",
+    "textos-sucios-script.json",
+    "textos-sucios-llave.json",
+    "textos-sucios-ruta.json",
 }
 META = "sistema-agentes.meta.v1"
 ESQUEMAS_DEL_CONTRATO = [
