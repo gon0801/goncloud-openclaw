@@ -1,0 +1,18 @@
+## agent:ingenieria:sua03-m17c
+Confirmé el error en la suma; ahora aplico la corrección y agrego la prueba.
+## agent:ingenieria:subagent:3f0f082e-b16c-45ae-8706-706d883f9d93
+Command executed on Mac (David's MacBook Pro):
+`cd /tmp/sua03-m17c/repo && python3 -m unittest test_calc -v`
+
+Output verbatim (stdout+stderr):
+```
+test_suma (test_calc.TestCalc) ... ok
+
+----------------------------------------------------------------------
+Ran 1 test in 0.000s
+
+OK
+EXIT_CODE:0
+```
+
+Exit code: 0 (exec wrapper exit 0; test process EXIT_CODE:0). No files changed.

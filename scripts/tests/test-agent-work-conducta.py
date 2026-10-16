@@ -699,6 +699,41 @@ class ConductaNativa(unittest.TestCase):
                 self.assertFalse(respuesta["ok"])
                 self.assertEqual(respuesta["razones"], razones_esperadas)
 
+    def test_the_real_m17c_run_is_red_only_for_the_summarized_first_step(self):
+        # M1 y M2 de SUA03-G5e: las herramientas de tool_search llegan envueltas
+        # (openclaw:core:progress_card) y su resultado es un JSON con la salida
+        # en details.aggregated. La conducta mide bien y queda solo el paso 1
+        # resumido por el modelo, que es conducta real y no se relaja.
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            libro = tmp / "skills" / "poteto-mode" / "playbooks" / "bug-fix.md"
+            libro.parent.mkdir(parents=True)
+            shutil.copy(FIXTURAS / "m17c-bug-fix.md", libro)
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                codigo = conducta.main(
+                    [
+                        "--forma",
+                        "openclaw",
+                        "--eventos",
+                        str(FIXTURAS / "m17c-ingenieria-nativo.jsonl"),
+                        "--playbook",
+                        str(libro),
+                        "--resultado",
+                        str(FIXTURAS / "m17c-ingenieria-RESULTADO.txt"),
+                    ]
+                )
+        self.assertEqual(codigo, 1)
+        respuesta = json.loads(out.getvalue())
+        self.assertFalse(respuesta["ok"])
+        self.assertEqual(len(respuesta["razones"]), 1, respuesta)
+        self.assertTrue(
+            respuesta["razones"][0].startswith(
+                "la primera lista no empieza con el primer paso del playbook:"
+            ),
+            respuesta,
+        )
+
     def test_a_native_run_whose_child_tests_after_the_change_follows_poteto(self):
         padre, hijo = "agent:x:turno", "agent:x:subagent:1"
         filas = [
