@@ -7,6 +7,7 @@ scripts/tests/fixtures/agent-work/claude/): p3b (dontAsk niega Write),
 p4 y p5 (el sandbox encierra Bash en el cwd y en --add-dir).
 """
 
+import json
 import shutil
 import sys
 import tempfile
@@ -64,6 +65,9 @@ class ArgvYEnv(unittest.TestCase):
         # La línea de entrega es el segundo argumento, como en opencode.
         self.assertTrue(argv[2].startswith("Open assignment JSON at"), argv[2])
         resto = argv[3:]
+        # B1 de G7-r2 (M-24): --setting-sources project carga el settings del repo
+        # de trabajo (hooks y permisos extra). --restricted deja solo las de --tools.
+        self.assertNotIn("--setting-sources", argv)
         self.assertEqual(
             resto,
             (
@@ -76,8 +80,10 @@ class ArgvYEnv(unittest.TestCase):
                 "dontAsk",
                 "--permission-prompts",
                 "none",
-                "--setting-sources",
-                "project",
+                "--restricted",
+                "--strict-mcp-config",
+                "--tools",
+                "Read,Bash",
                 "--no-session-persistence",
                 "--allowed-tools",
                 "Read,Bash",
@@ -87,6 +93,8 @@ class ArgvYEnv(unittest.TestCase):
                 '{"sandbox":{"enabled":true,"autoAllowBashIfSandboxed":true}}',
             ),
         )
+        # --tools y --allowed-tools llevan la misma lista.
+        self.assertEqual(argv[argv.index("--tools") + 1], argv[argv.index("--allowed-tools") + 1])
 
     def test_env_quita_anthropic_api_key_aunque_este(self):
         spec = spec_claude(self.tmp)
@@ -150,6 +158,57 @@ class LeerEventos(unittest.TestCase):
         eventos = self.eventos("p4.jsonl")
         self.assertEqual(eventos.denied, ())
         self.assertIn("Bash:allow", eventos.evaluations)
+
+    def test_la_herramienta_negada_no_queda_tambien_como_allow(self):
+        # LOW de G7-r2: el Write de p3b fue negado (permission_denials); no puede
+        # quedar también como :allow en las evaluaciones.
+        eventos = self.eventos("p3b.jsonl")
+        self.assertIn("Write:deny", eventos.evaluations)
+        self.assertNotIn("Write:allow", eventos.evaluations)
+
+
+class ModeloEnUso(unittest.TestCase):
+    def setUp(self):
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        self.tmp = Path(temp.name)
+
+    def eventos_de(self, texto):
+        record = self.tmp / "record"
+        record.mkdir(exist_ok=True)
+        (record / "events.jsonl").write_text(texto, encoding="utf-8")
+        (record / "stderr.log").write_text("", encoding="utf-8")
+        return sesion.adaptador("claude").leer_eventos(record)
+
+    def test_un_modelo_distinto_al_pedido_lo_dice(self):
+        # M1 de G7-r2: se pidió opus y corrió sonnet; la corrida lo tiene que decir.
+        texto = "\n".join(
+            json.dumps(d)
+            for d in (
+                {"type": "system", "subtype": "init", "cwd": "/w", "model": "claude-sonnet-5-5"},
+                {
+                    "type": "assistant",
+                    "parent_tool_use_id": None,
+                    "message": {"model": "claude-sonnet-5-5", "content": []},
+                },
+                {
+                    "type": "result",
+                    "subtype": "success",
+                    "is_error": False,
+                    "modelUsage": {"claude-sonnet-5-5": {}},
+                    "permission_denials": [],
+                },
+            )
+        )
+        eventos = self.eventos_de(texto)
+        usado, razon = sesion.adaptador("claude").modelo_en_uso(eventos, "anthropic/opus")
+        self.assertEqual(
+            (usado, razon),
+            (None, "claude usó anthropic/claude-sonnet-5-5 y se pidió anthropic/opus"),
+        )
+        # El alias que sí corrió no dice nada: claude-sonnet-5-5 contiene sonnet.
+        usado, razon = sesion.adaptador("claude").modelo_en_uso(eventos, "anthropic/sonnet")
+        self.assertEqual((usado, razon), ("anthropic/claude-sonnet-5-5", None))
 
 
 class PlanClaude(unittest.TestCase):
@@ -222,6 +281,12 @@ class PlanClaude(unittest.TestCase):
         self.assertIsInstance(plan, LaunchSpec, plan)
         self.assertNotIn("Edit", plan.herramientas)
         self.assertNotIn("Write", plan.herramientas)
+        # B1 de G7-r2: tampoco en el --tools del argv, que es lo que existe de verdad.
+        spec = spec_claude(self.tmp, herramientas=plan.herramientas)
+        argv = sesion.adaptador("claude").argv(spec, Path("/bin/claude"), task_id="t-1")
+        tools = argv[argv.index("--tools") + 1].split(",")
+        self.assertNotIn("Edit", tools)
+        self.assertNotIn("Write", tools)
 
 
 class HostClaude(unittest.TestCase):

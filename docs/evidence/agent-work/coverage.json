@@ -53,9 +53,9 @@
           "limitation": "La misma del slot: escapa quien llame a un binario setuid que cambia de grupo o quien le pida el trabajo a launchd."
         },
         "directoryGuard": {
-          "rule": "sandbox de claude (M-23): Bash escribe en el cwd y en las carpetas de --add-dir (la carpeta de la corrida); dontAsk niega las herramientas fuera de --allowed-tools",
-          "evidence": "M-23 (artifacts/SUA04-G7/RESULTADO.md y p4.jsonl/p5.jsonl)",
-          "limitation": "Medido solo con Bash y Write en carpetas locales (M-21/M-23); el hijo (Task) de una corrida y el límite del plan Max en una corrida larga se miden en el banco de G7."
+          "rule": "sandbox de claude (M-23): Bash escribe en el cwd y en las carpetas de --add-dir (la carpeta de la corrida); --restricted --strict-mcp-config --tools deja en pie solo las herramientas del perfil (M-24: con --setting-sources project el settings del repo corría hooks, sumaba permisos y traía los conectores de la cuenta); dontAsk niega las herramientas fuera de --allowed-tools",
+          "evidence": "M-23 (artifacts/SUA04-G7/RESULTADO.md y p4.jsonl/p5.jsonl) y M-24 (mediciones/m24/RESULTADO.md, restricted.jsonl y restricted-tools.jsonl)",
+          "limitation": "Medido solo con Bash y Write en carpetas locales (M-21/M-23); el sandbox deja escribir en /tmp (M-24, punto 3); el hijo (Task) de una corrida y el límite del plan Max en una corrida larga se miden en el banco de G7."
         }
       }
     }

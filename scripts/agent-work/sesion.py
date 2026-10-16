@@ -20,9 +20,9 @@ from typing import Callable, Literal
 import contexto
 from contracts import RunDir, SessionRecord
 from host import delivery_line
-from modelos import (Catalog, DefaultModel, ExactModel, GenerationNotCertified, MalformedHeader, ModelId,
-                     PerfilRechazado, PermittedModel, ProviderPolicy, Refusal, RouteNotCertified, WorkspaceRefused,
-                     authorize)
+from modelos import (CLAUDE_ALIASES, Catalog, DefaultModel, ExactModel, GenerationNotCertified, MalformedHeader,
+                     ModelId, PerfilRechazado, PermittedModel, ProviderPolicy, Refusal, RouteNotCertified,
+                     WorkspaceRefused, authorize)
 from resources import BoundaryBusy, TmuxBackend, _ps
 from spool import atomic_json
 
@@ -421,10 +421,14 @@ def claude_argv(spec: LaunchSpec, claude_bin: Path, *, task_id: str) -> tuple[st
     El modelo de la cabecera es `anthropic/<id>` y `--model` recibe el id sin el
     prefijo del proveedor: su --help acepta un alias (opus, sonnet) o el nombre
     completo. dontAsk con --permission-prompts none niega y sigue (M-21, punto 3);
-    --allowed-tools lleva las herramientas del perfil y --add-dir la carpeta de la
-    corrida, la única fuera del cwd donde el sandbox deja escribir (M-23)."""
+    --add-dir lleva la carpeta de la corrida, la única fuera del cwd donde el
+    sandbox deja escribir (M-23). `--restricted --strict-mcp-config --tools` deja
+    en pie solo las herramientas del perfil (M-24): con `--setting-sources
+    project`, el settings del repo de trabajo corría sus hooks, sumaba permisos
+    y traía los conectores de la cuenta. `--allowed-tools` lleva la misma lista."""
     if task_id.startswith("-"):
         raise ValueError(f"un taskId no empieza con guion: {task_id!r}")
+    herramientas = ",".join(spec.herramientas)
     return (
         str(claude_bin),
         "-p",
@@ -438,11 +442,13 @@ def claude_argv(spec: LaunchSpec, claude_bin: Path, *, task_id: str) -> tuple[st
         "dontAsk",
         "--permission-prompts",
         "none",
-        "--setting-sources",
-        "project",
+        "--restricted",
+        "--strict-mcp-config",
+        "--tools",
+        herramientas,
         "--no-session-persistence",
         "--allowed-tools",
-        ",".join(spec.herramientas),
+        herramientas,
         "--add-dir",
         str(spec.run.path),
         "--settings",
@@ -470,7 +476,10 @@ def claude_events(record: Path) -> "RunEvents | None":
     None si el archivo no se puede leer, como read_events."""
     files = SessionRecord(record)
     first_at, error, opened = None, None, None
-    denied, calls, evaluations, tail = [], [], [], deque(maxlen=TAIL_LINES)
+    denied, calls, tail = [], [], deque(maxlen=TAIL_LINES)
+    usos: list = []
+    ids_negados: set = set()
+    negaciones: list = []
     used: list[str] = []
     try:
         with files.events.open(encoding="utf-8", errors="replace") as flow:
@@ -503,7 +512,7 @@ def claude_events(record: Path) -> "RunEvents | None":
                         calls.append(call)
                     for bloque in message.get("content") or ():
                         if isinstance(bloque, dict) and bloque.get("type") == "tool_use":
-                            evaluations.append(f"{bloque.get('name')}:allow")
+                            usos.append((str(bloque.get("name")), bloque.get("id")))
                 if event.get("type") == "result":
                     for negado in event.get("permission_denials") or ():
                         if not isinstance(negado, dict):
@@ -518,7 +527,9 @@ def claude_events(record: Path) -> "RunEvents | None":
                             else ""
                         )
                         denied.append(PermissionDenied(herramienta, patron))
-                        evaluations.append(f"{herramienta}:deny")
+                        if isinstance(negado.get("tool_use_id"), str):
+                            ids_negados.add(negado["tool_use_id"])
+                        negaciones.append(f"{herramienta}:deny")
                     if not calls:
                         for modelo in (event.get("modelUsage") or {}):
                             calls.append(ModelCall("build", f"anthropic/{modelo}", False))
@@ -528,15 +539,21 @@ def claude_events(record: Path) -> "RunEvents | None":
                         error = str(event.get("result") or event.get("subtype") or "claude salió con error")
     except OSError:
         return None
+    # Una herramienta negada no queda también como :allow (LOW de G7-r2): su
+    # tool_use existe en el stream, pero permission_denials manda sobre él.
+    evaluations = [f"{nombre}:allow" for nombre, uso_id in usos if uso_id not in ids_negados]
+    evaluations += negaciones
     return RunEvents(first_at, tuple(dict.fromkeys(denied)), error, opened,
                      ("anthropic",) if used else (), tuple(tail), (), tuple(calls),
                      tuple(dict.fromkeys(evaluations)))
 
 
 def claude_model_in_use(events: "RunEvents | None", requested: "str | None") -> "tuple[str | None, str | None]":
-    """El modelo que claude corrió, de su stream. `--model` recibe un alias o un nombre
-    y el alias se resuelve solo (M-21), así que no hay igualdad que comprobar como con
-    el `-m` de opencode: el usado es el que modelUsage y los mensajes nombran."""
+    """El modelo que claude corrió, de su stream, comparado con lo pedido (M1 de
+    G7-r2). Lo pedido es un alias de CLAUDE_ALIASES o un nombre completo, con o sin
+    el prefijo anthropic/: el alias tiene que aparecer como palabra en el usado
+    (opus en claude-opus-5-5) y el nombre completo tiene que ser igual. Si corrió
+    otro, se dice, como model_in_use de opencode."""
     if events is None:
         return None, "no se pueden leer los eventos de claude"
     used = list(dict.fromkeys(call.model for call in events.calls if call.agent == "build" and not call.small))
@@ -544,6 +561,16 @@ def claude_model_in_use(events: "RunEvents | None", requested: "str | None") -> 
         return None, "claude no registró ninguna llamada"
     if requested is None:
         return None, f"claude usó {', '.join(used)} y no se sabe qué se pidió"
+    pedido = requested.removeprefix("anthropic/")
+
+    def es_lo_pedido(usado: str) -> bool:
+        nombre = usado.removeprefix("anthropic/")
+        if pedido in CLAUDE_ALIASES:
+            return pedido in nombre.split("-")
+        return nombre == pedido
+
+    if not all(es_lo_pedido(usado) for usado in used):
+        return None, f"claude usó {', '.join(used)} y se pidió {requested}"
     return used[0], None
 
 
