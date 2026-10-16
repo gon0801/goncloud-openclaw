@@ -1104,33 +1104,53 @@ if not clave or clave[0] != esperada:
     raise SystemExit(0)
 fila = db.execute("SELECT event_json, event_zstd FROM transcript_events WHERE session_id = ? AND seq = ?",
                   (pedido["session_id"], pedido["seq"])).fetchone()
-if not fila:
+if not fila or (fila[0] is None and fila[1] is None):
     print(json.dumps({"ok": False, "causa": "no hay evento con ese seq"}))
     raise SystemExit(0)
-crudo = fila[0]
-if crudo is None and fila[1] is not None:
-    from compression import zstd
-    crudo = zstd.decompress(fila[1]).decode("utf-8")
-evento = json.loads(crudo)
-mensaje = evento.get("message") or {}
-contenido = mensaje.get("content")
-texto = contenido if isinstance(contenido, str) else " ".join(
-    parte.get("text", "") for parte in contenido or [] if isinstance(parte, dict))
-if evento.get("type") != "message" or mensaje.get("role") != "user":
-    print(json.dumps({"ok": False, "causa": "el evento no es un mensaje del dueño (rol user)"}))
-elif pedido["cita"] not in texto:
-    print(json.dumps({"ok": False, "causa": "la frase no está literal en el mensaje"}))
+# La Mini corre Python 3.9, sin compression.zstd: el evento comprimido viaja en base64 y
+# se descomprime en la Mac, como en extraer-nativo.
+if fila[0] is not None:
+    print(json.dumps({"ok": True, "event_json": fila[0]}))
 else:
-    print(json.dumps({"ok": True, "timestamp": evento.get("timestamp")}))
+    import base64
+    print(json.dumps({"ok": True, "event_zstd": base64.b64encode(fila[1]).decode("ascii")}))
 """
+
+
+def _evento_tg(respuesta: dict) -> dict:
+    """El evento que mandó el cotejo de la Mini: event_json tal cual, o event_zstd en base64
+    que se descomprime aquí (compression.zstd o el binario zstd)."""
+    if respuesta.get("event_json") is not None:
+        evento = json.loads(respuesta["event_json"])
+    else:
+        import base64
+        datos = base64.b64decode(respuesta.get("event_zstd") or "", validate=True)
+        try:
+            from compression import zstd
+        except ImportError:
+            hecho = subprocess.run(["zstd", "-d"], input=datos, capture_output=True, timeout=60)
+            if hecho.returncode != 0:
+                raise ValueError(f"zstd -d salió {hecho.returncode}")
+            crudo = hecho.stdout
+        else:
+            try:
+                crudo = zstd.decompress(datos)
+            except zstd.ZstdError as error:
+                raise ValueError(f"event_zstd corrupto: {error}") from error
+        evento = json.loads(crudo.decode("utf-8"))
+    if not isinstance(evento, dict):
+        raise ValueError("el evento no es un objeto")
+    return evento
 
 
 def _citar_telegram(ref: str, quote: str, policy: ProviderPolicy, correr) -> "OperatorCitation | str":
     """La cita tg:<session_id>:<seq> (SUA-04, 4.8): la base de main en la Mini, en solo
     lectura y por stdin, como extraer-nativo. Sin cotejo no hay permiso, como con P####."""
     partes = ref.split(":")
-    if len(partes) != 3 or not partes[2].isdigit():
+    if len(partes) != 3 or not re.fullmatch(r"\d{1,18}", partes[2], flags=re.ASCII):
         return f"la cita {ref} no tiene la forma tg:<session_id>:<seq>"
+    if not quote.strip():
+        return "la cita está vacía"
     if not policy.owner_telegram_chat:
         return "la política no trae ownerTelegramChat: no hay chat del dueño contra el que cotejar"
     pedido = {"session_id": partes[1], "seq": int(partes[2]), "cita": quote,
@@ -1144,7 +1164,20 @@ def _citar_telegram(ref: str, quote: str, policy: ProviderPolicy, correr) -> "Op
         return "la cita tg: no coteja: el cotejo no contestó un JSON"
     if not respuesta.get("ok"):
         return f"la cita tg: no coteja: {respuesta.get('causa', 'sin causa')}"
-    marca = respuesta.get("timestamp")
+    try:
+        evento = _evento_tg(respuesta)
+    except (ValueError, OSError, subprocess.SubprocessError) as error:
+        return f"la cita tg: no coteja: el evento no se pudo leer ({error})"
+    mensaje = evento.get("message") if isinstance(evento, dict) else None
+    mensaje = mensaje if isinstance(mensaje, dict) else {}
+    contenido = mensaje.get("content")
+    texto = contenido if isinstance(contenido, str) else " ".join(
+        parte.get("text", "") for parte in contenido or [] if isinstance(parte, dict))
+    if evento.get("type") != "message" or mensaje.get("role") != "user":
+        return "la cita tg: no coteja: el evento no es un mensaje del dueño (rol user)"
+    if quote not in texto:
+        return "la cita tg: no coteja: la frase no está literal en el mensaje"
+    marca = evento.get("timestamp")
     try:
         segundos = float(marca) / (1000.0 if float(marca) > 1e12 else 1.0)
         fecha = datetime.fromtimestamp(segundos, tz=timezone.utc).date().isoformat()
@@ -1163,11 +1196,16 @@ def solicitar(name: str, provider: str, billing: str, *, state_root: Path, check
     policy = ProviderPolicy.load(Path(checkout) / POLICY_FILE)
     if policy.unreadable is not None:
         return {"ok": False, "causa": policy.unreadable}
-    if provider in policy.closed:
-        return {"ok": False, "causa": f"{provider} está cerrado: David lo abre con permitir, "
-                                      "que coteja su frase, no con una solicitud"}
+    if not PROVIDER.fullmatch(name) or not PROVIDER.fullmatch(provider):
+        return {"ok": False, "causa": f"nombre inválido o id de proveedor inválido: {name} {provider}"}
+    refused = _closed(policy, name, provider)
+    if refused is not None:
+        return {"ok": False, "causa": refused}
     if any(grant.name == name for grant in policy.grants):
         return {"ok": False, "causa": f"{name} ya tiene permiso"}
+    ligado = next((grant.name for grant in policy.grants if grant.provider == provider), None)
+    if ligado is not None:
+        return {"ok": False, "causa": f"{provider} ya está ligado al permiso {ligado}"}
     frase = f"confirmo abrir {name} ({provider}, {billing})"
     carpeta = Path(state_root) / "solicitudes"
     carpeta.mkdir(parents=True, exist_ok=True)
