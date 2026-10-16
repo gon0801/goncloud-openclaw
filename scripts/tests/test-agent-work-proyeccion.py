@@ -7,10 +7,12 @@ openclaw de doble que registra su argv y contesta una respuesta fijada.
 """
 
 import json
+import os
+import subprocess
 import sys
 import tempfile
 import unittest
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -120,6 +122,75 @@ class Derivar(unittest.TestCase):
     def test_host_gateway_requerido_cuando_una_fila_lo_necesita(self):
         with self.assertRaisesRegex(ValueError, "host_gateway"):
             derivar_fixture("raiz-sin-criterios", host_gateway=None)
+
+
+class CliDerivar(unittest.TestCase):
+    SCRIPT = ROOT / "scripts/agent-work/proyeccion.py"
+
+    def correr(self, *argumentos, extra_env=None):
+        entorno = dict(os.environ, LANG="en_US.UTF-8")
+        entorno.update(extra_env or {})
+        return subprocess.run(
+            [sys.executable, str(self.SCRIPT), *argumentos],
+            capture_output=True,
+            text=True,
+            timeout=60,
+            env=entorno,
+            cwd=str(ROOT),
+        )
+
+    def test_derivar_imprime_la_proyeccion_del_fixture(self):
+        hecho = self.correr(
+            "derivar", str(FIXTURES / "raiz-estados.json"),
+            "--stale-after-ms", "600000", "--intervalo-ms", str(INTERVALO),
+            "--host-gateway", GATEWAY,
+        )
+        self.assertEqual(hecho.returncode, 0, hecho.stderr)
+        impresa = json.loads(hecho.stdout)
+        self.assertEqual(impresa["freshness"], {"staleAfterMs": 600000})
+        self.assertEqual(contrato.validar(impresa), [])
+        snapshot = json.loads((FIXTURES / "raiz-estados.json").read_text(encoding="utf-8"))
+        esperada = proyeccion.derivar(
+            snapshot,
+            proyeccion._instante(impresa["generatedAt"], "generatedAt"),
+            600000,
+            INTERVALO,
+            {},
+            host_gateway=GATEWAY,
+        )
+        self.assertEqual(impresa, esperada)
+
+    def test_derivar_con_notados(self):
+        with tempfile.TemporaryDirectory() as temp:
+            notados = Path(temp) / "notados.json"
+            notados.write_text('{"exc-01": "2026-10-16T11:30:00Z"}', encoding="utf-8")
+            hecho = self.correr(
+                "derivar", str(FIXTURES / "excepciones.json"),
+                "--stale-after-ms", str(STALE), "--intervalo-ms", str(INTERVALO),
+                "--notados", str(notados), "--host-gateway", GATEWAY,
+            )
+        self.assertEqual(hecho.returncode, 0, hecho.stderr)
+        impresa = json.loads(hecho.stdout)
+        filas = {fila["unitId"]: fila for fila in impresa["units"]}
+        self.assertEqual(filas["unit-a"]["nextCheckAt"], "2026-10-16T12:30:00Z")
+        generado = proyeccion._instante(impresa["generatedAt"], "generatedAt")
+        self.assertEqual(
+            filas["unit-c"]["nextCheckAt"],
+            proyeccion._fecha(generado + timedelta(milliseconds=INTERVALO)),
+        )
+        self.assertEqual(contrato.validar(impresa), [])
+
+    def test_snapshot_roto_en_el_cli_sale_con_nombre(self):
+        with tempfile.TemporaryDirectory() as temp:
+            roto = Path(temp) / "snapshot-roto.json"
+            roto.write_bytes(b"esto { no es json")
+            hecho = self.correr(
+                "derivar", str(roto),
+                "--stale-after-ms", str(STALE), "--intervalo-ms", str(INTERVALO),
+            )
+        self.assertNotEqual(hecho.returncode, 0)
+        self.assertIn("snapshot-roto", hecho.stderr)
+        self.assertIn("proyeccion:", hecho.stderr)
 
 
 if __name__ == "__main__":

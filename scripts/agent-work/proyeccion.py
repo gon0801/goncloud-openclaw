@@ -8,8 +8,11 @@ Biblioteca estándar, Python 3.9 (corre en la Mac y en la Mini).
 
 from __future__ import annotations
 
+import argparse
 import json
 import re
+import socket
+import sys
 from collections.abc import Mapping
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -294,3 +297,53 @@ def cargar_snapshot(ruta: str | Path) -> dict:
         return json.loads(Path(ruta).read_bytes())
     except ValueError as fallo:
         raise ValueError(f"snapshot {ruta} no es JSON válido: {fallo}") from fallo
+
+
+def _cargar_notados(ruta: str | Path | None) -> dict[str, datetime]:
+    if ruta is None:
+        return {}
+    try:
+        crudo = json.loads(Path(ruta).read_bytes())
+    except ValueError as fallo:
+        raise ValueError(f"notados {ruta} no es JSON válido: {fallo}") from fallo
+    if not isinstance(crudo, dict):
+        raise ValueError(f"notados {ruta} no es un objeto {{exceptionId: fecha}}")
+    return {clave: _instante(valor, f"notados[{clave!r}]") for clave, valor in crudo.items()}
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(prog="proyeccion.py", description=__doc__)
+    subcomandos = parser.add_subparsers(dest="comando", required=True)
+
+    def comunes(destino):
+        destino.add_argument("--stale-after-ms", type=int, required=True)
+        destino.add_argument("--intervalo-ms", type=int, required=True)
+        destino.add_argument("--notados", type=Path, default=None)
+        destino.add_argument("--host-gateway", default=socket.gethostname())
+
+    derivar_cli = subcomandos.add_parser(
+        "derivar", help="deriva la proyección de un snapshot en disco"
+    )
+    derivar_cli.add_argument("snapshot", type=Path)
+    comunes(derivar_cli)
+
+    args = parser.parse_args(argv)
+    try:
+        snapshot = cargar_snapshot(args.snapshot)
+        proyeccion_de_la_raiz = derivar(
+            snapshot,
+            datetime.now(timezone.utc),
+            args.stale_after_ms,
+            args.intervalo_ms,
+            _cargar_notados(args.notados),
+            host_gateway=args.host_gateway,
+        )
+    except (ValueError, RuntimeError, OSError) as error:
+        print(f"proyeccion: {error}", file=sys.stderr)
+        return 2
+    print(json.dumps(proyeccion_de_la_raiz, ensure_ascii=False, indent=2))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
