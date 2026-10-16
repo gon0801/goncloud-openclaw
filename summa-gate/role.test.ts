@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, symlinkSync, existsSync, rmSync, readFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, symlinkSync, existsSync, rmSync, readFileSync, readlinkSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
@@ -174,19 +174,22 @@ describe("plugin smoke import", () => {
     }
     mkdirSync(nm, { recursive: true });
     try {
-      if (!existsSync(link)) symlinkSync(openclawRoot, link);
+      if (readlinkSync(link) !== openclawRoot) rmSync(link, { force: true });
     } catch {
-      // link may already exist from a prior run
+      // missing or not a symlink: nothing to repair
+    }
+    try {
+      if (!existsSync(link)) symlinkSync(openclawRoot, link);
+    } catch (err) {
+      // otro archivo de prueba lo creo entre el existsSync y el symlinkSync
+      if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
     }
   });
 
-  after(() => {
-    try {
-      rmSync(link, { force: true });
-    } catch {
-      // ignore
-    }
-  });
+  // El enlace persiste a proposito: otros archivos de prueba (adversary-confinamiento,
+  // diagnostic-guard-*, merge-guard-wiring) importan index.ts en procesos propios y
+  // concurrentes de node --test; borrarlo en after() hacia el modulo inresoluble y la
+  // bateria un sorteo. node_modules/ esta en .gitignore.
 
   it("default export exposes register", async () => {
     const mod = await import("./index.ts");

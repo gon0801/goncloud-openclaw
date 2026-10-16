@@ -72,10 +72,11 @@ lista explícita de hosts habilitados y deshabilitados con su razón.
 Qué permite: `CORRIDA_NATIVE_ROUTING=execute` con carriles de escritura para
 implementar y abrir PRs revisados. Prohibido en esta etapa: merge, push a
 ramas protegidas y despliegue. `main` queda fuera del allowlist de merge
-(14.4) y la cruzada local precede al primer push.
+(14.4) y la revisión del PR la hacen los bots (loop §4).
 
-Evidencia de promoción a Etapa 4: al menos un PR nativo completo (cruzada
-local, CI vigente en el head, CodeRabbit leído o indisponibilidad declarada)
+Evidencia de promoción a Etapa 4: al menos un PR nativo completo (evidencia
+del bot ai-review en el head, CI vigente en ese head, CodeRabbit leído o
+indisponibilidad declarada)
 y la recepción del cambio por la ruta autorizada: recibo del kit o, con
 `modo_recibo: ci-y-revisor` declarado en `preaprobaciones.v1.json` (kit
 apagado, David 2026-09-28), CI verde y veredicto de revisor sobre el mismo

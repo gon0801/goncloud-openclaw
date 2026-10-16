@@ -70,20 +70,17 @@ for a in 'LISTO <sha>' \
          'no vuelve a correr la batería' \
          'como draft' \
          'antes de cualquier push o PR' \
-         'el primer push y el primer PR ocurren después de cerrar la revisión local' \
          'revisa solo el delta' \
          'en el mismo PR' \
          'Un PR por carril, nunca por tarea' \
-         'Solo un hallazgo bloqueante abre otra ronda' \
-         'para en la primera que no traiga ninguno' \
-         'Si el mismo bloqueante vuelve en dos rondas seguidas' \
+         'Solo un hallazgo bloqueante abre ronda' \
+         'Tope 5+5 con relevo' \
+         'cuenta como otra ronda' \
          'Un PR nunca se promueve con un bloqueante abierto' \
          'Un bloqueante nunca va a una fila del plan' \
          'Lo no bloqueante no abre ronda' \
-         '-Desde <sha que vio la ronda anterior>' \
-         'excluyendo al modelo que implementó' \
-         'Cada ronda cambia de revisor' \
-         'código 3' \
+         'excluyendo a los autores' \
+         'Nunca revisa el modelo que implementó' \
          'Tope de tres PRs abiertos' \
          'Los comentarios de CodeRabbit se leen' \
          'en tanda, no en ráfaga' \
@@ -99,8 +96,10 @@ for a in 'LISTO <sha>' \
          'No repite' \
          'test-runbooks-no-contradicen-entorno.sh' \
          'Jamás `--no-verify`' \
-         '-Base <sha de la base del bloque>' \
-         'conjunto cerrado' \
+         'politica-calidad.json' \
+         'solo el coordinador' \
+         'ai-review: descartar F' \
+         'merge.py mergear <PR> --sha <head>' \
          'nunca lo escribe el lead' \
          'CodeRabbit no es un proveedor de modelo'; do
   # `--` obligatorio: un ancla que empieza con `-` (como `-Alcance last-commit`)
@@ -109,57 +108,32 @@ for a in 'LISTO <sha>' \
 done
 echo "ok (3): las anclas de reglas están"
 
-# La ronda 1 pide el diff del bloque. -Desde, en cualquier sha, le dice al
-# revisor que juzgue solo los arreglos; ese flag queda para las rondas siguientes.
+# (3-r1) La ronda cierra en el PR: el primer bloque cercado de la seccion 4 es la
+# gramatica de descarte y adjudicacion que la compuerta de merge lee. Nada de la
+# cruzada vieja (ningun pwsh) vuelve a la seccion normativa.
 r1cmd=$(awk '
   /^## 4\. / { in4=1 }
   in4 && /^## 5\. / { exit }
   in4 && /^```$/ { fence++; next }
   in4 && fence==1 { print }
 ' "$DOC")
-printf '%s\n' "$r1cmd" | grep -qF -- '-Base <sha de la base del bloque>' \
-  || fail "el comando de la ronda 1 no usa -Base:
+printf '%s\n' "$r1cmd" | grep -qF 'ai-review: descartar F' \
+  || fail "la seccion 4 no trae la gramatica de descarte del bot:
 $r1cmd"
-printf '%s\n' "$r1cmd" | grep -qF -- '-Desde' \
-  && fail "el comando de la ronda 1 no puede usar -Desde:
+printf '%s\n' "$r1cmd" | grep -qF 'adjudicado F2' \
+  || fail "la seccion 4 no trae la gramatica de adjudicacion con su head:
 $r1cmd"
-echo "ok (3-r1): la ronda 1 usa -Base y no -Desde"
-
-# (3-r1b) El comando de ronda 1 que cita base-openclaw.md manda lo mismo que el §4
-# del loop: -Base con el merge-base del bloque. Ni -Desde (eso es ronda de
-# arreglos) ni -Alcance last-commit (la ronda 1 ve el diff completo del bloque).
-# Es el ancla del residual del recibo de #126: el doc base y el loop no pueden
-# volver a divergir sobre que diff ve la primera ronda.
-r1base=$(awk '
-  /La revisión cruzada/ { inr=1 }
-  inr && /^```$/ { fence++; next }
-  inr && fence==1 { print }
-  inr && fence>=2 { exit }
-' "$BASE")
-[ -n "$r1base" ] || fail "$BASE: no encuentro el comando de la revisión cruzada"
-printf '%s\n' "$r1base" | grep -qF -- '-Base <sha de la base del bloque>' \
-  || fail "$BASE: el comando de la ronda 1 no usa -Base:
-$r1base"
-printf '%s\n' "$r1base" | grep -qF -- '-Desde' \
-  && fail "$BASE: el comando de la ronda 1 no puede usar -Desde:
-$r1base"
-printf '%s\n' "$r1base" | grep -qF -- '-Alcance' \
-  && fail "$BASE: el comando de la ronda 1 no puede usar -Alcance last-commit:
-$r1base"
-echo "ok (3-r1b): la ronda 1 de base-openclaw usa -Base y ni -Desde ni -Alcance"
+printf '%s\n' "$r1cmd" | grep -qiF 'pwsh' \
+  && fail "la seccion 4 vuelve a traer el comando de la cruzada:
+$r1cmd"
+echo "ok (3-r1): la seccion 4 cierra la ronda con descarte y adjudicacion, sin cruzada"
 
 # (3d) La regla 4 de base-openclaw.md justifica el veto de rebase con la historia
-# que la ronda 1 lee con -Base (sin esa justificacion el veto parece capricho), y
-# el doc deja dicho que los runbooks cerrados de fases 6 y 7 conservan su
-# `-Alcance last-commit` como historia: el script aborta solo con un valor fuera
-# del conjunto. Sin la nota, quien sigue un runbook viejo no sabe si rompe algo.
-grep -qF '(`-Base`, loop §4) y un rebase reescribe esa historia' "$BASE" \
-  || fail "$BASE: la regla 4 ya no justifica el veto de rebase con la historia que la ronda 1 lee con -Base"
-grep -qF 'fases 6 y 7, ya cerradas, escriben `-Alcance last-commit`' "$BASE" \
-  || fail "$BASE: falta declarar que los runbooks cerrados de fases 6 y 7 escriben -Alcance last-commit"
-grep -qF 'aborta si el valor de `-Alcance` no está en ese conjunto' "$BASE" \
-  || fail "$BASE: falta decir que el script aborta si el valor de -Alcance no está en el conjunto"
-echo "ok (3d): regla 4 justificada con -Base e historia de fases 6 y 7 declarada"
+# que la revision y los checks fijan al head (sin esa justificacion el veto parece
+# capricho). La cruzada y su -Base ya no existen: la justificacion sobrevive sin ellos.
+grep -qF 'un rebase reescribe esa historia' "$BASE" \
+  || fail "$BASE: la regla 4 ya no justifica el veto de rebase con la historia que fija el head"
+echo "ok (3d): regla 4 de base-openclaw justificada con la historia del head"
 
 # (3a) Entrega-sin-sello A retiro la autoridad ligada a una sesion. Estas formas
 # reintroducirian el candado que detuvo Fase 9 aunque el resto de las anclas pase.
@@ -167,26 +141,30 @@ vieja=$(grep -nEi 'veredicto sellado|sin estado del hook|re-sell|para que el kit
 [ -z "$vieja" ] || fail "reaparecio autoridad de sesion obsoleta: $vieja"
 echo "ok (3a): autoridad de sesion ausente"
 
-# (3b) La seccion 4 manda repetir mientras salgan bloqueantes, sin tope fijo, y nunca
+# (3b) La seccion 4 aplica la regla 4 de quality-kit: tope 5+5 con relevo guardado
+# en politica-calidad.json, solo un bloqueante con reproduccion abre ronda, y nunca
 # promover con un bloqueante abierto. Medido el 2026-09-18 tres veces: un tope de tres
 # rondas llevo a la Fase 9 a promover el PR 81 con cuatro medias vivas; el criterio sin
 # tope por altas y medias volvio la revision una cadena sin fin; y el tope de 2 dejaba
-# dudas sobre que hacer con un bloqueante en la segunda ronda. Regla vigente
-# (quality-kit #13): solo un bloqueante abre ronda, cada ronda ve solo los arreglos, se
-# repite hasta la primera sin bloqueantes, y un bloqueante nunca va al plan ni se promueve.
+# dudas sobre que hacer con un bloqueante en la segunda ronda. El tope nuevo es decision
+# del dueno del 2026-10-12 (5+5); los numeros viven en el JSON, no aqui.
 s4_ini=$(grep -n -E '^## 4\. ' "$DOC" | head -1 | cut -d: -f1)
 s4_fin=$(grep -n -E '^## 5\. ' "$DOC" | head -1 | cut -d: -f1)
 [ -n "$s4_ini" ] && [ -n "$s4_fin" ] || fail "$DOC: no encuentro los limites de la seccion 4"
 # Se mira solo lo que la seccion MANDA: las notas historicas ("Medido:" y la que fecha el
 # tope viejo) nombran las reglas anteriores justamente para explicar por que cambiaron.
 s4=$(sed -n "${s4_ini},${s4_fin}p" "$DOC" | grep -v '^Medido:' | grep -v 'estuvo escrito aqu')
-printf '%s' "$s4" | grep -qF 'Se repite mientras una ronda traiga un bloqueante' \
-  || fail "$DOC: la seccion 4 no manda repetir mientras salgan bloqueantes"
+printf '%s' "$s4" | grep -qF 'Solo un hallazgo bloqueante abre ronda' \
+  || fail "$DOC: la seccion 4 no acota la ronda a un bloqueante"
+printf '%s' "$s4" | grep -qF 'Tope 5+5 con relevo' \
+  || fail "$DOC: la seccion 4 no trae el tope 5+5 con relevo"
+printf '%s' "$s4" | grep -qF 'politica-calidad.json' \
+  || fail "$DOC: la seccion 4 no apunta a la politica de calidad guardada como datos"
 printf '%s' "$s4" | grep -qF 'Un PR nunca se promueve con un bloqueante abierto' \
   || fail "$DOC: la seccion 4 no prohibe promover con un bloqueante abierto"
 viejo=$(printf '%s' "$s4" | grep -inE 'tope: *[0-9a-z]+ rondas|tope de [0-9a-z]+ rondas|no hay tope de rondas|ninguna alta ni media|altas ni medias' || true)
 [ -z "$viejo" ] || fail "$DOC: la seccion 4 volvio a un tope fijo o al criterio de altas y medias: $viejo"
-echo "ok (3b): la seccion 4 repite mientras salgan bloqueantes y nunca promueve con uno abierto"
+echo "ok (3b): la seccion 4 aplica el tope 5+5 de la politica y nunca promueve con un bloqueante abierto"
 
 # (3c) Entrega-sin-sello C alinea las tres politicas que frenaban el relevo y el cierre.
 # Medido 2026-09-20: el loop trataba cualquier comentario de CodeRabbit como revision no
@@ -214,7 +192,7 @@ printf '%s' "$s5" | grep -qF 'cero bloqueantes adjudicados abiertos' \
 viejo=$(printf '%s' "$s5" | grep -inE 'con comentarios accionables no es' || true)
 [ -z "$viejo" ] || fail "$DOC: la seccion 5 volvio a tratar cualquier comentario como revision no aprobada: $viejo"
 s6=$(seccion 6)
-for regla in 'Cualquier agente Claw o CLI puede ejecutar' 'gh pr merge <PR> --squash --match-head-commit <SHA>' 'CI y CodeRabbit estén aprobados' 'No se requiere orden adicional, recibo del lead ni el script del kit'; do
+for regla in 'Con CI y CodeRabbit aprobados y los bloqueantes resueltos' 'cualquier agente Claw o CLI ejecuta `python3 /Users/dn/dev/wt/agent-work-host/scripts/agent-work/merge.py mergear <PR> --sha <head> --repo <owner/repo>`' 'devuelve el faltan y no mergea' 'No se requiere orden adicional, recibo del lead ni tabla de preaprobaciones'; do
   printf '%s' "$s6" | grep -qF "$regla" || fail "$DOC: falta la regla de merge: $regla"
 done
 s7=$(seccion 7)
@@ -239,7 +217,7 @@ for file in "$DOC" "$BASE" docs/runbooks/base-summonaikit.md; do
 done
 printf '%s' "$s3" | grep -qF 'El PR espera hasta tener su aprobación' \
   || fail "$DOC: CodeRabbit sin respuesta no puede habilitar el merge"
-printf '%s' "$s6" | grep -qF 'CI y CodeRabbit estén aprobados' \
+printf '%s' "$s6" | grep -qF 'Con CI y CodeRabbit aprobados' \
   || fail "$DOC: falta la aprobación de CodeRabbit antes del merge"
 grep -qF 'los otros carriles continúan' "$BASE" \
   || fail "$BASE: la espera de CodeRabbit detiene otros carriles"
@@ -256,21 +234,34 @@ stale=$(grep -nE 'one PR open, nothing merged by you|owner.s to merge|Mergeado p
 [ -z "$stale" ] || fail "volvió el veto de cierre o el recibo obligatorio: $stale"
 echo "ok (3c-gate): CodeRabbit obligatorio para el PR, sin veto de rol ni recibo"
 
-# (3e) Fase 14, Task 6: la revision cruzada local precede al primer push y al
-# primer PR; la correccion tras CodeRabbit se revisa en local (delta) y se
-# publica en el mismo PR. Si el orden se invierte, el candado queda rojo
-# aunque las anclas nuevas sigan presentes.
+# (3e) La auditoria del lead precede al primer push y al primer PR; la correccion
+# tras la revision se hace en local y se publica en el mismo PR. Si el orden se
+# invierte, el candado queda rojo aunque las anclas nuevas sigan presentes.
 s3_ini=$(grep -n -E '^## 3\. ' "$DOC" | head -1 | cut -d: -f1)
 s3_fin=$(grep -n -E '^## 4\. ' "$DOC" | head -1 | cut -d: -f1)
-rev_local=$(sed -n "${s3_ini},${s3_fin}p" "$DOC" | grep -n 'cruzada local, antes de' | head -1 | cut -d: -f1)
+rev_local=$(sed -n "${s3_ini},${s3_fin}p" "$DOC" | grep -n 'antes de cualquier push' | head -1 | cut -d: -f1)
 push_pr=$(sed -n "${s3_ini},${s3_fin}p" "$DOC" | grep -n 'Primer push y PR' | head -1 | cut -d: -f1)
 [ -n "$rev_local" ] && [ -n "$push_pr" ] \
-  || fail "$DOC: el paso 3 no ordena revision local y primer push"
+  || fail "$DOC: el paso 3 no ordena auditoria y primer push"
 [ "$rev_local" -lt "$push_pr" ] \
-  || fail "$DOC: el primer push quedo antes de la revision local"
+  || fail "$DOC: el primer push quedo antes de la auditoria del lead"
 printf '%s' "$s3" | grep -qF 'permanece abierto' \
   || fail "$DOC: el paso 7 no manda mantener el PR abierto durante la correccion local"
-echo "ok (3e): revision local antes del primer push; correccion local al mismo PR"
+echo "ok (3e): auditoria antes del primer push; correccion local al mismo PR"
+
+# (3f) La cruzada de quality-kit y su maquinaria (APPROVE lead, -Excluir,
+# -Desde) salieron del flujo (decision del dueno, 2026-10-12): los runbooks
+# vivos no las nombran. Los runbooks de fases cerradas conservan la suya como
+# historia fechada y quedan fuera de este barrido; el loop las conserva solo
+# dentro de sus lineas Medido:, que cuentan por que salieron.
+for file in docs/runbooks/*.md agents/*/agent/workshop-skills/*/SKILL.md; do
+  case "$file" in *autopilot-fase*) continue ;; esac
+  vieja=$(grep -v '^Medido:' "$file" | grep -in -E 'cross-review|-Excluir|-Desde|rondas? cruzada|APPROVE lead' || true)
+  [ -z "$vieja" ] || fail "$file: volvio un mecanismo retirado (cruzada/-Excluir/-Desde/APPROVE lead): $vieja"
+done
+grep -qF 'La cruzada local de quality-kit salió del flujo' "$DOC" \
+  || fail "$DOC: falta el Medido que fecha la salida de la cruzada"
+echo "ok (3f): los runbooks vivos no nombran la cruzada ni su maquinaria; su salida queda fechada en Medido"
 
 # (4) La fila del lead no nombra ningún modelo. Es la regla central del documento.
 hit=$(lead_nombra_modelo < "$DOC")

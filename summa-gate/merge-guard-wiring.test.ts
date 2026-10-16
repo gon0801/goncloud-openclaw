@@ -7,7 +7,7 @@
  * no contra el runtime real de OpenClaw; el SDK se stubbea igual que en el resto de tests.
  */
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, rmSync, symlinkSync } from "node:fs";
+import { existsSync, mkdirSync, symlinkSync, rmSync, readlinkSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { after, before, describe, it } from "node:test";
@@ -22,19 +22,22 @@ before(() => {
   if (!existsSync(openclawRoot)) throw new Error(`openclaw install missing at ${openclawRoot}`);
   mkdirSync(nm, { recursive: true });
   try {
-    if (!existsSync(link)) symlinkSync(openclawRoot, link);
+    if (readlinkSync(link) !== openclawRoot) rmSync(link, { force: true });
   } catch {
-    // link may already exist from a prior run
+    // missing or not a symlink: nothing to repair
+  }
+  try {
+    if (!existsSync(link)) symlinkSync(openclawRoot, link);
+  } catch (err) {
+    // otro archivo de prueba lo creo entre el existsSync y el symlinkSync
+    if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
   }
 });
 
-after(() => {
-  try {
-    rmSync(join(dirname(fileURLToPath(import.meta.url)), "node_modules", "openclaw"), { force: true });
-  } catch {
-    // ignore
-  }
-});
+  // El enlace persiste a proposito: node --test corre estos archivos en procesos
+  // concurrentes y otros importan index.ts; borrarlo en after() deja el modulo
+  // inresoluble para ellos y vuelve la bateria un sorteo. node_modules/ esta en
+  // .gitignore.
 
 type OnReg = { event: string; handler: (event: unknown, ctx: unknown) => unknown; opts?: unknown };
 
