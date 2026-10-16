@@ -1116,6 +1116,24 @@ class Sucesion(Mac):
 import sqlite3 as _sqlite3
 
 
+def _hay_zstd():
+    """compression.zstd (Python 3.14+) o el binario zstd: el runner de CI trae otro Python."""
+    try:
+        from compression import zstd  # noqa: F401
+    except ImportError:
+        return shutil.which("zstd") is not None
+    return True
+
+
+def _comprimir(datos):
+    try:
+        from compression import zstd
+    except ImportError:
+        return subprocess.run(["zstd", "-c"], input=datos, capture_output=True, check=True,
+                              timeout=60).stdout
+    return zstd.compress(datos)
+
+
 def _base_telegram(ruta, *, session_key="agent:main:telegram:default:direct:6470689715",
                    role="user", content="confirmo abrir mistral (mistral, subscription) por favor",
                    comprimido=False):
@@ -1129,9 +1147,8 @@ def _base_telegram(ruta, *, session_key="agent:main:telegram:default:direct:6470
               "message": {"role": role, "content": content}}
     if comprimido:
         # Como en la base real: los eventos grandes van en event_zstd con event_json nulo.
-        from compression import zstd
         db.execute("INSERT INTO transcript_events VALUES ('s-1', 7, NULL, ?)",
-                   (zstd.compress(json.dumps(evento).encode()),))
+                   (_comprimir(json.dumps(evento).encode()),))
     else:
         db.execute("INSERT INTO transcript_events VALUES ('s-1', 7, ?, NULL)", (json.dumps(evento),))
     db.commit()
@@ -1170,6 +1187,15 @@ class Solicitar(Mac):
                                    state_root=self.state, checkout=self.checkout, now=1_800_000_000.0)
         self.assertFalse(answer["ok"])
         self.assertIn("cerrado", answer["causa"])
+        self.assertFalse((self.state / "solicitudes").exists())
+
+    def test_solicitar_se_niega_si_el_id_ya_es_de_otro_permiso(self):
+        # F7 de DeepSeek en #321 (push 2): permitir moriría después con "dos permisos ligan
+        # el id"; la frase que se le pediría a David no se puede aplicar.
+        answer = encargo.solicitar("otro", "zai-coding-plan", "subscription",
+                                   state_root=self.state, checkout=self.checkout, now=1_800_000_000.0)
+        self.assertFalse(answer["ok"])
+        self.assertIn("ya está ligado", answer["causa"])
         self.assertFalse((self.state / "solicitudes").exists())
 
     def test_solicitar_se_niega_a_un_cerrado(self):
@@ -1217,12 +1243,28 @@ class TelegramCitation(Mac):
         glm = policy.grant_for("mistral")
         self.assertEqual(glm.decision.ref, "tg:s-1:7")
 
+    @unittest.skipUnless(_hay_zstd(), "sin compression.zstd ni el binario zstd no hay fila comprimida")
     def test_pasa_con_el_evento_comprimido(self):
         # F2 de DeepSeek en #321: ~39% de las filas de main van en event_zstd y la Mini no
         # descomprime; el evento viaja en base64 y se descomprime en la Mac.
         row = self.permitir_tg(comprimido=True)
         self.assertNotIsInstance(row, str, row)
         self.assertEqual(self.policy().grant_for("mistral").decision.ref, "tg:s-1:7")
+
+    def test_un_seq_de_mas_de_18_digitos_y_una_cita_vacia_se_niegan_limpio(self):
+        # F8 y F9 de DeepSeek en #321 (push 2): el seq cabe en un entero de sqlite, como
+        # PROMPT_REF, y una cita vacía no coteja (en "" cualquier texto la contiene).
+        (self.bin / "listing").write_text(LISTING + "mistral/mistral-large\n")
+        for ref, quote, motivo in (("tg:s-1:" + "9" * 25, "confirmo abrir mistral (mistral, subscription)",
+                                    "no tiene la forma"),
+                                   ("tg:s-1:7", "  ", "la cita está vacía")):
+            with self.subTest(ref=ref, quote=quote):
+                row = encargo.permitir(
+                    "mistral", provider="mistral", billing="subscription", ref=ref, quote=quote,
+                    state_root=self.state, checkout=self.checkout, prompts=self.prompts,
+                    opencode_bin=self.bin / "opencode", correr=self.fake_ssh)
+                self.assertIsInstance(row, str)
+                self.assertIn(motivo, row)
 
     def test_un_seq_que_no_es_un_numero_ascii_se_niega_limpio(self):
         # F5 de DeepSeek en #321: "²".isdigit() es verdadero e int("²") revienta.

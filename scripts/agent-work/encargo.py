@@ -1023,8 +1023,10 @@ def _citar_telegram(ref: str, quote: str, policy: ProviderPolicy, correr) -> "Op
     """La cita tg:<session_id>:<seq> (SUA-04, 4.8): la base de main en la Mini, en solo
     lectura y por stdin, como extraer-nativo. Sin cotejo no hay permiso, como con P####."""
     partes = ref.split(":")
-    if len(partes) != 3 or not (partes[2].isascii() and partes[2].isdigit()):
+    if len(partes) != 3 or not re.fullmatch(r"\d{1,18}", partes[2], flags=re.ASCII):
         return f"la cita {ref} no tiene la forma tg:<session_id>:<seq>"
+    if not quote.strip():
+        return "la cita está vacía"
     if not policy.owner_telegram_chat:
         return "la política no trae ownerTelegramChat: no hay chat del dueño contra el que cotejar"
     pedido = {"session_id": partes[1], "seq": int(partes[2]), "cita": quote,
@@ -1077,6 +1079,9 @@ def solicitar(name: str, provider: str, billing: str, *, state_root: Path, check
         return {"ok": False, "causa": refused}
     if any(grant.name == name for grant in policy.grants):
         return {"ok": False, "causa": f"{name} ya tiene permiso"}
+    ligado = next((grant.name for grant in policy.grants if grant.provider == provider), None)
+    if ligado is not None:
+        return {"ok": False, "causa": f"{provider} ya está ligado al permiso {ligado}"}
     frase = f"confirmo abrir {name} ({provider}, {billing})"
     carpeta = Path(state_root) / "solicitudes"
     carpeta.mkdir(parents=True, exist_ok=True)
