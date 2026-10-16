@@ -14,6 +14,10 @@
         "type": "string",
         "default": "C:\\Users\\ehven\\.openclaw-state\\tablero-runbook"
       },
+      "raicesDir": {
+        "type": "string",
+        "description": "Directorio de proyecciones de raíces; por omisión <stateDir>/raices"
+      },
       "fases": {
         "type": "array",
         "items": { "type": "string" },

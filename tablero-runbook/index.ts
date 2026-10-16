@@ -28,6 +28,7 @@
  * summa-gate/observer.ts: un solo nivel de respaldo con nombre FIJO
  * `<vivo>.1.jsonl`, tope por bytes, sin compresión ni borrado.
  */
+import { createHash } from "node:crypto";
 import { appendFileSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -39,11 +40,15 @@ import {
   type Evento,
   type GithubCruce,
   type ProgresoDoc,
+  SCRIPT_RAIZ,
   derivar,
   esc,
+  renderRaices,
+  renderRaiz,
   renderTablero,
   validarFase,
   validarProgreso,
+  validarRootId,
 } from "./lib.ts";
 import { cruzarGitHub, leerGithubConfig } from "./github.ts";
 import { cruzarPlan, type PlanCruce } from "./plan.ts";
@@ -58,6 +63,7 @@ import {
 import type { TareaSuelta } from "./seguimiento-render.ts";
 import { validarMensajeV1 } from "./seguimiento-render.ts";
 import { syncProgress } from "./live-bus.ts";
+import { leerArchivoRaiz, leerRaices } from "./raices.ts";
 import {
   isManagedProgress,
   isManagedPhase,
@@ -75,7 +81,7 @@ import {
 export const DEFAULT_STATE_DIR = "C:\\Users\\ehven\\.openclaw-state\\tablero-runbook";
 export const DEFAULT_FASES = ["6"];
 
-type Config = { stateDir: string; fases: string[] };
+type Config = { stateDir: string; fases: string[]; raicesDir: string };
 
 function leerConfig(pluginConfig: unknown): Config {
   const pc =
@@ -89,14 +95,24 @@ function leerConfig(pluginConfig: unknown): Config {
   const fases = Array.isArray(pc["fases"]) && pc["fases"].every((f) => validarFase(f))
     ? (pc["fases"] as string[])
     : DEFAULT_FASES;
-  return { stateDir, fases };
+  // Sin constante default: el valor por omisión SIEMPRE deriva del stateDir
+  // resuelto (en la Mini el real llega por pluginConfig).
+  const raicesDir =
+    typeof pc["raicesDir"] === "string" && pc["raicesDir"].length > 0
+      ? pc["raicesDir"]
+      : join(stateDir, "raices");
+  return { stateDir, fases, raicesDir };
 }
 
 function validarCorrida(s: unknown): s is string {
   return typeof s === "string" && CORRIDA_RE.test(s);
 }
 
-type ClaveTablero = { kind: "fase"; id: string } | { kind: "corrida"; id: string };
+type ClaveTablero =
+  | { kind: "fase"; id: string }
+  | { kind: "corrida"; id: string }
+  | { kind: "raices" }
+  | { kind: "raiz"; id: string };
 
 function rutaDoc(stateDir: string, clave: ClaveTablero): string {
   return clave.kind === "fase"
@@ -384,6 +400,11 @@ const HEADERS_JSON = {
   "X-Content-Type-Options": "nosniff",
   "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'",
 } as const;
+/** Solo las páginas de raíces: el ÚNICO script admitido es el refresh estático de render.ts. */
+const HEADERS_RAICES = {
+  ...HEADERS_HTML,
+  "Content-Security-Policy": `default-src 'none'; style-src 'unsafe-inline'; script-src 'sha256-${createHash("sha256").update(SCRIPT_RAIZ, "utf8").digest("base64")}'; connect-src 'self'`,
+} as const;
 
 /**
  * Parte por "/" ANTES de decodificar. Un `%2f` no puede saltar de segmento y
@@ -396,9 +417,32 @@ function formaCorridaEnUrl(url: string | undefined): boolean {
   return segs.length >= 4 && segs[2] === "c";
 }
 
+function formaRaizEnUrl(url: string | undefined): boolean {
+  const limpio = (url ?? "").split("?")[0]?.split("#")[0] ?? "";
+  const segs = limpio.split("/").filter(Boolean);
+  return segs.length >= 4 && segs[2] === "raices";
+}
+
 function claveDeUrl(url: string | undefined): ClaveTablero | undefined {
   const limpio = (url ?? "").split("?")[0]?.split("#")[0] ?? "";
   const segs = limpio.split("/").filter(Boolean);
+  // El gate segs[1] === "tablero" deja a /runbook/progress/raices en el 400
+  // "fase inválida" de hoy: servirJson comparte esta función.
+  if (segs[1] === "tablero" && segs[2] === "raices") {
+    if (segs.length === 3) return { kind: "raices" };
+    if (segs.length === 4) {
+      let id: string;
+      try {
+        id = decodeURIComponent(segs[3] ?? "");
+      } catch {
+        return undefined;
+      }
+      // Sin strip de .json a diferencia de fase/corrida: la URL lleva el
+      // rootId pelado y un sufijo .json simplemente no existe en disco.
+      return validarRootId(id) ? { kind: "raiz", id } : undefined;
+    }
+    return undefined;
+  }
   if (segs.length === 3) {
     let crudo: string;
     try {
@@ -428,6 +472,38 @@ type ResLike = {
   end: (chunk?: string) => void;
 };
 
+/** Matriz SUA-06 §4.4: lista y detalle con estados con nombre; 404/500 solo por archivo. */
+function servirRaices(
+  cfg: Config,
+  clave: { kind: "raices" } | { kind: "raiz"; id: string },
+  res: ResLike,
+): void {
+  const ahora = Date.now();
+  if (clave.kind === "raices") {
+    res.writeHead(200, HEADERS_RAICES);
+    res.end(renderRaices(leerRaices(cfg.raicesDir), ahora));
+    return;
+  }
+  const archivo = leerArchivoRaiz(cfg.raicesDir, clave.id);
+  if (archivo.estado === "ok" || archivo.estado === "invalida" || archivo.estado === "json-roto") {
+    res.writeHead(200, HEADERS_RAICES);
+    res.end(renderRaiz(clave.id, archivo, ahora));
+    return;
+  }
+  if (archivo.estado === "ausente") {
+    res.writeHead(404, HEADERS_HTML);
+    res.end(`<!doctype html><p>raíz ${esc(clave.id)}: sin proyección</p>`);
+    return;
+  }
+  if (archivo.estado === "enlace" || archivo.estado === "fuera") {
+    res.writeHead(404, HEADERS_HTML);
+    res.end(`<!doctype html><p>raíz ${esc(clave.id)}: sin proyección (enlace)</p>`);
+    return;
+  }
+  res.writeHead(500, HEADERS_HTML);
+  res.end(`<!doctype html><p>raíz ${esc(clave.id)}: fallo de disco</p>`);
+}
+
 function servirTablero(
   log: Logger,
   cfg: Config,
@@ -441,12 +517,18 @@ function servirTablero(
     return Promise.resolve();
   }
   const clave = claveDeUrl(req.url);
+  if (clave !== undefined && (clave.kind === "raices" || clave.kind === "raiz")) {
+    servirRaices(cfg, clave, res);
+    return Promise.resolve();
+  }
   if (clave === undefined) {
     res.writeHead(400, HEADERS_HTML);
     res.end(
-      formaCorridaEnUrl(req.url)
-        ? "<!doctype html><p>corrida inválida: debe casar ^[a-z0-9][a-z0-9-]{0,40}$</p>"
-        : "<!doctype html><p>fase inválida: debe casar ^[0-9]{1,3}(\\.[0-9]{1,3})?$</p>",
+      formaRaizEnUrl(req.url)
+        ? "<!doctype html><p>raíz inválida: debe casar ^[A-Za-z0-9._-]{1,80}$ (ni \".\" ni \"..\") solos</p>"
+        : formaCorridaEnUrl(req.url)
+          ? "<!doctype html><p>corrida inválida: debe casar ^[a-z0-9][a-z0-9-]{0,40}$</p>"
+          : "<!doctype html><p>fase inválida: debe casar ^[0-9]{1,3}(\\.[0-9]{1,3})?$</p>",
     );
     return Promise.resolve();
   }
@@ -814,6 +896,15 @@ export default definePluginEntry({
       requiredScopes: ["operator.read"],
     });
 
-    log.info(`tablero-runbook: plugin registrado (stateDir=${cfg.stateDir}, fases=${cfg.fases.join(",")})`);
+    api.session.controls.registerControlUiDescriptor({
+      surface: "tab",
+      id: "raices",
+      label: "Raíces",
+      path: "/runbook/tablero/raices",
+      group: "control",
+      requiredScopes: ["operator.read"],
+    });
+
+    log.info(`tablero-runbook: plugin registrado (stateDir=${cfg.stateDir}, raicesDir=${cfg.raicesDir}, fases=${cfg.fases.join(",")})`);
   },
 });
