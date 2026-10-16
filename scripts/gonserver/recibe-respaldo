@@ -1,0 +1,80 @@
+#!/bin/sh
+# Receptor de respaldos en gonserver: /usr/local/bin/recibe-respaldo <familia>.
+#
+# Lo invoca el command= forzado de la llave en ~clawbackup/.ssh/authorized_keys. El
+# cliente manda el nombre del archivo como comando remoto (llega en SSH_ORIGINAL_COMMAND)
+# y los datos por stdin; aquí no hay shell ni otro comando posible.
+#
+#   openclaw  openclaw-backup-AAAAMMDD.tar.gz y openclaw-extras-AAAAMMDD.tar.gz
+#             en $RECIBE_BASE/openclaw, se guardan los 7 más nuevos de cada prefijo.
+#   hermes    hermes-backup-AAAAMMDD.tar.gz en $RECIBE_BASE/hermes (7), y el nombre viejo
+#             claw-backup-AAAAMMDD.tar.gz en $RECIBE_BASE/claw (8) para que el script
+#             anterior de la PC siga funcionando hasta que lo reemplacen.
+#
+# La fecha del nombre tiene que caer entre hoy-60 y hoy+1 según el reloj del servidor:
+# la poda guarda los más nuevos por nombre, así que siete nombres con fecha futura
+# borrarían todas las copias reales y se quedarían para siempre.
+#
+# Cada subida tiene tope de RECIBE_MAX_BYTES (20 GiB): el disco de respaldos es
+# compartido y un `cat` sin tope lo puede llenar.
+#
+# Éxito: imprime el sha256 del archivo guardado y sale 0. Falla: mensaje en stderr y
+# salida distinta de 0 (2 nombre, familia o fecha inválidos, 3 archivo corrupto, 4 pasa
+# del tope, 5 más viejo que los que se guardan). Nunca deja un archivo a medias: escribe a un temporal, lo valida con
+# `gzip -t` y lo renombra.
+set -eu
+umask 077
+
+BASE="${RECIBE_BASE:-/mnt/data/backups}"
+MAX="${RECIBE_MAX_BYTES:-21474836480}"
+familia="${1:-}"
+nombre="${SSH_ORIGINAL_COMMAND:-}"
+D8='[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]'
+
+# shellcheck disable=SC2254  # $D8 es un patrón, no un literal
+case "$familia:$nombre" in
+  openclaw:openclaw-backup-$D8.tar.gz | openclaw:openclaw-extras-$D8.tar.gz)
+    dir="$BASE/openclaw"; guardar=7 ;;
+  hermes:hermes-backup-$D8.tar.gz) dir="$BASE/hermes"; guardar=7 ;;
+  hermes:claw-backup-$D8.tar.gz) dir="$BASE/claw"; guardar=8 ;;
+  *) echo "ERROR: nombre invalido para la familia '$familia'" >&2; exit 2 ;;
+esac
+prefijo="${nombre%-*}"
+
+# Número de día de AAAAMMDD, con el año empezando en marzo para que febrero quede al
+# final. sh no tiene aritmética de fechas portable; el 1 delante evita el octal de "08".
+dia() {
+  y=$((1${1%????} - 10000)); m=${1#????}; m=$((1${m%??} - 100)); d=$((1${1#??????} - 100))
+  [ "$m" -gt 2 ] || { y=$((y - 1)); m=$((m + 12)); }
+  echo $((365 * y + y / 4 - y / 100 + y / 400 + (153 * (m - 3) + 2) / 5 + d))
+}
+fecha="${nombre##*-}"; fecha="${fecha%.tar.gz}"
+hoy=$(dia "${RECIBE_HOY:-$(date +%Y%m%d)}"); n=$(dia "$fecha")
+if [ "$n" -gt $((hoy + 1)) ] || [ "$n" -lt $((hoy - 60)) ]; then
+  echo "ERROR: fecha fuera de rango en '$nombre' (se aceptan de hoy-60 a hoy+1)" >&2; exit 2
+fi
+
+mkdir -p "$dir"
+# Un día más viejo que los que se guardan se podaría al instante: el cliente creería
+# que quedó guardado. Se rechaza antes de leer nada.
+if ! { ls -1 "$dir" | grep -E "^$prefijo-[0-9]{8}\.tar\.gz\$"; echo "$nombre"; } \
+    | sort -ru | head -n "$guardar" | grep -qxF "$nombre"; then
+  echo "ERROR: '$nombre' es más viejo que los $guardar que se guardan" >&2; exit 5
+fi
+tmp="$dir/.$nombre.tmp.$$"
+trap 'rm -f "$tmp"' EXIT
+trap 'exit 1' HUP INT TERM
+head -c "$((MAX + 1))" > "$tmp"
+if [ "$(wc -c < "$tmp" | tr -d ' ')" -gt "$MAX" ]; then
+  echo "ERROR: el archivo pasa de $MAX bytes" >&2; exit 4
+fi
+gzip -t "$tmp" 2>/dev/null || { echo "ERROR: archivo corrupto o incompleto" >&2; exit 3; }
+mv -f "$tmp" "$dir/$nombre"
+# Antes de podar: un archivo viejo recién subido puede ser el que la poda quite.
+suma="$(sha256sum "$dir/$nombre" | cut -d" " -f1)"
+
+# El nombre lleva la fecha, así que el orden por nombre es el orden por día.
+ls -1 "$dir" | grep -E "^$prefijo-[0-9]{8}\.tar\.gz\$" | sort -r | tail -n +"$((guardar + 1))" | while IFS= read -r viejo; do
+  rm -f "$dir/$viejo"
+done
+echo "$suma"
