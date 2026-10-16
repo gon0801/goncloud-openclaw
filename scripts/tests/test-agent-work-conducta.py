@@ -874,7 +874,8 @@ RUN_CLAUDE = "/corrida/enc-1"
 
 def corrida_claude(*, con_lista=False):
     """Una corrida claude que sigue poteto (lecturas con Read y file_path), con o
-    sin la lista de pasos."""
+    sin la lista de pasos. La lista de claude es TaskCreate (M-24 punto 5:
+    TodoWrite no existe en 2.1.301); el primer subject es el paso 1."""
     pasos = [
         (
             "c1",
@@ -901,12 +902,17 @@ def corrida_claude(*, con_lista=False):
             2,
             (
                 "c1b",
-                "TodoWrite",
-                {
-                    "todos": [
-                        {"content": "how over the affected subsystem.", "status": "in_progress"}
-                    ]
-                },
+                "TaskCreate",
+                {"subject": "how over the affected subsystem.", "description": "el paso 1"},
+                "ok",
+            ),
+        )
+        pasos.insert(
+            3,
+            (
+                "c1c",
+                "TaskUpdate",
+                {"taskId": "1", "status": "in_progress"},
                 "ok",
             ),
         )
@@ -969,8 +975,53 @@ class ConductaClaude(unittest.TestCase):
         self.assertEqual(veredicto.razones, ("no hay lista de pasos (todowrite)",))
 
     def test_la_corrida_claude_que_deja_la_lista_pasa_completa(self):
-        veredicto = juzgar_claude(corrida_claude(con_lista=True))
+        veredicto = juzgar_claude(corrida_claude(con_lista=True), f"{RUN_CLAUDE}/{PLAYBOOK}")
         self.assertEqual(veredicto, conducta.Veredicto(True, ()))
+
+    def test_los_streams_medidos_de_la_lista_m24_punto_5(self):
+        # B4 de G7-r5: con --tools Read,TaskCreate el init trae las dos y el modelo
+        # dejó la lista con TaskCreate; con --tools Read,TodoWrite el init trae
+        # solo ['Read'] y no hubo ninguna llamada (TodoWrite no existe en 2.1.301).
+        lineas = (
+            (CLAUDE_FIXTURES / "lista-TaskCreate.jsonl").read_text(encoding="utf-8").splitlines()
+        )
+        pasos = conducta.pasos_claude(lineas)
+        self.assertEqual([paso.tool for paso in pasos], ["todowrite", "todowrite"])
+        self.assertEqual([paso.detail for paso in pasos], ["leer", "arreglar"])
+        sin_llamadas = conducta.pasos_claude(
+            (CLAUDE_FIXTURES / "lista-TodoWrite.jsonl").read_text(encoding="utf-8").splitlines()
+        )
+        self.assertEqual(sin_llamadas, [])
+
+    def test_la_primera_lista_de_claude_sale_con_el_subject_del_primer_taskcreate(self):
+        # La primera lista que juzgar mira es la primera tras leer el playbook, y
+        # su primer elemento es el subject del primer TaskCreate (el paso 1).
+        lineas = [
+            llamada_claude(
+                "c1", "Read", file_path=f"{RUN_CLAUDE}/contexto/skills/poteto-mode/SKILL.md"
+            ),
+            resultado_claude("c1", "# poteto\n"),
+            llamada_claude("c2", "TaskCreate", subject="leer", description="leer"),
+            resultado_claude("c2", "Created task #1\n"),
+            llamada_claude("c3", "TaskUpdate", taskId="1", status="completed"),
+            resultado_claude("c3", "Updated task #1\n"),
+            llamada_claude("c4", "TaskCreate", subject="arreglar", description="arreglar"),
+            resultado_claude("c4", "Created task #2\n"),
+        ]
+        pasos = conducta.pasos_claude(lineas)
+        self.assertEqual([paso.tool for paso in pasos], ["todowrite", "todowrite"])
+        self.assertEqual([paso.detail for paso in pasos], ["leer", "arreglar"])
+        veredicto = conducta.juzgar(
+            pasos,
+            playbook=PLAYBOOK,
+            texto_del_playbook=TEXTO,
+            resultado="nada citado",
+        )
+        self.assertNotIn(
+            "no hay lista de pasos (todowrite)",
+            veredicto.razones,
+            "el TaskUpdate no debe borrar la lista",
+        )
 
     def test_la_lectura_fuera_del_paquete_y_la_tarde_no_cuentan(self):
         sin_lecturas = [
