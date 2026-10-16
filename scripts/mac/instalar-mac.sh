@@ -59,9 +59,13 @@ generar_plist() { # $1 destino
   sed "s|/Users/dn|$esc|g" "$PL_FUENTE" >"$1" || return 1
 }
 
-generar_plist2() { # $1 destino: la sucesion diaria de SUA-04 (4.3), misma sustitucion
+generar_plist2() { # $1 destino: la sucesion diaria de SUA-04 (4.3), runtime del canario incluido
   local esc; esc="$(printf '%s' "$HOME" | sed 's/[&|\\]/\\&/g')"
-  sed "s|/Users/dn|$esc|g" "$PL2_FUENTE" >"$1" || return 1
+  local esc_r; esc_r="$(printf '%s' "$R_SUCESION" | sed 's/[&|\\]/\\&/g')"
+  # El runtime se sustituye ya home-ificado y al final: antes, un R_SUCESION que
+  # contenga /Users/dn quedaria reescrito por la pasada del HOME. Con el R por
+  # omision, la segunda sustitucion reemplaza la ruta por si misma.
+  sed -e "s|/Users/dn|$esc|g" -e "s|$HOME/dev/wt/r-sua02-c-gate|$esc_r|g" "$PL2_FUENTE" >"$1" || return 1
 }
 
 # Fase 1: comprobar blobs contra la rama ANTES de tocar disco. Sale 0 si todo
@@ -117,7 +121,7 @@ modo_dry() {
 }
 
 modo_verificar() {
-  local mal=0 f tmp
+  local mal=0 f tmp volcado
   for f in $BINS; do
     [ -f "$BIN_DIR/$f" ] || { di "FALTA: bin/$f"; mal=$((mal+1)); continue; }
     cmp -s "$AQUI/$f" "$BIN_DIR/$f" || { di "DIFIERE: bin/$f"; mal=$((mal+1)); continue; }
@@ -144,8 +148,16 @@ modo_verificar() {
   generar_plist2 "$tmp" || { rm -f "$tmp"; falla "no se pudo generar el plist de sucesion esperado"; }
   if [ ! -f "$R_SUCESION/openclaw.mjs" ]; then
     di "sin R construido en $R_SUCESION: el plist de sucesion no se instala (el canario nunca correria)"
-  elif [ ! -f "$LA_DIR/$PL2_NOMBRE" ]; then di "FALTA: LaunchAgents/$PL2_NOMBRE"; mal=$((mal+1));
-  elif ! cmp -s "$tmp" "$LA_DIR/$PL2_NOMBRE"; then di "DIFIERE: LaunchAgents/$PL2_NOMBRE"; mal=$((mal+1)); fi
+  else
+    if [ ! -f "$LA_DIR/$PL2_NOMBRE" ]; then di "FALTA: LaunchAgents/$PL2_NOMBRE"; mal=$((mal+1));
+    elif ! cmp -s "$tmp" "$LA_DIR/$PL2_NOMBRE"; then di "DIFIERE: LaunchAgents/$PL2_NOMBRE"; mal=$((mal+1)); fi
+    # El archivo en disco puede estar sano y launchd seguir corriendo el viejo
+    # que leyo al cargar: lo cargado debe traer el runtime del plist generado.
+    if volcado="$("$LC_BIN" print "gui/$QUIEN_UID/$ETIQUETA2" 2>/dev/null)"; then
+      printf '%s' "$volcado" | grep -qF "$R_SUCESION" \
+        || { di "DIFIERE cargado: LaunchAgents/$PL2_NOMBRE"; mal=$((mal+1)); }
+    fi
+  fi
   rm -f "$tmp"
   if [ ! -f "$HOME/.tmux.conf" ]; then di "FALTA: .tmux.conf"; mal=$((mal+1));
   elif ! cmp -s "$AQUI/tmux.conf" "$HOME/.tmux.conf"; then di "DIFIERE: .tmux.conf"; mal=$((mal+1)); fi
@@ -188,11 +200,26 @@ modo_instalar() {
   else
     pl_tmp="$(mktemp)" || falla "sin tmp para el plist de sucesion"
     generar_plist2 "$pl_tmp" || { rm -f "$pl_tmp"; falla "no se pudo generar el plist de sucesion"; }
+    # cmp antes de copiar: despues el instalado ya es el generado y se pierde si
+    # launchd quedo corriendo el plist viejo que leyo al cargar.
+    local pl2_cambia=0 n2=0
+    { [ -f "$LA_DIR/$PL2_NOMBRE" ] && cmp -s "$pl_tmp" "$LA_DIR/$PL2_NOMBRE"; } || pl2_cambia=1
     copiar_si_difiere "$pl_tmp" "$LA_DIR/$PL2_NOMBRE" || { rm -f "$pl_tmp"; falla "no se pudo instalar el plist de sucesion"; }
     rm -f "$pl_tmp"
     mkdir -p "$HOME/Library/Logs/goncloud" || falla "no se pudo crear Library/Logs/goncloud"
-    # La sucesion es de una pasada diaria: se carga una vez y no se reinicia como el vigilante.
-    if ! "$LC_BIN" print "gui/$QUIEN_UID/$ETIQUETA2" >/dev/null 2>&1; then
+    # Como el vigilante: cargada y sin cambios no se toca (un bootout+bootstrap
+    # innecesario puede dejarla descargada si el bootstrap corre antes de que el
+    # bootout termine). Cargada y con el archivo cambiado, launchd sigue con el
+    # plist viejo en memoria: bootout y bootstrap con los mismos reintentos.
+    if "$LC_BIN" print "gui/$QUIEN_UID/$ETIQUETA2" >/dev/null 2>&1; then
+      if [ "$pl2_cambia" = "1" ]; then
+        "$LC_BIN" bootout "gui/$QUIEN_UID/$ETIQUETA2" >/dev/null 2>&1 || true
+        until "$LC_BIN" bootstrap "gui/$QUIEN_UID" "$LA_DIR/$PL2_NOMBRE" >&2; do
+          n2=$((n2+1)); [ "$n2" -ge 5 ] && falla "launchctl no cargo $ETIQUETA2 tras 5 intentos"
+          sleep 1
+        done
+      fi
+    else
       "$LC_BIN" bootstrap "gui/$QUIEN_UID" "$LA_DIR/$PL2_NOMBRE" >&2 || falla "launchctl no cargo $ETIQUETA2"
     fi
   fi
