@@ -480,7 +480,10 @@ def perfiles(checkout: Path, mini: str | None = None, correr=None) -> dict:
         import agentes as agentes_mod
         if correr is None:
             correr = agentes_mod._ssh(mini)
-        vivos = agentes_mod.lista_viva(mini, correr)
+        try:
+            vivos = agentes_mod.lista_viva(mini, correr)
+        except (OSError, ValueError, KeyError, TypeError) as error:
+            raise ValueError(f"no se pudo leer la lista viva de la Mini: {error}") from error
         coverage = contexto.leer_json(Path(checkout) / COVERAGE_FILE)
         estados = agentes_mod.descubrir(documento, vivos, coverage.get("requesters", ()))
         respuesta["estados"] = {
@@ -940,14 +943,11 @@ def _run_perfiles(args: argparse.Namespace, where: dict, now: float) -> int:
     try:
         respuesta = perfiles(checkout=where["checkout"], mini=args.mini)
     except (OSError, ValueError, KeyError, TypeError) as error:
+        mensaje = str(error)
+        if not mensaje.startswith("no se pudo"):
+            mensaje = f"perfiles: no se pudo leer perfiles.v1.json del checkout: {error}"
         print(
-            json.dumps(
-                {
-                    "ok": False,
-                    "error": f"perfiles: no se pudo leer perfiles.v1.json del checkout: {error}",
-                },
-                ensure_ascii=False,
-            ),
+            json.dumps({"ok": False, "error": mensaje}, ensure_ascii=False),
             file=sys.stderr,
         )
         return 3

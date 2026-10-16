@@ -309,6 +309,33 @@ class PublicadorNativo(unittest.TestCase):
         self.assertIn("pers", estado["workspaces"])
         self.assertFalse(respaldo.exists())
 
+    def test_un_agente_que_vuelve_aplica_sin_conflicto(self):
+        # F2: el retiro olvida el digest, pero el bloque queda en el AGENTS.md. Si el
+        # agente vuelve con el mismo workspace, aplicar lo reconoce por el respaldo del
+        # retiro y sale "igual", no "conflicto: el bloque fue editado".
+        self.armar()
+        self.publicar("leer")
+        self.publicar("aplicar")
+        sin_pers = self.tmp / "agents-sin-pers.json"
+        sin_pers.write_text(
+            json.dumps([a for a in self.agentes if a["id"] != "pers"]) + "\n", encoding="utf-8"
+        )
+        self.agentes = [a for a in self.agentes if a["id"] != "pers"]
+        self.armar_generacion(2)
+        self.publicar("leer", agentes_json=sin_pers)
+        codigo, salida = self.publicar("aplicar", agentes_json=sin_pers)
+        self.assertEqual((codigo, salida["agentes"]["pers"]), (0, "retirado"))
+        self.agentes = [a for a in self.agentes] + [
+            a for a in json.loads(self.agents_json.read_text()) if a["id"] == "pers"
+        ]
+        self.armar_generacion(3)
+        self.publicar("leer")
+        codigo, salida = self.publicar("aplicar")
+        # Sin conflicto: "igual" si el bloque no cambió de generación, "publicado" si sí.
+        self.assertEqual((codigo, salida["conflictos"]), (0, 0))
+        self.assertIn(salida["agentes"]["pers"], ("igual", "publicado"))
+        self.assertIn("pers", self.estado_del_home()["bloques"])
+
     def revertir_con_copia_que_falla(self):
         """La reversa en proceso con la copia rota a medias (C6 de SUA03-G5c): el
         fallo se inyecta en copytree y no depende de permisos, así que también

@@ -576,9 +576,19 @@ def aplicar_en_la_mini(publicacion: Path, home: Path, agentes_json: Path | None)
             salida_agentes[identificador] = "conflicto: el bloque fue editado"
             conflictos += 1
             continue
+        # La vuelta de un retirado (F2): el digest que el estado olvidó vive en el
+        # respaldo del retiro, y vale como el publicado, como en la reversa.
+        respaldos_retiro = sorted(suya.glob(f"*/agentes-retirados/{identificador}.json"))
+        respaldo_retiro = (
+            respaldos_retiro[-1]
+            if respaldos_retiro
+            else suya / gen / "agentes-retirados" / f"{identificador}.json"
+        )
+        datos_retiro = leer_json(respaldo_retiro) if respaldo_retiro.exists() else {}
+        esperado_bloque = estado["bloques"].get(identificador) or datos_retiro.get("bloques")
         if trecho is not None:
             desde, hasta = trecho
-            if sha256hex(actual[desde:hasta]) != estado["bloques"].get(identificador):
+            if sha256hex(actual[desde:hasta]) != esperado_bloque:
                 salida_agentes[identificador] = "conflicto: el bloque fue editado"
                 conflictos += 1
                 continue
@@ -589,6 +599,7 @@ def aplicar_en_la_mini(publicacion: Path, home: Path, agentes_json: Path | None)
             contenido = actual + salto + bloques[identificador] + final
         if (
             estado["workspaces"].get(identificador) != digest
+            and datos_retiro.get("workspaces") != digest
             and lectura.get("agents", {}).get(identificador) != digest
         ):
             salida_agentes[identificador] = "conflicto: cambió después de --leer"
@@ -599,6 +610,7 @@ def aplicar_en_la_mini(publicacion: Path, home: Path, agentes_json: Path | None)
             # "igual" no refresca el digest: el del estado es el de la última escritura
             # del publicador, y es el que la reversa valida (4.3 CAS).
             nuevos_bloques[identificador] = sha256hex(bloques[identificador])
+            respaldo_retiro.unlink(missing_ok=True)
             continue
         respaldo = suya / gen / "workspaces" / f"{identificador}.AGENTS.md"
         respaldo.parent.mkdir(parents=True, exist_ok=True)
@@ -613,6 +625,7 @@ def aplicar_en_la_mini(publicacion: Path, home: Path, agentes_json: Path | None)
         salida_agentes[identificador] = "publicado"
         nuevos_workspaces[identificador] = releido
         nuevos_bloques[identificador] = sha256hex(bloques[identificador])
+        respaldo_retiro.unlink(missing_ok=True)
 
     vivos = {agente["id"] for agente in agentes}
     traidos = (

@@ -61,14 +61,15 @@ class FakeMini:
     """Un ssh y un openclaw falsos: la tarea aparece cuando el turno a main corre."""
 
     def __init__(self, *, tarea=True, registrada=False, marcador=True, entregas=0,
-                 memoria_cambia=False, spawn=False):
+                 memoria_cambia=False, spawn=False, concurrente=False, turno_cortado=False):
         self.tarea, self.registrada, self.con_marcador = tarea, registrada, marcador
         self.entregas, self.memoria_cambia, self.spawn = entregas, memoria_cambia, spawn
+        self.concurrente, self.turno_cortado = concurrente, turno_cortado
         self.llamadas = []
         self.memoria = "aaa  memory/notas.md\n"
         self.turno_corrido = False
 
-    def __call__(self, argv, entrada=None):
+    def __call__(self, argv, entrada=None, timeout=None):
         self.llamadas.append((argv, entrada))
         texto = " ".join(argv)
         if "agents list" in texto:
@@ -79,18 +80,29 @@ class FakeMini:
         if "cat >" in texto:
             return 0, "", ""
         if "agent --agent main" in texto:
+            if self.turno_cortado:
+                return 1, "", "ssh no contestó en 900s"
             self.turno_corrido = True
             if self.memoria_cambia:
                 self.memoria = "bbb  memory/notas.md\n"
-            return 0, "{}", ""
+            return 0, json.dumps({"taskId": "t-sonda"}), ""
         if "python3" in texto and "-c" in argv:
             tareas = []
             if self.turno_corrido and self.tarea:
                 tareas = [{"taskId": "t-sonda", "kind": "agent", "agentId": "ingenieria",
                            "estado": "registered" if self.registrada else "result-recorded",
                            "resultado": "SONDA-7" if self.con_marcador else "otro texto"}]
+            if self.turno_corrido and self.concurrente:
+                tareas.append({"taskId": "t-real", "kind": "agent", "agentId": "ingenieria",
+                               "estado": "result-recorded", "resultado": "trabajo real de otro"})
+            pedido = json.loads(entrada or "{}")
+            reportada = pedido.get("tareaReportada")
+            sesiones = ["agent:ingenieria:managed:ajena"]
+            if self.turno_corrido:
+                sesiones.append("agent:ingenieria:managed:t-sonda")
             return 0, json.dumps({"tareas": tareas, "entregas": self.entregas if self.turno_corrido else 0,
-                                  "sesionesHijas": ["agent:ingenieria:managed:t-sonda"] if self.turno_corrido else [],
+                                  "sesionesHijas": list(sesiones),
+                                  "sesionesAgente": sesiones,
                                   "spawn": self.spawn}), ""
         return 0, "", ""
 
@@ -119,6 +131,25 @@ class Sondear(unittest.TestCase):
         borradas = [" ".join(argv) for argv in fake.corridas("sessions delete")]
         self.assertTrue(any("agent:main:sua04-sonda-ingenieria-7" in b for b in borradas))
         self.assertTrue(any("agent:ingenieria:managed:t-sonda" in b for b in borradas))
+
+    def test_no_borra_sesiones_ajenas_ni_toma_la_tarea_concurrente(self):
+        # F1: la sonda solo toca lo suyo: ni la sesión gestionada ajena ni la tarea real
+        # concurrente al mismo agente.
+        fake = FakeMini(concurrente=True)
+        fila = sondear_con(fake)
+        self.assertEqual((fila["ok"], fila["taskId"]), (True, "t-sonda"))
+        borradas = [" ".join(argv) for argv in fake.corridas("sessions delete")]
+        self.assertFalse(any("managed:ajena" in b for b in borradas), borradas)
+        self.assertTrue(any("managed:t-sonda" in b for b in borradas), borradas)
+
+    def test_turno_cortado_conserva_la_sesion_de_main(self):
+        fake = FakeMini(turno_cortado=True)
+        fila = sondear_con(fake)
+        self.assertEqual(fila["causa"],
+                         "turno cortado, sesión conservada: agent:main:sua04-sonda-ingenieria-7")
+        borradas = [" ".join(argv) for argv in fake.corridas("sessions delete")]
+        self.assertFalse(any("agent:main:sua04-sonda" in b for b in borradas), borradas)
+        self.assertTrue(any("rm" in argv for argv, _ in fake.llamadas))
 
     def test_main_que_usa_sessions_spawn(self):
         fila = sondear_con(FakeMini(tarea=False, spawn=True))

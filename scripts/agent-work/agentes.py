@@ -65,12 +65,13 @@ def descubrir(perfiles: dict, vivos: list, requesters=()) -> list:
 
 
 def _ssh(mini: str):
-    def correr(argv, entrada=None):
+    def correr(argv, entrada=None, timeout=None):
+        tope = timeout or TIMEOUT_SSH
         try:
             hecho = subprocess.run(["ssh", *SSH_OPCIONES, mini, *argv], input=entrada,
-                                   capture_output=True, text=True, timeout=TIMEOUT_SSH)
+                                   capture_output=True, text=True, timeout=tope)
         except subprocess.TimeoutExpired:
-            return 1, "", f"ssh no contestó en {TIMEOUT_SSH}s"
+            return 1, "", f"ssh no contestó en {tope}s"
         return hecho.returncode, hecho.stdout, hecho.stderr
     return correr
 
@@ -117,18 +118,33 @@ entregas = 0
 for col in [c for c in cols if c.endswith("session_key")]:
     entregas += db.execute(
         f"select count(*) from conversation_deliveries where {col} = ?", (req["sesionMain"],)).fetchone()[0]
-hijas = []
+agente = req["agentId"]
 try:
     adb = sqlite3.connect("file:" + os.path.expanduser(
-        f"~/.openclaw/agents/{req['agentId']}/agent/openclaw-agent.sqlite") + "?mode=ro", uri=True)
-    hijas = [r[0] for r in adb.execute(
-        "select session_key from session_windows where session_key like ?",
-        (f"agent:{req['agentId']}:managed%",))]
-    spawn = adb.execute("select count(*) from session_windows where session_key like ? and session_key not like ?",
-                        (f"agent:{req['agentId']}%", "agent:%:managed%")).fetchone()[0] > 0
-except Exception:
+        f"~/.openclaw/agents/{agente}/agent/openclaw-agent.sqlite") + "?mode=ro", uri=True)
+    sesiones_agente = [r[0] for r in adb.execute("select session_key from session_windows")]
+    reportada = req.get("tareaReportada")
+    # Solo la hija de ESTA tarea (F1): una sesión gestionada ajena no es de la sonda.
+    hijas = [k for k in sesiones_agente if reportada and reportada in k]
+    previas = set(req.get("sesionesPrevias") or [])
     spawn = False
-print(json.dumps({"tareas": tareas, "entregas": entregas, "sesionesHijas": hijas, "spawn": spawn}))
+    for clave in [k for k in sesiones_agente if k not in previas]:
+        if reportada and reportada in clave:
+            continue
+        # El diagnóstico de spawn: una sesión nueva cuyo transcript trae el marcador.
+        try:
+            filas = adb.execute(
+                "select count(*) from transcript_events where session_id in "
+                "(select session_id from session_windows where session_key = ?) "
+                "and event_json like ?", (clave, "%" + req["marcador"] + "%")).fetchone()[0]
+        except Exception:
+            filas = 0
+        if filas:
+            spawn = True
+except Exception:
+    sesiones_agente, hijas, spawn = [], [], False
+print(json.dumps({"tareas": tareas, "entregas": entregas, "sesionesHijas": hijas,
+                  "sesionesAgente": sesiones_agente, "spawn": spawn}))
 """
 
 
@@ -141,12 +157,32 @@ def _foto_memoria(correr, workspace: str) -> str:
     return out
 
 
-def _estado_remoto(correr, sesion_main: str, agent_id: str) -> dict:
-    rc, out, err = correr(["python3", "-c", AYUDANTE],
-                          entrada=json.dumps({"sesionMain": sesion_main, "agentId": agent_id}))
+def _estado_remoto(correr, sesion_main: str, agent_id: str, marcador: str,
+                   sesiones_previas=(), tarea_reportada=None) -> dict:
+    rc, out, err = correr(["python3", "-c", AYUDANTE], entrada=json.dumps(
+        {"sesionMain": sesion_main, "agentId": agent_id, "marcador": marcador,
+         "sesionesPrevias": list(sesiones_previas), "tareaReportada": tarea_reportada}))
     if rc != 0:
         raise ValueError(f"la lectura de la tarea falló: {err.strip()}")
     return json.loads(out)
+
+
+def _task_id_reportado(salida: str):
+    """El taskId que main reporta en su turno, si viene: la tarea de la sonda es esa (F1)."""
+    try:
+        doc = json.loads(salida)
+    except ValueError:
+        return None
+    pila = [doc]
+    while pila:
+        actual = pila.pop()
+        if isinstance(actual, dict):
+            if isinstance(actual.get("taskId"), str):
+                return actual["taskId"]
+            pila.extend(actual.values())
+        elif isinstance(actual, list):
+            pila.extend(actual)
+    return None
 
 
 MENSAJE = """Sonda de SUA-04 (no avises a David, no escribas a Telegram, no uses sessions_spawn).
@@ -166,6 +202,7 @@ def sondear(agent_id: str, *, mini: str, correr, perfiles: dict, marca: str,
     fila = {"ok": False, "agentId": agent_id, "taskId": None, "estado": None,
             "marcador": False, "entregas": None, "memoriaIgual": None, "causa": None}
     hijas: list = []
+    turno_cortado = False
     try:
         vivos = {a["id"]: a for a in lista_viva(mini, correr)}
         if agent_id not in vivos:
@@ -174,26 +211,46 @@ def sondear(agent_id: str, *, mini: str, correr, perfiles: dict, marca: str,
         perfil = next((p["id"] for p in perfiles.get("profiles", ())
                        for r in p.get("routes", ()) if r.get("agentId") == agent_id), None)
         antes = _foto_memoria(correr, vivos[agent_id]["workspace"])
-        previas = {t["taskId"] for t in _estado_remoto(correr, sesion_main, agent_id)["tareas"]}
+        estado0 = _estado_remoto(correr, sesion_main, agent_id, marcador)
+        previas = {t["taskId"] for t in estado0["tareas"]}
+        sesiones_previas = estado0.get("sesionesAgente") or []
         texto = MENSAJE.format(perfil=f"--perfil {perfil}" if perfil else "(sin --perfil)",
                                marcador=marcador, agente=agent_id)
         rc, _, err = correr(["sh", "-c", f"cat > {shlex.quote(mensaje_remoto)}"], entrada=texto)
         if rc != 0:
             fila["causa"] = f"no se pudo escribir el mensaje en la Mini: {err.strip()}"
             return fila
-        rc, _, err = correr([OPENCLAW, "agent", "--agent", "main", "--session-key", sesion_main,
-                             "--message-file", mensaje_remoto, "--json"])
+        # El turno tiene su propio tope, mayor que el de la espera (F5): un turno de main
+        # tarda lo que tarde en mandar la tarea, y cortarlo no es un fallo de la sonda.
+        rc, out, err = correr([OPENCLAW, "agent", "--agent", "main", "--session-key", sesion_main,
+                               "--message-file", mensaje_remoto, "--json"],
+                              timeout=tope + 600)
+        if rc != 0 and "no contestó" in err:
+            turno_cortado = True
+            fila["causa"] = f"turno cortado, sesión conservada: {sesion_main}"
+            return fila
         if rc != 0:
             fila["causa"] = f"el turno a main falló: {err.strip()}"
             return fila
+        reportada = _task_id_reportado(out)
         inicio = reloj()
-        estado = _estado_remoto(correr, sesion_main, agent_id)
+        estado = _estado_remoto(correr, sesion_main, agent_id, marcador, sesiones_previas, reportada)
         while True:
-            hijas = estado.get("sesionesHijas") or hijas
+            # Solo la hija de esta tarea (F1): el ayudante puede traer sesiones ajenas.
+            reportado_id = reportada or fila["taskId"]
+            hijas = [k for k in (estado.get("sesionesHijas") or [])
+                     if reportado_id and reportado_id in k] or hijas
             nuevas = [t for t in estado["tareas"] if t["taskId"] not in previas
                       and t.get("kind") == "agent" and t.get("agentId") == agent_id]
-            if nuevas:
-                tarea = nuevas[0]
+            # La tarea de la sonda es la que main reportó o la nueva cuyo resultado trae
+            # el marcador (F1): una tarea real concurrente al mismo agente no es suya.
+            tarea = None
+            if reportada:
+                tarea = next((t for t in nuevas if t["taskId"] == reportada), None)
+            else:
+                tarea = next((t for t in nuevas if t["estado"] == "result-recorded"
+                              and marcador in (t.get("resultado") or "")), None)
+            if tarea is not None:
                 fila["taskId"], fila["estado"] = tarea["taskId"], tarea["estado"]
                 if tarea["estado"] == "result-recorded":
                     fila["marcador"] = marcador in (tarea.get("resultado") or "")
@@ -201,13 +258,13 @@ def sondear(agent_id: str, *, mini: str, correr, perfiles: dict, marca: str,
             if reloj() - inicio >= tope:
                 if not nuevas and estado.get("spawn"):
                     fila["causa"] = "main usó sessions_spawn en vez de la tarea gestionada"
-                elif not nuevas:
+                elif tarea is None and not reportada:
                     fila["causa"] = "la tarea no llegó: main no mandó una tarea gestionada a este agente"
                 else:
                     fila["causa"] = "la tarea no llegó a result-recorded en el tope"
                 break
             dormir(5)
-            estado = _estado_remoto(correr, sesion_main, agent_id)
+            estado = _estado_remoto(correr, sesion_main, agent_id, marcador, sesiones_previas, reportada)
         fila["entregas"] = estado["entregas"]
         despues = _foto_memoria(correr, vivos[agent_id]["workspace"])
         fila["memoriaIgual"] = antes == despues
@@ -222,7 +279,10 @@ def sondear(agent_id: str, *, mini: str, correr, perfiles: dict, marca: str,
         return fila
     finally:
         correr(["rm", "-f", mensaje_remoto])
-        correr([OPENCLAW, "sessions", "delete", sesion_main, "--yes"])
+        # Solo lo suyo (F1): la sesión de main de la sonda y la hija de su tarea. Con el
+        # turno cortado, la sesión de main se conserva (F5).
+        if not turno_cortado:
+            correr([OPENCLAW, "sessions", "delete", sesion_main, "--yes"])
         for hija in hijas:
             correr([OPENCLAW, "sessions", "delete", hija, "--yes"])
 
@@ -238,6 +298,14 @@ def main(argv=None) -> int:
     s.add_argument("--mini", required=True, help="user@host de la Mini")
     s.add_argument("--tope", type=float, default=300.0)
     args = parser.parse_args(argv)
+    try:
+        return _main(args)
+    except (OSError, ValueError, KeyError) as error:
+        print(json.dumps({"ok": False, "causa": str(error)}, ensure_ascii=False))
+        return 3
+
+
+def _main(args) -> int:
     perfiles = contexto.leer_json(RAIZ / PERFILES)
     if args.comando == "descubrir":
         if args.agentes_json is not None:

@@ -532,6 +532,17 @@ class Perfiles(Mac):
                       respuesta["estados"]["perfil-incompleto"]["perfiles"])
         self.assertNotIn("estados", encargo.perfiles(checkout=self.checkout))
 
+    def test_perfiles_mini_says_the_live_list_failed_not_the_profiles_file(self):
+        # F4: un ssh que falla dice que falló la lista viva, no perfiles.v1.json.
+        def fake(argv, entrada=None):
+            return 1, "", "sin ruta a la Mini"
+        with self.assertRaisesRegex(ValueError, "lista viva"):
+            encargo.perfiles(checkout=self.checkout, mini="u@h", correr=fake)
+        code, out, err = self.cli("perfiles", "--mini", "u@h")
+        self.assertEqual(code, 3)
+        self.assertIn("lista viva", err)
+        self.assertNotIn("perfiles.v1.json", err)
+
     def test_perfiles_mini_without_a_host_is_a_usage_error(self):
         # B2: main corre encargo.py en la Mac, así que --mini sin user@host leería la lista
         # de la Mac, que no es la de la Mini: es error de uso, no una lista local.
