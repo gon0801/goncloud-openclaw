@@ -5,6 +5,10 @@
       "name": "glm",
       "provider": "zai-coding-plan",
       "billing": "subscription",
+      "default": {
+        "line": "zai-coding-plan/glm-{}-flash",
+        "since": "zai-coding-plan/glm-5.3-flash"
+      },
       "decision": {
         "by": "David",
         "on": "2026-10-03",
@@ -132,5 +136,6 @@
         "quote": "pero open ode debe usar solo zcode sus iption no la suscripcion opencode go ni zen"
       }
     }
-  ]
+  ],
+  "defaultGrant": "glm"
 }

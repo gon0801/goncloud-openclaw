@@ -15,6 +15,8 @@ import time
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
+
+import lineas
 from types import MappingProxyType
 from typing import Callable, Literal, Mapping, NewType, Union
 
@@ -24,8 +26,10 @@ ProviderId = NewType("ProviderId", str)
 Billing = Literal["subscription", "per-token"]
 """Cómo cobra un proveedor. Lo dice el operador en cada permiso; el código no lo comprueba."""
 
-DEFAULT_MODEL = "zai-coding-plan/glm-5.3-flash"
-"""Lo que corre un encargo sin modelo. También pasa por authorize."""
+SUCESSION_FILE = "sucesion.json"
+SUCESSION_SCHEMA = "agent-work.succession.v1"
+"""El estado de la sucesión (SUA-04, 4.3): vive en <state_root>/sucesion.json y lo escribe G3.
+Aquí solo se lee: el «actual» de una línea, si es válido, es el modelo por omisión efectivo."""
 
 POLICY_FILE = Path("docs/evidence/agent-work/proveedores-permitidos.json")
 POLICY_SCHEMA = "agent-work.provider-policy.v1"
@@ -118,6 +122,14 @@ class ModelFilter:
 
 
 @dataclass(frozen=True)
+class ProviderDefault:
+    """El modelo por omisión de un permiso (SUA-04, 4.2): su línea y el id desde el que la sucesión
+    parte. Ningún id nuevo se escribe a mano en la política: la línea no cambia con las versiones."""
+    line: str
+    since: ModelId
+
+
+@dataclass(frozen=True)
 class ProviderGrant:
     """Un proveedor que el operador permitió para encargos. `name` es la palabra con la que lo nombra y
     `provider` el id con el que opencode lo lista. Con `provider` en None el permiso existe y no autoriza
@@ -127,6 +139,7 @@ class ProviderGrant:
     billing: Billing
     decision: OperatorCitation
     models: ModelFilter | None = None
+    default: ProviderDefault | None = None
 
     def admits(self, model: ModelId) -> bool:
         return model.provider == self.provider and (self.models is None or self.models.admits(model.name))
@@ -144,13 +157,30 @@ def _label(entry: object, key: str, index: int) -> str:
     return entry[key] if isinstance(entry, dict) and isinstance(entry.get(key), str) else f"#{index + 1}"
 
 
-def _parse_policy(raw: bytes) -> "tuple[tuple[ProviderGrant, ...], dict[ProviderId, ProviderClosure]] | str":
+def _parse_default(entry: dict, provider: "ProviderId | None", where: str) -> "ProviderDefault | str":
+    raw = entry["default"]
+    if not isinstance(raw, dict) or set(raw) != {"line", "since"}:
+        return f"un default lleva exactamente line y since ({where})"
+    if provider is None:
+        return f"un permiso sin id ligado no lleva default ({where})"
+    if not isinstance(raw["line"], str) or not raw["line"].startswith(f"{provider}/") or raw["line"].count("{}") != 1:
+        return f"la línea del default no es de su proveedor ({where})"
+    since = ModelId.parse(raw["since"]) if isinstance(raw["since"], str) else MalformedModel(str(raw["since"]))
+    if not isinstance(since, ModelId):
+        return f"el since del default no es un id ({where})"
+    parsed = lineas.parse(str(since))
+    if parsed is None or parsed[0] != raw["line"]:
+        return f"el since del default no parsea a su línea ({where})"
+    return ProviderDefault(raw["line"], since)
+
+
+def _parse_policy(raw: bytes) -> "tuple[tuple[ProviderGrant, ...], dict[ProviderId, ProviderClosure], str | None] | str":
     try:
         document = json.loads(raw)
     except (ValueError, RecursionError) as exc:
         return f"no es JSON: {exc}"
-    if not isinstance(document, dict) or set(document) != {"schema", "providers", "closed"}:
-        return "el archivo lleva exactamente schema, providers y closed"
+    if not isinstance(document, dict) or not {"schema", "providers", "closed"} <= set(document) <= {"schema", "providers", "closed", "defaultGrant"}:
+        return "el archivo lleva schema, providers, closed y, si hace falta, defaultGrant"
     if document["schema"] != POLICY_SCHEMA:
         return f"schema desconocido: {document['schema']!r}"
     if not isinstance(document["providers"], list) or not isinstance(document["closed"], list):
@@ -159,8 +189,8 @@ def _parse_policy(raw: bytes) -> "tuple[tuple[ProviderGrant, ...], dict[Provider
     for index, entry in enumerate(document["providers"]):
         where = f"en el permiso {_label(entry, 'name', index)}"
         required = {"name", "provider", "billing", "decision"}
-        if not isinstance(entry, dict) or not required <= set(entry) <= required | {"models"}:
-            return f"un permiso lleva name, provider, billing, decision y, si hace falta, models ({where})"
+        if not isinstance(entry, dict) or not required <= set(entry) <= required | {"models", "default"}:
+            return f"un permiso lleva name, provider, billing, decision y, si hace falta, models y default ({where})"
         if not isinstance(entry["name"], str) or not PROVIDER.fullmatch(entry["name"]):
             return f"nombre inválido {where}"
         provider = entry["provider"]
@@ -178,8 +208,11 @@ def _parse_policy(raw: bytes) -> "tuple[tuple[ProviderGrant, ...], dict[Provider
             return f"dos permisos se llaman {entry['name']}"
         if provider is not None and any(grant.provider == provider for grant in grants):
             return f"dos permisos ligan el id {provider} ({where})"
+        default = _parse_default(entry, provider and ProviderId(provider), where) if "default" in entry else None
+        if isinstance(default, str):
+            return default
         grants.append(ProviderGrant(entry["name"], provider and ProviderId(provider), entry["billing"], decision,
-                                    models))
+                                    models, default))
     closed: dict[ProviderId, ProviderClosure] = {}
     for index, entry in enumerate(document["closed"]):
         where = f"en el cierre {_label(entry, 'provider', index)}"
@@ -195,7 +228,12 @@ def _parse_policy(raw: bytes) -> "tuple[tuple[ProviderGrant, ...], dict[Provider
         if any(grant.provider == entry["provider"] for grant in grants):
             return f"{entry['provider']} está permitido y cerrado a la vez"
         closed[ProviderId(entry["provider"])] = ProviderClosure(ProviderId(entry["provider"]), decision)
-    return tuple(grants), closed
+    default_grant = document.get("defaultGrant")
+    if default_grant is not None:
+        named = next((grant for grant in grants if grant.name == default_grant), None)
+        if not isinstance(default_grant, str) or named is None or named.default is None:
+            return f"defaultGrant no nombra un permiso con default: {default_grant!r}"
+    return tuple(grants), closed, default_grant
 
 
 @dataclass(frozen=True)
@@ -208,6 +246,8 @@ class ProviderPolicy:
     closed: Mapping[ProviderId, ProviderClosure]
     digest: str | None
     unreadable: str | None
+    default_grant: str | None = None
+    """El permiso cuyo modelo por omisión usa un encargo sin modelo (SUA-04, 4.2)."""
 
     @staticmethod
     def load(path: Path) -> "ProviderPolicy":
@@ -225,14 +265,15 @@ class ProviderPolicy:
         parsed = _parse_policy(raw)
         if isinstance(parsed, str):
             return ProviderPolicy((), MappingProxyType({}), digest, f"{name}: {parsed}")
-        return ProviderPolicy(parsed[0], MappingProxyType(parsed[1]), digest, None)
+        return ProviderPolicy(parsed[0], MappingProxyType(parsed[1]), digest, None, parsed[2])
 
     def grant_for(self, provider: ProviderId) -> ProviderGrant | None:
         """El permiso cuyo id ligado es ese proveedor. Un permiso sin id nunca sale de aquí."""
         return next((grant for grant in self.grants if grant.provider == provider), None)
 
 
-def policy_document(grants: "tuple[ProviderGrant, ...]", closed: "Mapping[ProviderId, ProviderClosure]") -> bytes:
+def policy_document(grants: "tuple[ProviderGrant, ...]", closed: "Mapping[ProviderId, ProviderClosure]",
+                    default_grant: "str | None" = None) -> bytes:
     """El archivo de política en su formato canónico, el único que escriben `permitir` y `cerrar`."""
     def cite(decision: OperatorCitation) -> dict:
         return {"by": decision.by, "on": decision.on, "ref": decision.ref, "quote": decision.quote}
@@ -241,15 +282,61 @@ def policy_document(grants: "tuple[ProviderGrant, ...]", closed: "Mapping[Provid
             "include": list(grant.models.include),
             **({"exclude": list(grant.models.exclude)} if grant.models.exclude else {}),
             "decision": cite(grant.models.decision)}}
+        default = grant.default and {"default": {"line": grant.default.line, "since": str(grant.default.since)}}
         return {"name": grant.name, "provider": grant.provider, "billing": grant.billing, **(models or {}),
-                "decision": cite(grant.decision)}
+                **(default or {}), "decision": cite(grant.decision)}
     document = {
         "schema": POLICY_SCHEMA,
         "providers": [entry(grant) for grant in grants],
         "closed": [{"provider": closure.provider, "decision": cite(closure.decision)}
                    for closure in closed.values()],
+        **({"defaultGrant": default_grant} if default_grant is not None else {}),
     }
     return (json.dumps(document, indent=2, ensure_ascii=False) + "\n").encode()
+
+
+def succession_actual(state_root: Path, line: str) -> "tuple[ModelId | None, str | None]":
+    """El «actual» de una línea en <state_root>/sucesion.json, y la causa si no se pudo usar.
+
+    Solo lectura (lo escribe G3). Un archivo ausente no es una causa: la línea parte de su
+    `since`. Uno ilegible, con otro schema o con un actual que no parsea a esa línea sí lo es,
+    y quien resuelve cae a `since` sin romper.
+    """
+    path = Path(state_root) / SUCESSION_FILE
+    try:
+        document = json.loads(path.read_text(encoding="utf-8"))
+    except OSError:
+        return None, None
+    except ValueError:
+        return None, f"{SUCESSION_FILE} no es JSON: se usa el since de la política"
+    if not isinstance(document, dict) or document.get("schema") != SUCESSION_SCHEMA \
+            or not isinstance(document.get("lines"), dict):
+        return None, f"{SUCESSION_FILE} no trae el schema {SUCESSION_SCHEMA}: se usa el since de la política"
+    entry = document["lines"].get(line)
+    if entry is None:
+        return None, None
+    actual = entry.get("actual") if isinstance(entry, dict) else None
+    parsed = ModelId.parse(actual) if isinstance(actual, str) else MalformedModel(str(actual))
+    if not isinstance(parsed, ModelId) or lineas.parse(str(parsed)) is None \
+            or lineas.parse(str(parsed))[0] != line:
+        return None, f"el actual de {line} en {SUCESSION_FILE} no parsea a esa línea: se usa el since"
+    return parsed, None
+
+
+def effective_default(policy: ProviderPolicy, state_root: "Path | None") -> "tuple[ModelId, str | None] | SinModeloPorOmision":
+    """El modelo por omisión efectivo (SUA-04, 4.2): el actual promovido de la línea del permiso
+    que nombra `defaultGrant`, o su `since`. La causa de un sucesion.json ilegible viaja con el
+    modelo para que `proveedores` la muestre; no cambia qué modelo corre."""
+    grant = next((item for item in policy.grants if item.name == policy.default_grant), None)
+    if grant is None or grant.default is None:
+        return SinModeloPorOmision()
+    if state_root is not None:
+        actual, causa = succession_actual(state_root, grant.default.line)
+        if actual is not None:
+            return actual, "promovido desde sucesion.json"
+        if causa is not None:
+            return grant.default.since, causa
+    return grant.default.since, None
 
 
 @dataclass(frozen=True)
@@ -422,6 +509,12 @@ class PolicyUnreadable:
 
 
 @dataclass(frozen=True)
+class SinModeloPorOmision:
+    """La política carga y no nombra un modelo por omisión (SUA-04 G2, F1): el permiso que lo
+    daba se cerró o se re-ligó. No es una política ilegible: el encargo se pide con --modelo."""
+
+
+@dataclass(frozen=True)
 class ProviderNotAllowed:
     """`models` trae uno para un id exacto o para el modelo por omisión, y todas las coincidencias en
     proveedores sin permiso para un nombre. `closures` trae la cita de cada proveedor cerrado que aparece
@@ -514,9 +607,9 @@ class PerfilRechazado:
     frase: str
 
 
-Refusal = Union[MalformedModel, PolicyUnreadable, ProviderNotAllowed, ProviderNotConfigured, ModelNotListed,
-                ModelOutsideGrant, NameMatchesNothing, NameIsAmbiguous, MalformedHeader, WorkspaceRefused,
-                RouteNotCertified, GenerationNotCertified, ContextoIncompleto, PerfilRechazado]
+Refusal = Union[MalformedModel, PolicyUnreadable, SinModeloPorOmision, ProviderNotAllowed, ProviderNotConfigured,
+                ModelNotListed, ModelOutsideGrant, NameMatchesNothing, NameIsAmbiguous, MalformedHeader,
+                WorkspaceRefused, RouteNotCertified, GenerationNotCertified, ContextoIncompleto, PerfilRechazado]
 
 
 @dataclass(frozen=True)
@@ -600,9 +693,11 @@ def _by_name(request: ByName, policy: ProviderPolicy, catalog: Catalog) -> "Mode
 
 
 def authorize(request: "ModelRequest | MalformedModel", policy: ProviderPolicy,
-              catalog: Catalog) -> "PermittedModel | Refusal":
-    """Pura. La llaman `preparar` (aviso en el mismo turno) y el host (la que manda). El proveedor se
-    revisa antes que el catálogo: uno sin permiso se rechaza aunque el modelo exista.
+              catalog: Catalog, state_root: "Path | None" = None) -> "PermittedModel | Refusal":
+    """Pura, salvo la lectura de sucesion.json cuando el pedido es sin modelo y el llamador pasa
+    `state_root` (SUA-04, 4.2). La llaman `preparar` (aviso en el mismo turno) y el host (la que
+    manda). El proveedor se revisa antes que el catálogo: uno sin permiso se rechaza aunque el
+    modelo exista.
 
     Acepta lo que devuelve `pedido`, así que un pedido mal formado sale tal cual. Cualquier otra cosa es
     un error del llamador y lanza TypeError: nada que no sea DefaultModel pide el modelo por omisión."""
@@ -617,7 +712,10 @@ def authorize(request: "ModelRequest | MalformedModel", policy: ProviderPolicy,
     elif isinstance(request, ExactModel):
         candidate = request.model
     else:
-        candidate = ModelId.parse(DEFAULT_MODEL)
+        effective = effective_default(policy, state_root)
+        if isinstance(effective, SinModeloPorOmision):
+            return effective
+        candidate = effective[0]
     if not isinstance(candidate, ModelId):
         return candidate
     grant = policy.grant_for(candidate.provider)
@@ -760,6 +858,8 @@ def _frase_sin_host(caso: HostDown) -> tuple[str, tuple[str, ...]]:
 _RECHAZOS: "dict[type, tuple[str, Callable[..., tuple[str, tuple[str, ...]]]]]" = {
     PolicyUnreadable: ("politica-ilegible", lambda caso: (
         f"La política de proveedores no se puede leer ({caso.why}). No corre ningún encargo hasta arreglarla.", ())),
+    SinModeloPorOmision: ("sin-modelo-por-omision", lambda caso: (
+        "no hay modelo por omisión: el permiso que lo daba se cerró; pide el encargo con --modelo", ())),
     MalformedModel: ("modelo-mal-formado", lambda caso: (
         f"«{caso.text}» no es un modelo bien formado. Va como <proveedor>/<modelo>.", ())),
     ProviderNotAllowed: ("proveedor-no-permitido", _frase_no_permitido),
@@ -830,4 +930,7 @@ def explicar(caso: "Refusal | str | HostDown | HostMismatch | SlotBlocked", *, r
     frase, candidatos = redactar(caso)
     if registrado:
         return Explicacion(causa, frase, "cancelar")
-    return Explicacion(causa, frase, "preguntar-a-david" if candidatos else "no-registrar", candidatos)
+    # Sin modelo por omisión, quien pide tiene que nombrar uno: es preguntar-a-david aunque
+    # no haya candidatos que listar (F1 de SUA04-G2).
+    pregunta = bool(candidatos) or isinstance(caso, SinModeloPorOmision)
+    return Explicacion(causa, frase, "preguntar-a-david" if pregunta else "no-registrar", candidatos)

@@ -109,9 +109,12 @@ class PolicyFile(Policies):
 
     def test_the_repo_policy_is_already_in_the_format_permitir_writes(self):
         policy = ProviderPolicy.load(POLICY)
-        self.assertEqual(modelos.policy_document(policy.grants, policy.closed), POLICY.read_bytes())
+        self.assertEqual(modelos.policy_document(policy.grants, policy.closed, policy.default_grant), POLICY.read_bytes())
 
     def test_a_grant_without_a_bound_id_never_comes_out_of_grant_for(self):
+        # SUA-04 (4.2): un permiso sin id no lleva default, y defaultGrant no lo puede nombrar.
+        self.document["providers"][0].pop("default")
+        del self.document["defaultGrant"]
         self.document["providers"][0]["provider"] = None
         policy = ProviderPolicy.load(self.write())
         self.assertIsNone(policy.unreadable)
@@ -172,7 +175,7 @@ class PolicyFile(Policies):
 
     def test_an_unknown_key_a_bad_date_or_a_repeated_grant_closes_the_whole_file(self):
         for label, change in (
-            ("schema, providers y closed", lambda doc: doc.update(apodos={})),
+            ("schema, providers, closed", lambda doc: doc.update(apodos={})),
             ("glm", lambda doc: doc["providers"][0].update(models=["glm-5.3"])),
             ("12-10-2026", lambda doc: doc["providers"][1]["decision"].update(on="12-10-2026")),
             ("2026-13-40", lambda doc: doc["providers"][1]["decision"].update(on="2026-13-40")),
@@ -306,9 +309,52 @@ class Authorize(Policies):
             with self.subTest(request), self.assertRaises(TypeError):
                 self.ask(request)
 
-    def test_the_default_model_is_refused_when_its_provider_has_no_grant(self):
-        self.assertEqual(self.ask(DefaultModel(), policy=self.only_deepseek()),
-                         ProviderNotAllowed(models=(DEFAULT,), allowed=("deepseek",), closures=(), awaiting_login=()))
+    def test_a_policy_without_a_default_grant_has_no_default_model(self):
+        # SUA-04 (4.2): el modelo por omisión sale de defaultGrant, no de un id fijo en el código.
+        # Una política que no lo nombra (only_deepseek) no tiene modelo por omisión que correr.
+        answer = self.ask(DefaultModel(), policy=self.only_deepseek())
+        self.assertIsInstance(answer, modelos.SinModeloPorOmision)
+
+    def test_default_validation_closes_the_policy(self):
+        # SUA-04 (4.2): la línea es del proveedor del permiso, el since parsea a esa línea y
+        # defaultGrant nombra un permiso que existe y trae default. Si no, nada corre.
+        for label, change in (
+            ("de su proveedor", lambda doc: doc["providers"][0]["default"].update(line="otro/glm-{}-flash")),
+            ("parsea a su línea", lambda doc: doc["providers"][0]["default"].update(since="zai-coding-plan/glm-5.3")),
+            ("con default", lambda doc: doc.update(defaultGrant="no-esta")),
+            ("con default", lambda doc: doc.update(defaultGrant="claude")),
+            ("sin id ligado no lleva default", lambda doc: doc["providers"][1].update(
+                provider=None, default={"line": "anthropic/claude-{}", "since": "anthropic/claude-opus-5-5"})),
+        ):
+            with self.subTest(label):
+                self.document = json.loads(POLICY.read_text())
+                change(self.document)
+                policy = ProviderPolicy.load(self.write())
+                self.assertEqual(policy.grants, ())
+                self.assertIn(label, policy.unreadable)
+
+    def test_a_request_without_a_model_uses_the_promoted_actual_from_succession(self):
+        # SUA-04 (4.2, I10): con sucesion.json, el efectivo es su actual, sin tocar la política.
+        state = self.root / "state"
+        state.mkdir()
+        (state / "sucesion.json").write_text(json.dumps({
+            "schema": "agent-work.succession.v1",
+            "lines": {"zai-coding-plan/glm-{}-flash": {"actual": "zai-coding-plan/glm-5.4-flash"}}}))
+        answer = authorize(DefaultModel(), self.policy, catalog("zai-coding-plan/glm-5.4-flash"),
+                           state_root=state)
+        self.assertEqual(str(answer.model), "zai-coding-plan/glm-5.4-flash")
+        self.assertEqual(modelos.effective_default(self.policy, state),
+                         (ModelId("zai-coding-plan", "glm-5.4-flash"), "promovido desde sucesion.json"))
+
+    def test_an_unreadable_succession_falls_back_to_since_with_its_cause(self):
+        state = self.root / "state"
+        state.mkdir()
+        (state / "sucesion.json").write_text("{")
+        answer = authorize(DefaultModel(), self.policy, catalog(), state_root=state)
+        self.assertEqual(answer.model, DEFAULT)
+        model, causa = modelos.effective_default(self.policy, state)
+        self.assertEqual(model, DEFAULT)
+        self.assertIn("sucesion.json no es JSON", causa)
 
     def test_a_closed_provider_is_refused_with_davids_words_even_though_the_model_exists(self):
         model = ModelId("opencode-go", "deepseek-v4-pro")
@@ -443,7 +489,7 @@ class Explicar(Policies):
             "Permitidos sin sesión todavía: claude.", "no-registrar"))
 
     def test_a_registered_refusal_keeps_its_phrase_and_asks_to_cancel(self):
-        refusal = authorize(DefaultModel(), self.only_deepseek(), catalog())
+        refusal = authorize(ExactModel(DEFAULT), self.only_deepseek(), catalog())
         before, after = explicar(refusal), explicar(refusal, registrado=True)
         self.assertEqual((before.causa, before.accion), ("proveedor-no-permitido", "no-registrar"))
         self.assertEqual((after.causa, after.accion, after.candidatos), ("proveedor-no-permitido", "cancelar", ()))
@@ -495,6 +541,7 @@ class Explicar(Policies):
         cases = {
             modelos.MalformedModel("Zai/glm"): "modelo-mal-formado",
             PolicyUnreadable("sin cita en el permiso deepseek"): "politica-ilegible",
+            modelos.SinModeloPorOmision(): "sin-modelo-por-omision",
             ProviderNotAllowed((DEFAULT,), (), (), ()): "proveedor-no-permitido",
             ProviderNotConfigured("grok", "xai", "grok"): "proveedor-sin-sesion",
             ModelNotListed(ModelId("zai-coding-plan", "glm-5.3-flahs"), (DEFAULT,)): "modelo-no-existe",
@@ -791,11 +838,10 @@ class Plans(Policies):
 
     def test_an_old_brief_is_refused_when_the_default_provider_lost_its_grant(self):
         refusal = self.plan(policy=self.only_deepseek())
-        self.assertEqual(refusal.models, (ModelId("zai-coding-plan", "glm-5.3-flash"),))
-        self.assertIsInstance(refusal, ProviderNotAllowed)
+        self.assertIsInstance(refusal, modelos.SinModeloPorOmision)
         self.assertNotIsInstance(refusal, sesion.LaunchSpec)
         answer = explicar(refusal, registrado=True)
-        self.assertEqual((answer.causa, answer.accion), ("proveedor-no-permitido", "cancelar"))
+        self.assertEqual((answer.causa, answer.accion), ("sin-modelo-por-omision", "cancelar"))
 
     def test_a_header_cannot_reach_a_closed_provider_or_a_model_nobody_lists(self):
         closed = self.plan(b"agent-work.launch.v1\nmodel: opencode-go/deepseek-v4-pro\n---\n")
