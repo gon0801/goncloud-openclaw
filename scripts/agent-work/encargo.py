@@ -512,6 +512,111 @@ def perfiles(checkout: Path, mini: str | None = None, correr=None) -> dict:
     return respuesta
 
 
+AVISO_EVERY_SECONDS = 7 * 86400
+"""El aviso de lo que va por vencer se intenta una vez por semana: lo corre el launchd de 4.3. Solo
+se quema cuando el envío salió, así que una semana sin envío se reintenta cada corrida."""
+POR_VENCER_DIAS = 30
+FUENTES_SCHEMA = "agent-work.fuentes.v1"
+
+
+def _cuenta(valid_until: str | None, ahora: datetime) -> dict:
+    """Un `validUntil` con los días que le quedan y si ya va por vencer (vencidas incluidas). Sin
+    validUntil no se cuenta: no hay de qué."""
+    if valid_until is None:
+        return {"validUntil": None, "dias": None, "porVencer": False}
+    dias = (datetime.fromisoformat(valid_until.replace("Z", "+00:00")) - ahora).days
+    return {"validUntil": valid_until, "dias": dias, "porVencer": dias < POR_VENCER_DIAS}
+
+
+def _quema_el_aviso(vencen: list, state_root: Path, now: float, *, enviar_aviso=None,
+                    policy=None, openclaw_bin: Path = OPENCLAW_BIN) -> dict:
+    """El estado semanal del aviso en `<state_root>/fuentes.json`. Si hay algo por vencer y pasó una
+    semana desde el último aviso, manda la lista con avisar.py y quema `ultimoAviso=now` solo cuando
+    el envío salió: sin quema, la corrida de mañana reintenta. "causa" va solo cuando hubo intento y
+    el envío contestó que no salió. Escritura atómica y sin candado porque el único escritor es el
+    launchd diario."""
+    path = Path(state_root) / "fuentes.json"
+    try:
+        estado = contexto.leer_json(path)
+    except (OSError, ValueError):
+        estado = None
+    ultimo = estado.get("ultimoAviso") if isinstance(estado, dict) else None
+    ultimo = ultimo if isinstance(ultimo, (int, float)) else None
+    respuesta = {"vencen": [entrada for entrada, _ in vencen],
+                 "enviado": False, "ultimoAviso": ultimo}
+    if vencen and (ultimo is None or now - ultimo >= AVISO_EVERY_SECONDS):
+        renglones = [f"- {entrada} ({dias} días)" for entrada, dias in vencen]
+        texto = "fuentes por vencer:\n" + "\n".join(renglones)
+        envio = (enviar_aviso or aviso_mod.avisar)(texto, policy=policy, openclaw_bin=openclaw_bin)
+        if envio.get("enviado"):
+            contenido = json.dumps({"schema": FUENTES_SCHEMA, "ultimoAviso": now},
+                                   ensure_ascii=False)
+            descriptor, pending = tempfile.mkstemp(prefix=".fuentes-", dir=path.parent)
+            try:
+                with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
+                    stream.write(contenido)
+                    stream.flush()
+                    os.fsync(stream.fileno())
+                os.replace(pending, path)
+            finally:
+                if os.path.exists(pending):
+                    os.unlink(pending)
+            respuesta.update(enviado=True, ultimoAviso=now)
+        else:
+            respuesta["causa"] = envio.get("causa", "no salió")
+    return respuesta
+
+
+def fuentes(checkout: Path, state_root: Path, *, aviso: bool = False, now: float,
+            enviar_aviso=None, policy: ProviderPolicy | None = None,
+            openclaw_bin: Path = OPENCLAW_BIN) -> dict:
+    """`encargo.py fuentes [--aviso]`. Cada perfil con sus fuentes y la competencia de sus rutas,
+    con los días que les quedan y cuáles van por vencer (SUA-04, 4.9). Con --aviso suma el estado
+    semanal: lo que vence (las fuentes y la competencia juntas, ordenadas) se manda por Telegram
+    con avisar.py y el estado se quema solo cuando el envío salió. La política y el openclaw son
+    los mismos que usa sucesion para avisar; `diario` y la línea de comandos dejan el envío real."""
+    try:
+        documento = _valida_perfiles(
+            contexto.leer_json(Path(checkout) / CONTEXTO_DIR / "perfiles.v1.json"))
+    except (OSError, ValueError) as error:
+        raise ValueError(f"no se pudo leer perfiles.v1.json del checkout: {error}") from error
+    ahora = datetime.fromtimestamp(now, tz=timezone.utc)
+    filas = []
+    vencen = []
+    for perfil in documento["profiles"]:
+        fuentes_del_perfil = []
+        for fuente in perfil.get("sources") or ():
+            cuenta = _cuenta(fuente.get("validUntil"), ahora)
+            if cuenta["porVencer"]:
+                vencen.append((fuente["ref"], cuenta["dias"]))
+            fuentes_del_perfil.append(
+                {"ref": fuente["ref"], "revision": fuente["revision"], **cuenta})
+        competencia = []
+        for ruta in perfil["routes"]:
+            clave = contexto.clave_de_ruta(ruta)
+            dato = perfil["competence"].get(clave)
+            if dato is not None:
+                cuenta = _cuenta(dato.get("validUntil"), ahora)
+                if cuenta["porVencer"]:
+                    vencen.append((f"competencia {perfil['id']} {clave}", cuenta["dias"]))
+                competencia.append({"ruta": clave, **cuenta})
+        filas.append({"perfil": perfil["id"], "fuentes": fuentes_del_perfil,
+                      "competencia": competencia})
+    respuesta = {"ok": True, "perfiles": filas, "aviso": None}
+    if aviso:
+        if policy is None:
+            policy = ProviderPolicy.load(Path(checkout) / POLICY_FILE)
+        respuesta["aviso"] = _quema_el_aviso(sorted(vencen), state_root, now,
+                                              enviar_aviso=enviar_aviso, policy=policy,
+                                              openclaw_bin=openclaw_bin)
+        # Un intento que no salió es un fallo (CodeRabbit en #322): diario no termina en 0.
+        # Los avisos apagados no son un intento: es la corrida a mano.
+        causa = respuesta["aviso"].get("causa")
+        if causa and not causa.startswith("avisos apagados"):
+            respuesta["ok"] = False
+    return respuesta
+
+
 def _session(provider: ProviderId | None,
              catalog: Catalog | None) -> Literal["con-sesion", "sin-sesion", "sin-id", "sin-catalogo"]:
     if provider is None:
@@ -839,6 +944,30 @@ def sucesion(*, state_root: Path, checkout: Path, aplicar: bool = False, reverti
         _escribir_sucesion(state_root, doc)
         return {"ok": True, "accion": "pendiente", "linea": line, "causa": causa,
                 "evidencia": entry["evidencia"]}
+
+
+def diario(*, state_root: Path, checkout: Path, now: float,
+           opencode_bin: Path = OPENCODE_BIN) -> dict:
+    """`encargo.py diario` (SUA-04, 4.9): la pasada completa que corre el mismo launchd de 4.3,
+    ahora también con fuentes. Corre `sucesion --aplicar` y después `fuentes --aviso`, cada uno
+    aislado: si el primero contesta ok False o lanza, el segundo corre igual, la única línea de
+    salida dice qué pasó en cada uno y el código de salida es el peor de los dos."""
+
+    def aislada(pasada):
+        try:
+            return pasada()
+        except Exception as error:
+            # Aislamiento total: un leg que revienta por cualquier cosa (no solo lo que
+            # _run_fuentes espera) no puede tumbar al otro ni la línea del launchd.
+            return {"ok": False, "causa": str(error)}
+
+    respuesta_sucesion = aislada(lambda: sucesion(aplicar=True, revertir=None, runtime_source=None,
+                                                  now=now, state_root=state_root,
+                                                  checkout=checkout, opencode_bin=opencode_bin))
+    respuesta_fuentes = aislada(lambda: fuentes(checkout=checkout, state_root=state_root,
+                                                aviso=True, now=now))
+    return {"ok": respuesta_sucesion.get("ok") is True and respuesta_fuentes.get("ok") is True,
+            "sucesion": respuesta_sucesion, "fuentes": respuesta_fuentes}
 
 
 def citar(ref: str, quote: str, prompts: Path) -> "OperatorCitation | str":
@@ -1331,6 +1460,10 @@ def _parser() -> argparse.ArgumentParser:
     perfiles_cmd = commands.add_parser("perfiles", help="los perfiles del checkout y los agentes sin perfil, en una línea JSON")
     perfiles_cmd.add_argument("--mini", default=None, metavar="user@host",
                               help="suma alta-sin-registrar, retirado y perfil-incompleto contra la lista viva de la Mini, por ssh")
+    fuentes_cmd = commands.add_parser(
+        "fuentes", help="cada perfil con sus fuentes y su competencia, y los días que les quedan")
+    fuentes_cmd.add_argument("--aviso", action="store_true",
+                             help="suma el aviso semanal y lo quema si hay fuentes por vencer")
     solicitar_cmd = commands.add_parser("solicitar", help="pedir abrir un proveedor: deja la solicitud y contesta la frase para David")
     solicitar_cmd.add_argument("nombre", help="el nombre del permiso, por ejemplo mistral")
     solicitar_cmd.add_argument("--proveedor", required=True, help="el id del proveedor")
@@ -1339,6 +1472,8 @@ def _parser() -> argparse.ArgumentParser:
     sucesion_cmd.add_argument("--aplicar", action="store_true", help="corre a lo más un canario y promueve o rechaza")
     sucesion_cmd.add_argument("--revertir", metavar="LINEA", help="vuelve la línea a su anterior y la deja rechazada")
     sucesion_cmd.add_argument("--runtime-source", help="AGENT_WORK_RUNTIME_SOURCE para el banco del canario")
+    commands.add_parser(
+        "diario", help="la pasada del launchd: sucesion en aplicar y el aviso de fuentes")
     listing = commands.add_parser("proveedores", help="qué proveedores pueden correr, cómo cobran y qué falta")
     listing.add_argument("--refrescar", action="store_true", help="pide a opencode que vuelva a bajar su lista")
     allow = commands.add_parser("permitir", help="escribe un permiso, un filtro o el id de un permiso que existe")
@@ -1399,6 +1534,22 @@ def _run_perfiles(args: argparse.Namespace, where: dict, now: float) -> int:
     return 0
 
 
+def _run_fuentes(args: argparse.Namespace, where: dict, now: float) -> int:
+    try:
+        respuesta = fuentes(checkout=where["checkout"], state_root=where["state_root"],
+                            aviso=args.aviso, now=now)
+    except (OSError, ValueError, KeyError, TypeError) as error:
+        # El mensaje viaja tal cual si ya dice su origen (la lectura de perfiles se
+        # atribuye en fuentes); atribuir aquí la escritura del estado como lectura miente.
+        mensaje = str(error)
+        if not mensaje.startswith("no se pudo"):
+            mensaje = f"fuentes: {error}"
+        print(json.dumps({"ok": False, "error": mensaje}, ensure_ascii=False), file=sys.stderr)
+        return 3
+    print(json.dumps(respuesta, ensure_ascii=False))
+    return 0 if respuesta.get("ok") else 3
+
+
 def _run_proveedores(args: argparse.Namespace, where: dict, now: float) -> int:
     return _show("proveedores", proveedores(refrescar=args.refrescar, **where))
 
@@ -1433,8 +1584,15 @@ def _run_sucesion(args: argparse.Namespace, where: dict, now: float) -> int:
     return 0 if respuesta.get("ok") else 3
 
 
+def _run_diario(args: argparse.Namespace, where: dict, now: float) -> int:
+    respuesta = diario(now=now, **where)
+    print(json.dumps(respuesta, ensure_ascii=False))
+    return 0 if respuesta["ok"] else 3
+
+
 _COMMANDS = {"preparar": _run_preparar, "estado": _run_estado, "perfiles": _run_perfiles,
-             "proveedores": _run_proveedores, "sucesion": _run_sucesion, "solicitar": _run_solicitar,
+             "fuentes": _run_fuentes, "proveedores": _run_proveedores, "sucesion": _run_sucesion,
+             "diario": _run_diario, "solicitar": _run_solicitar,
              "permitir": _run_politica, "cerrar": _run_politica}
 
 
