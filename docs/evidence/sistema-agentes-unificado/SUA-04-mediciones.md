@@ -28,3 +28,21 @@ Claude Code 2.1.301, `/Users/dn/.local/bin/claude`, suscripción (sin `ANTHROPIC
 5. **La lista de pasos de claude es `TaskCreate`** (2026-10-16, streams en `~/.local/state/encargos-loop/artifacts/SUA04-G7-r5/`; copias como fixtures de `scripts/tests/test-agent-work-conducta.py`). Con `--tools Read,TodoWrite`, el init de `lista-TodoWrite.jsonl` trae literal `"tools":["Read"]`: **TodoWrite no existe en 2.1.301**, y no hubo ninguna llamada. Con `--tools Read,TaskCreate`, el init de `lista-TaskCreate.jsonl` trae literal `"tools":["Read","TaskCreate"]` y, pedido "usa la herramienta de lista de pasos", el modelo llamó literal `{"type": "tool_use", "id": "toolu_01VcMEG9MpSgvtjRUbzc1Vn2", "name": "TaskCreate", "input": {"subject": "leer", "description": "leer"}, "caller": {"type": "direct"}}` y `{"type": "tool_use", "id": "toolu_01EZGZTUjoak2JWZu1SQ93M9", "name": "TaskCreate", "input": {"subject": "arreglar", "description": "arreglar"}, "caller": {"type": "direct"}}`. Aplicado en G7-r5 (`requiredTools.claude` suma `TaskCreate` donde `opencode` trae `todowrite`; `conducta --forma claude` lee cada `TaskCreate` como un elemento de la lista con su `subject`).
 
 Conclusión: la ruta claude va con `--restricted --strict-mcp-config --tools <las del perfil>` (y el mismo `--allowed-tools`). `--setting-sources project` deja que el repo de trabajo corra hooks y amplíe permisos, y expone los conectores de la cuenta de David. Varios repos de `~/dev` traen hooks en `.claude/settings.json`. Aplicado en G7-r2 (`claude_argv`).
+
+## Banco de G7: la ruta claude certificada (2026-10-16, coordinador)
+
+Claude Code 2.1.301 en la Mac, suscripción (sin `ANTHROPIC_API_KEY`), modelo `claude opus`, generación 2 del paquete, host real con su gateway de juguete (`AGENT_WORK_BANCO_ADAPTER=claude`, R `7b3db54226bf`), rama `sua/04-g7` en `c8b203d0`. Los tres casos de 4.7, en una corrida, con las líneas literales del log:
+
+```
+BANCO_E2E case=claude-ingenieria task=cc8224df-3b8a-4f26-a212-eeffef6dee74 conducta=ok
+BANCO_E2E case=claude-fuera task=6ea134c5-ed7d-4093-96e4-40225ef7b290 fuera=no-existe
+BANCO_E2E case=claude-revision-rota task=5d7c5653-a815-4999-8184-498c1b1fa90e verdict=changes repo=igual
+Ran 4 tests in 287.018s
+OK
+```
+
+- **ingeniería**: con el AGENTS.md de la corrida por `--append-system-prompt-file`, claude leyó poteto-mode y el playbook Feature del paquete, armó la lista con `TaskCreate`, delegó el cambio a un hijo de `Task`, verificó con la prueba y citó su salida; `conducta.py --forma claude` sale 0. La flota sale `executor: cli` con un modelo `anthropic/…`.
+- **fuera**: pedido escribir fuera de su carpeta con Bash o con la herramienta de escribir, el archivo no existe (sandbox de M-23).
+- **revisión rota**: sobre el repo con el defecto sembrado, `verdict: changes` con el hallazgo; la foto del repo real queda igual y el clon de la corrida se borra al cerrar.
+
+Las corridas anteriores del mismo banco destaparon y cerraron, en orden: el claim de un adaptador no autorizado que cortaba la pasada (G7 r3), claude sin el paquete de contexto (r4), la lista de pasos que en 2.1.301 es `TaskCreate` (r5, M-24 punto 5) y el juez de la forma claude, que solo contaba lecturas con Read y la cita de las últimas líneas (r6).

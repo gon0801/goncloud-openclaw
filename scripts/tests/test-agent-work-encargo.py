@@ -271,11 +271,11 @@ class Preparar(Mac):
                 for piece in pieces:
                     self.assertIn(piece, answer["frase"])
         # SUA-04 G7: "claude opus" ya no contesta proveedor-sin-sesion (la frase de
-        # B22-S5): la ruta claude existe y el modelo entra por sus alias. Sin host
-        # canario, lo que contesta es que esa ruta todavía no está certificada.
-        sin_canario = self.preparar("--modelo", "claude opus")
-        self.assertEqual(sin_canario["causa"], "ruta-no-certificada")
-        self.assertNotIn("auth login", sin_canario["frase"])
+        # B22-S5): la ruta claude existe, está certificada (banco de G7) y el modelo
+        # entra por sus alias. Sin latido del host, lo que falta es el host.
+        sin_host = self.preparar("--modelo", "claude opus")
+        self.assertEqual(sin_host["causa"], "sin-host")
+        self.assertNotIn("auth login", sin_host["frase"])
 
     def test_claude_opus_elige_el_adaptador_claude(self):
         # SUA-04 (4.7): anthropic va por el adaptador claude y brief.py lo recibe así.
