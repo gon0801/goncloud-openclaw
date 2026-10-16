@@ -486,6 +486,10 @@ def aplicar_en_la_mini(publicacion: Path, home: Path, agentes_json: Path | None)
     estado = leer_json(estado_path) if estado_path.exists() else estado_vacio()
     gen = str(manifiesto["generation"])
     conflictos = 0
+    # I19 (diseño 4.10): un agente con el bloque de esta publicación en disco y el estado
+    # en la generación vieja (un apply muerto entre el bloque y el estado) obliga a
+    # reescribir el estado aunque lo demás no cambie.
+    estado_rezagado = False
     salida_skills: dict[str, str] = {}
     salida_agentes: dict[str, str] = {}
 
@@ -588,7 +592,13 @@ def aplicar_en_la_mini(publicacion: Path, home: Path, agentes_json: Path | None)
         esperado_bloque = estado["bloques"].get(identificador) or datos_retiro.get("bloques")
         if trecho is not None:
             desde, hasta = trecho
-            if sha256hex(actual[desde:hasta]) != esperado_bloque:
+            digest_del_trecho = sha256hex(actual[desde:hasta])
+            # I19: la regla gemela del CAS de skills. El trecho con el digest de esta
+            # publicación no es una edición del dueño: son bytes del publicador que un
+            # apply cortado dejó escritos antes del estado.
+            if digest_del_trecho != esperado_bloque and digest_del_trecho != sha256hex(
+                bloques[identificador]
+            ):
                 salida_agentes[identificador] = "conflicto: el bloque fue editado"
                 conflictos += 1
                 continue
@@ -610,6 +620,13 @@ def aplicar_en_la_mini(publicacion: Path, home: Path, agentes_json: Path | None)
             # "igual" no refresca el digest: el del estado es el de la última escritura
             # del publicador, y es el que la reversa valida (4.3 CAS).
             nuevos_bloques[identificador] = sha256hex(bloques[identificador])
+            if estado["bloques"].get(identificador) != nuevos_bloques[identificador]:
+                # I19: el estado certifica otro bloque, o sea que este archivo lo escribió
+                # un apply que murió antes del estado. El apply se completa: certificar el
+                # digest del archivo y marcar cambios, porque sin eso el estado quedaría en
+                # la generación vieja para siempre y la reversa conflictuaría.
+                nuevos_workspaces[identificador] = digest
+                estado_rezagado = True
             # La vuelta limpia TODOS los respaldos de retiro (F9): uno viejo que
             # sobreviva mentiría un retiro que ya no existe.
             for viejo in {*respaldos_retiro, respaldo_retiro}:
@@ -661,6 +678,7 @@ def aplicar_en_la_mini(publicacion: Path, home: Path, agentes_json: Path | None)
 
     cambios = (
         conflictos > 0
+        or estado_rezagado
         or "publicado" in salida_skills.values()
         or "quitado" in salida_skills.values()
         or ("publicado" in salida_agentes.values())
