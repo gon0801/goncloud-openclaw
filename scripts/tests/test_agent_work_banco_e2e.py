@@ -306,6 +306,15 @@ class Briefs(unittest.TestCase):
             self.assertEqual((destino / "repo" / "saluda.py").read_text(), "nuevo\n")
             self.assertFalse((destino / "de-la-anterior.md").exists())
 
+    def test_provenance_names_both_files_with_a_line(self):
+        # B7 de G5d: la procedencia de la exploración positiva nombra saluda.py
+        # y test-saluda.py, cada uno junto a un número de línea.
+        self.assertTrue(
+            nombra_procedencia(
+                "saluda.py:2 devuelve hola\ntest-saluda.py, línea 5 espera hello\n"))
+        self.assertFalse(nombra_procedencia("saluda.py devuelve hola\ntest-saluda.py espera hello\n"))
+        self.assertFalse(nombra_procedencia("saluda.py:2 devuelve hola\nla prueba espera hello\n"))
+
     def test_artifact_path_reads_what_the_host_recorded(self):
         # E: el inspect de R devuelve artifactRef como artifact:<sha256>; la ruta real es
         # la que el host grabó en results/<op>.json.
