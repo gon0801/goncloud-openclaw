@@ -143,8 +143,7 @@ def requerir_administrada(estado, corrida):
 
 
 def archivar_cola(base, corrida):
-    """La corrida no existe en el tablero ni como doc legado: la cola entera se
-    archiva por fecha y la pasada termina sin error."""
+    """La corrida no existe en el tablero ni como doc legado (SUA-06 §4.3)."""
     queue = base / "queue"
     destino = base / ("archivo-" + datetime.now(timezone.utc).strftime("%Y-%m-%d"))
     mkdir(destino)

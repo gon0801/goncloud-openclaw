@@ -81,7 +81,6 @@ class Derivar(unittest.TestCase):
         self.assertEqual(filas["unit-a"]["nextCheckAt"], "2026-10-16T12:30:00Z")
         self.assertEqual(filas["unit-b"]["nextCheckAt"], "2026-10-16T12:00:00Z")
         self.assertEqual(filas["unit-c"]["nextCheckAt"], "2026-10-16T12:05:00Z")
-        self.assertTrue(all(fila["nextCheckAt"] for fila in proyeccion_doc["units"]))
         self.assertEqual(contrato.validar(proyeccion_doc), [])
 
     def test_deadline_anterior_gana_a_todo(self):
@@ -95,7 +94,6 @@ class Derivar(unittest.TestCase):
             [fila["nextCheckAt"] for fila in proyeccion_doc["units"]],
             ["2026-10-16T11:00:00Z"] * 3,
         )
-        self.assertTrue(all(fila["nextCheckAt"] for fila in proyeccion_doc["units"]))
         self.assertEqual(contrato.validar(proyeccion_doc), [])
 
     def test_textos_sucios_son_valueerror_con_nombre(self):

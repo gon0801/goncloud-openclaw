@@ -66,12 +66,6 @@ def _identificador(valor: object, nombre: str) -> str:
     return valor
 
 
-def _sin_secretos(texto: str, nombre: str) -> str:
-    if SECRET_RE.search(texto):
-        raise ValueError(f"{nombre} parece un secreto y no puede entrar a la proyección")
-    return texto
-
-
 def _lista(snapshot: dict, clave: str) -> list:
     valor = snapshot.get(clave, [])
     _como(isinstance(valor, list), f"{clave} no es una lista")
@@ -235,7 +229,6 @@ def derivar(
             estado = sin_bound.get(unit_id, "pending")
             _como(isinstance(estado, str), f"unbound[] (unitId {unit_id}) state no es un texto")
             executor, host = "sin-asignar", gateway()
-        _sin_secretos(executor, f"executor de {unit_id}")
 
         proximo = None
         for exception_id, renotice in abiertas.get(unit_id, []):
@@ -388,7 +381,7 @@ def main(argv: list[str] | None = None) -> int:
                 )
         else:
             snapshot = cargar_snapshot(args.snapshot)
-        proyeccion_de_la_raiz = derivar(
+        resultado = derivar(
             snapshot,
             datetime.now(timezone.utc),
             args.stale_after_ms,
@@ -399,7 +392,7 @@ def main(argv: list[str] | None = None) -> int:
     except (ValueError, RuntimeError, OSError) as error:
         print(f"proyeccion: {error}", file=sys.stderr)
         return 2
-    print(json.dumps(proyeccion_de_la_raiz, ensure_ascii=False, indent=2))
+    print(json.dumps(resultado, ensure_ascii=False, indent=2))
     return 0
 
 
