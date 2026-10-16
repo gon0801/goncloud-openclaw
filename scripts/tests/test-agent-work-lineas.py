@@ -5,9 +5,9 @@ de Hermes cuando está en la máquina."""
 
 import importlib.util
 import json
-from pathlib import Path
 import sys
 import unittest
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts" / "agent-work"))
@@ -39,18 +39,29 @@ PARSE_NONE = (
 
 
 def catalog(*ids, deprecated=()):
-    return {**{model: {} for model in ids}, **{model: {"status": "deprecated"} for model in deprecated}}
+    return {
+        **{model: {} for model in ids},
+        **{model: {"status": "deprecated"} for model in deprecated},
+    }
 
 
 SUCESOR_CASES = [
     ("grok-4.7", catalog("grok-4.8", "grok-4.20-0309-reasoning"), "grok-4.8"),
     ("gpt-5.6-sol", catalog("gpt-6-sol", "gpt-6.1-sol", "gpt-6-luna"), "gpt-6.1-sol"),
-    ("claude-opus-5-5", catalog("claude-opus-6", "claude-opus-5-5-20260922", "claude-sonnet-6"), "claude-opus-6"),
+    (
+        "claude-opus-5-5",
+        catalog("claude-opus-6", "claude-opus-5-5-20260922", "claude-sonnet-6"),
+        "claude-opus-6",
+    ),
     ("glm-5.3-flash", catalog("glm-5.4", "glm-5.4-flash", "glm-5.3-highspeed"), "glm-5.4-flash"),
     ("k3", catalog("k3-256k", "k4"), "k4"),
     ("kimi-for-coding", catalog("kimi-for-coding", "k4"), None),
     ("deepseek-flash", catalog("deepseek-flash", "deepseek-v5-flash"), None),
-    ("muse-spark-1.3-contributor", catalog("muse-spark-1.4", "muse-spark-1.4-contributor"), "muse-spark-1.4-contributor"),
+    (
+        "muse-spark-1.3-contributor",
+        catalog("muse-spark-1.4", "muse-spark-1.4-contributor"),
+        "muse-spark-1.4-contributor",
+    ),
 ]
 
 
@@ -90,7 +101,9 @@ class Sucesor(unittest.TestCase):
         self.assertIsNone(lineas.sucesor("gpt-6.1-sol", ["gpt-6-sol", "gpt-6.1-sol"]))
 
     def test_one_family_per_provider_of_the_policy(self):
-        policy = json.loads((ROOT / "docs/evidence/agent-work/proveedores-permitidos.json").read_text())
+        policy = json.loads(
+            (ROOT / "docs/evidence/agent-work/proveedores-permitidos.json").read_text()
+        )
         casos = {
             "glm": ("zai-coding-plan/glm-5.3-flash", "zai-coding-plan/glm-5.4-flash"),
             "claude": ("anthropic/claude-opus-5-5", "anthropic/claude-opus-5-6"),
@@ -112,7 +125,9 @@ class Sucesor(unittest.TestCase):
                 self.assertIsNone(lineas.sucesor(actual, [otro]))
 
 
-@unittest.skipUnless(HERMES_LINES.is_file(), f"no está {HERMES_LINES}: la comparación con Hermes se salta")
+@unittest.skipUnless(
+    HERMES_LINES.is_file(), f"no está {HERMES_LINES}: la comparación con Hermes se salta"
+)
 class HermesComparison(unittest.TestCase):
     def setUp(self):
         spec = importlib.util.spec_from_file_location("hermes_model_lines", HERMES_LINES)
@@ -124,14 +139,17 @@ class HermesComparison(unittest.TestCase):
         for model in list(PARSE_OK) + list(PARSE_NONE):
             with self.subTest(model=model):
                 theirs = self.hermes.parse(model)
-                self.assertEqual(lineas.parse(model),
-                                 None if theirs is None else (theirs.line, theirs.version))
+                self.assertEqual(
+                    lineas.parse(model), None if theirs is None else (theirs.line, theirs.version)
+                )
 
     def test_newer_in_line_agrees_on_the_copied_cases(self):
         for current, available, _ in SUCESOR_CASES:
             with self.subTest(current=current):
-                self.assertEqual(lineas.sucesor(current, available),
-                                 self.hermes.newer_in_line(current, available))
+                self.assertEqual(
+                    lineas.sucesor(current, available),
+                    self.hermes.newer_in_line(current, available),
+                )
 
 
 if __name__ == "__main__":

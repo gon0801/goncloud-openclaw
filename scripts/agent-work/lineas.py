@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
-"""La regla de línea de un modelo: qué id es el sucesor de otro dentro de su proveedor (SUA-04, 4.1).
+"""La regla de línea de un modelo: qué id es el sucesor de otro dentro de su proveedor
+(SUA-04, 4.1).
 
 Es la regla de `scripts/model_lines.py` de goncloud-hermes (parse, la regla de una sola versión
 limpia, los marcadores inestables y la comparación con ceros a la derecha), sin la parte de red y
 sin FAMILIES: aquí la línea lleva el prefijo del proveedor (`zai-coding-plan/glm-{}-flash`), así
 que un id de otro proveedor nunca es sucesor de este. Biblioteca estándar.
 """
+
 from __future__ import annotations
 
 import re
@@ -14,7 +16,7 @@ _NUMERIC_RUN = re.compile(r"\d+(?:[.-]\d+)*")
 _UNSTABLE = frozenset({"preview", "exp", "alpha", "beta", "free", "latest"})
 
 
-def parse(model_id: str) -> "tuple[str, tuple[int, ...]] | None":
+def parse(model_id: str) -> tuple[str, tuple[int, ...]] | None:
     """(línea, versión) de un id, o None cuando no tiene una sola versión limpia.
 
     Una foto fechada (cualquier parte de cuatro o más dígitos), dos corridas numéricas o un
@@ -33,7 +35,7 @@ def parse(model_id: str) -> "tuple[str, tuple[int, ...]] | None":
     parts = re.split(r"[.-]", run.group())
     if any(len(part) >= 4 for part in parts):
         return None
-    line = name[: run.start()] + "{}" + name[run.end():]
+    line = name[: run.start()] + "{}" + name[run.end() :]
     if provider:
         line = f"{provider}/{line}"
     return line, tuple(int(part) for part in parts)
@@ -53,7 +55,7 @@ def _above(left: tuple[int, ...], right: tuple[int, ...]) -> bool:
     return _padded(left, length) > _padded(right, length)
 
 
-def sucesor(actual: str, ids) -> "str | None":
+def sucesor(actual: str, ids) -> str | None:
     """El id más alto de la línea de `actual` por encima de él, entre `ids`, o None.
 
     Como la línea lleva el proveedor, un id de otro proveedor no compite aunque su modelo se
