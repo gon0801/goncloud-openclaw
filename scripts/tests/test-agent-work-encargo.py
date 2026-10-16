@@ -769,6 +769,30 @@ class Fuentes(Mac):
         self.assertEqual(segunda["aviso"]["causa"], "avisos apagados (AGENT_WORK_AVISOS no es 1)")
         self.assertFalse((self.state / "fuentes.json").exists())
 
+    def test_un_envio_que_falla_marca_fuentes_como_fallida(self):
+        # CodeRabbit en #322: con la compuerta encendida y openclaw fallando, el aviso no
+        # salió y diario no puede terminar en 0. La quema sigue sin hacerse (reintenta).
+        self.escribir_perfiles(
+            [{"ref": "G:agents/ingenieria/agent/workshop-skills", "revision": "97d35ab0",
+              "validUntil": self.vence_en(10)}], {})
+
+        def enviar(texto, **_):
+            return {"enviado": False, "causa": "openclaw salió 1: sin red"}
+
+        respuesta = self.correr_fuentes(aviso=True, enviar_aviso=enviar)
+        self.assertIs(respuesta["ok"], False)
+        self.assertEqual(respuesta["aviso"]["causa"], "openclaw salió 1: sin red")
+        self.assertFalse((self.state / "fuentes.json").exists())
+        # Con los avisos apagados no hay fallo: es la corrida a mano de siempre.
+        self.assertIs(self.correr_fuentes(aviso=True)["ok"], True)
+        # Y por la línea de comandos el código de salida no contradice el JSON (DeepSeek F2
+        # en #323).
+        with mock.patch.object(encargo.aviso_mod, "avisar", side_effect=enviar), \
+                mock.patch.object(encargo.time, "time", return_value=self.AHORA.timestamp()):
+            code, out, err = self.cli("fuentes", "--aviso")
+        self.assertEqual(code, 3, out + err)
+        self.assertIs(json.loads(out)["ok"], False)
+
     def test_menos_de_siete_dias_no_llama_a_avisar(self):
         viejo = self.AHORA.timestamp() - 3 * 86400
         (self.state / "fuentes.json").write_text(json.dumps(
