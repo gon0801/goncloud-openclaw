@@ -1,6 +1,6 @@
 # SUA-04, modelos y agentes que se actualizan: diseño y corte en rebanadas
 
-Fecha: 2026-10-16. Estado: diseño propuesto, sin código. Lo escribió el coordinador (Claude). Lo revisa el implementador asignado (Muse Wonder) antes de implementar: no es autor de este documento.
+Fecha: 2026-10-16. Estado: diseño propuesto, sin código. Ronda 2, con los hallazgos de VEREDICTO-SUA04-diseno-r1 (B1 a B3 y M1 a M6) y M-21 medida. Lo escribió el coordinador (Claude). Lo revisa el implementador asignado (Muse Wonder) antes de implementar: no es autor de este documento.
 
 Bases leídas: G `origin/main` `f3041af5` (SUA-03 cerrado, recibo `docs/evidence/sistema-agentes-unificado/SUA-03.md`). R `/Users/dn/dev/wt/r-sua02-c-gate`, HEAD `7b3db54226bf`, el que corre en la Mini. goncloud-hermes `a8722f1` (`/Users/dn/dev/goncloud-hermes`). La Mini se leyó el 2026-10-16 solo con comandos de lectura.
 
@@ -41,7 +41,7 @@ Palabras con un solo sentido en este documento. Las de SUA-01 a SUA-03 siguen ig
 
 ### Los agentes de la Mini y cómo se descubren
 
-- Hay 19 agentes. G los conoce de dos formas: las rutas de los 11 perfiles (`perfiles.v1.json`) y la lista raíz `agents` con 7 agentes `sin-perfil`. Esa lista solo la lee una prueba (`test-agent-work-contexto.py:383`).
+- Hay 19 agentes. G los conoce de dos formas: las rutas de los 11 perfiles (`perfiles.v1.json`) y la lista raíz `agents` con 7 agentes `sin-perfil`. Esa lista la leen `encargo.py perfiles` (`agentesSinPerfil`) y la prueba `test-agent-work-contexto.py:383`.
 - El publicador toma la lista viva de `openclaw agents list --json` (`publicar-contexto.py:169-195`). Un agente nuevo recibe el bloque "No tienes perfil por omisión". No se rechaza. El estado publicado tiene bloques para los 19.
 - La ruta "encargo nativo a un agente" (tarea gestionada con `target.kind=agent`) nunca la usó ningún pedido real. En el canario A de SUA-03, `main` mandó el encargo nativo con `sessions_spawn` (fila de `followups.md` "canario A, nativo por sessions_spawn").
 - R tiene `openclaw agents add|delete|bind|set-identity`.
@@ -68,8 +68,8 @@ Las 18 fuentes de los 11 perfiles vencen el 2027-01-14 (`perfiles.v1.json`, `sou
 
 | Punto del plan | Hoy | Falta |
 |---|---|---|
-| 1. Fuentes oficiales, acceso por cuenta, sucesión, estabilidad, capacidades, causa de inelegibilidad | CLI: catálogo de `opencode models` y política. Nativo: `model_lines.py` con models.dev y la lista de opencode-go | En la ruta por CLI: la línea, el estable, el sucesor y la causa de inelegibilidad por id (no estable, sin sesión, fuera de permiso, rechazado por el plan) |
-| 2. Probar un sucesor y promoverlo dentro de la autorización; el intento activo conserva su modelo; un relevo hereda raíz, gasto y restricciones | Nativo: `claw_autoupdate` lo hace. CLI: nada. El intento ya conserva su `PermittedModel` (`sesion.py:151`) | CLI: el modelo por omisión por proveedor, la promoción con canario y su estado. Que un relevo de `main` herede la raíz se mide, no se construye: lo da R (SUA-02) |
+| 1. Fuentes oficiales, acceso por cuenta, sucesión, estabilidad, capacidades, causa de inelegibilidad | CLI: catálogo de `opencode models` y política. Nativo: `model_lines.py` con models.dev y la lista de opencode-go | En la ruta por CLI: la línea, el estable, el sucesor y la causa de inelegibilidad por id (no estable, sin sesión, fuera de permiso, rechazado por el plan). La fuente oficial de la ruta por CLI es `opencode models`, que es lo que el host puede lanzar. Las capacidades por modelo y el `status` de models.dev (`deprecated`) quedan fuera de SUA-04, con su fila: el canario de 4.3 es lo que decide si un id sirve |
+| 2. Probar un sucesor y promoverlo dentro de la autorización; el intento activo conserva su modelo; un relevo hereda raíz, gasto y restricciones | Nativo: `claw_autoupdate` lo hace. CLI: nada. El intento ya conserva su modelo: `LaunchSpec` (`sesion.py:211`) es una dataclass congelada con un `PermittedModel` (`modelos.py:392`) | CLI: el modelo por omisión por proveedor, la promoción con canario y su estado. Que un relevo herede raíz, gasto y restricciones lo da R desde SUA-02 (un `continue` crea un hijo de la misma raíz, con su presupuesto; recibo `SUA-02.md`); SUA-04 no lo construye ni lo vuelve a medir |
 | 3. Altas y retiros, perfil y conexión ida/vuelta, nuevos destinos por manifiesto; los siete adaptadores | El publicador acepta un agente nuevo como "sin perfil". Nadie mide la ida y vuelta | El descubrimiento con su estado visible, la sonda de ida y vuelta por tarea gestionada, el retiro, y sacar los siete adaptadores |
 | 4. Refrescar fuentes y skills por caducidad; acotar mantenimiento, backoff y coste; generación con CAS, atestación y read-back | El publicador ya tiene CAS, respaldo y reversa (SUA-03) | El aviso antes del vencimiento y el refresco con su generación nueva |
 | B22-S5 Claude por su CLI | Nada | Medir primero (fase 0). La ruta va en una rebanada aparte |
@@ -104,15 +104,16 @@ El modelo por omisión **efectivo** de un proveedor se resuelve en cada `prepara
 
 ### 4.3 La sucesión en la ruta por CLI
 
-El estado vive fuera de G, en `<state_root>/sucesion.json` (`agent-work.succession.v1`): por línea, `{actual, candidato, estado, intentos, ultimo, evidencia}`. El estado es `pendiente | probando | promovido | rechazado` con su causa. Escritura atómica con candado, como la caché del catálogo.
+El estado vive fuera de G, en `<state_root>/sucesion.json` (`agent-work.succession.v1`): por línea, `{actual, anterior, candidato, estado, causa, intentos, ultimo, huellaDelCatalogo, evidencia}`. El estado es `pendiente | probando | promovido | rechazado`. `huellaDelCatalogo` es el sha256 de la lista ordenada de ids de esa línea en el catálogo contra el que se decidió. `intentos` cuenta solo canarios que corrieron y salieron rojos por el modelo. Un fallo de infraestructura no cuenta. Escritura atómica con candado, como la caché del catálogo.
 
 `encargo.py sucesion [--aplicar]` hace, por cada permiso con `default`:
 
 1. Lee el catálogo (`CatalogStore.current`).
 2. Calcula el sucesor de `actual` en su línea entre los ids que el permiso admite (`ModelFilter`). Un id no estable no es sucesor. Un proveedor sin sesión no tiene sucesor y la causa queda escrita.
 3. Sin `--aplicar`, imprime lo que haría y sale.
-4. Con `--aplicar` y un sucesor nuevo: lanza **un canario** con ese modelo exacto, el caso `ingenieria` del banco (la tarea de `saluda.py` con su conducta, en su propio Gateway y su grupo; M-16). Si sale verde, `estado: promovido`, `actual` pasa al sucesor y la evidencia guarda el log del caso. Si sale rojo (incluido un `launch-failed` porque el plan del proveedor no incluye ese modelo), `estado: rechazado` con la causa, y no se vuelve a probar ese id hasta que cambie el catálogo o pasen 7 días. Un fallo de infraestructura del banco (slot ocupado, opencode que no contesta) no rechaza: deja `pendiente`.
+4. Con `--aplicar` y un sucesor nuevo: lanza **un canario** con ese modelo exacto, el caso `ingenieria` del banco (la tarea de `saluda.py` con su conducta, en su propio Gateway y su grupo; M-16). El modelo entra así: el banco gana `AGENT_WORK_BANCO_MODELO=<proveedor>/<modelo>`, y con ella `ask` pasa `--modelo <ese id exacto>` a `preparar`, que lo autoriza como `ExactModel` y lo pone en `briefArgs` como `--model`. El caso comprueba además que `flota.json` trae ese `model.id`, para que un canario no salga verde con otro modelo. Ese cambio del banco entra en G3. Si sale verde, `estado: promovido`, `anterior` guarda el `actual` de antes, `actual` pasa al sucesor y la evidencia guarda el log del caso. Si sale rojo por el modelo (incluido un `launch-failed` porque el plan del proveedor no lo incluye), `estado: rechazado` con la causa y la `huellaDelCatalogo`. Ese id no se vuelve a probar mientras la huella sea la misma y no hayan pasado 7 días desde `ultimo`. Un fallo de infraestructura del banco (slot ocupado, opencode que no contesta, el banco que no arranca) no rechaza: deja `pendiente` y no cuenta como intento.
 5. Como mucho una promoción por corrida, y nunca mientras el host tenga un encargo en vuelo (el mismo chequeo del paso 1 de la ventana de SUA-03).
+6. `encargo.py sucesion --revertir <línea>` vuelve `actual` a `anterior` con el mismo candado y deja el id revertido como `rechazado`, con causa `revertido por el operador` y su huella. Así una promoción revertida no se vuelve a promover sola con el mismo catálogo.
 
 El modelo por omisión cambia solo para los encargos nuevos. Un intento en vuelo conserva su `PermittedModel` y su `flota.v1` lo registra. Un relevo de `main` (una corrección con `continue`) es un hijo de la misma raíz en R y lleva el modelo que pida su `preparar` (SUA-02). Esto se mide, no se construye.
 
@@ -145,7 +146,7 @@ No se construye nada. SUA-04:
 
 La sonda la corre el coordinador desde la Mac: una vez para cada alta, y una vez como M-18 sobre un agente existente (`ingenieria`) para medir la ruta.
 
-**El retiro.** Un agente `retirado` deja de recibir bloque en la publicación siguiente. El publicador ya rechaza una publicación que no trae un bloque por agente vivo, y no exige bloque para un agente que no está. Lo que falta es que el estado (`.sua-contexto.json`) olvide el bloque del agente que ya no está, con su respaldo, como hace con una skill que sale del manifiesto (C8 de SUA-03). Un perfil cuya ruta queda sin agente se ve como `perfil-incompleto`, y `contexto.admite` lo rechaza en esa ruta con `perfil-no-atiende-ruta`.
+**El retiro.** Un agente `retirado` deja de recibir bloque en la publicación siguiente. El publicador ya rechaza una publicación que no trae un bloque por agente vivo, y no exige bloque para un agente que no está. Lo que falta es que el estado (`.sua-contexto.json`) olvide el bloque del agente que ya no está, con su respaldo, como hace con una skill que sale del manifiesto (C8 de SUA-03). Un perfil cuya ruta queda sin agente se ve como `perfil-incompleto` en `agentes.py descubrir` y en `encargo.py perfiles`, que son los que conocen la lista viva. No se rechaza en `contexto.admite`, que no la conoce. Tampoco hace falta: en SUA-03 la admisión por perfil solo existe en la ruta por CLI, que no depende de los agentes de la Mini, y en las nativas el rechazo por encargo es de SUA-09O (conflicto 4 de SUA-03). I11 pide que el perfil incompleto se vea, y se ve.
 
 ### 4.6 Los siete adaptadores
 
@@ -162,7 +163,19 @@ La rebanada de esta ruta no se diseña aquí entera, porque depende de cuatro me
 3. Qué hace `--permission-prompts none` con una herramienta que pediría permiso: si la niega y sigue, si sale y con qué código.
 4. Qué eventos deja para leer el modelo usado, los permisos y las herramientas (el equivalente de `message=stream` de opencode).
 
-Con M-21 verde, una rebanada aparte (G7) generaliza el host: un `Adaptador` con `argv`, `env`, `leer_eventos` y su `id`, `opencode` como primera implementación sin cambiar su comportamiento, y `claude` como segunda. Si M-21 sale roja en el punto 1, la ruta de Claude por su CLI queda fuera de SUA-04 con su fila, y el permiso `claude` sigue "sin sesión" con su frase de hoy.
+**M-21 ya se midió el 2026-10-16** (`~/.local/state/sua-loop/mediciones/m21/RESULTADO.md`, que entra a `SUA-04-mediciones.md` en G7):
+1. `claude -p` corre con el plan Max sin llave: `claude auth status` da `authMethod: claude.ai` y `subscriptionType: max`.
+2. La carpeta de trabajo es el cwd del proceso: con `PWD` apuntando a otra carpeta, `pwd` contestó el cwd. Es al revés que opencode.
+3. Sin flags, la corrida hereda la configuración de David (`permissionMode: auto`, 57 herramientas, sus MCP) y escribe sin preguntar. Con `--permission-mode dontAsk --permission-prompts none --setting-sources project --allowed-tools <lista>` quedan 25 herramientas y 0 MCP. Una herramienta fuera de la lista sale `is_error: true`, el modelo sigue, la salida es 0 y el `result` final la nombra en `permission_denials`.
+4. `--output-format stream-json --verbose` trae `system/init` (`model`, `permissionMode`, `cwd`, `tools`, `mcp_servers`), cada `tool_use` y cada `tool_result` con `is_error`, y el `result` con `modelUsage`, `permission_denials` y `stop_reason`.
+
+Así, G7 va dentro de SUA-04. El host gana un `Adaptador` con `id`, `argv`, `env`, `carpeta` y `leer_eventos`. `opencode` es la primera implementación, sin cambiar su comportamiento: sus pruebas de hoy siguen verdes sin tocarlas. `claude` es la segunda:
+- **`argv`:** `claude -p <línea de entrega> --model <id> --output-format stream-json --verbose --permission-mode dontAsk --permission-prompts none --setting-sources project --no-session-persistence --allowed-tools <las de su perfil>`, con `--add-dir <carpeta de la corrida>`.
+- **`carpeta`:** el lanzador hace `cd` a la carpeta de trabajo, y no confía en `PWD`.
+- **`env`:** sin `ANTHROPIC_API_KEY` (se quita aunque esté).
+- **`leer_eventos`:** lee `modelUsage`, `permission_denials` y el `cwd` de `init`, y con eso llena `flota.v1` (`executor: "cli"`, como dejó previsto `flota.py:20`).
+
+El id del adaptador es `claude` (4.6), su forma es `run-per-task` y su ruta entra a `hostAdapterRoute` con su propio canario y su banco, como opencode en B22. El permiso `claude` de la política pasa de "sin sesión" a lanzable por esta ruta, y el `preparar --modelo "claude opus"` de hoy (`proveedor-sin-sesion`) cambia de frase: la prueba `test-agent-work-encargo.py:258` se actualiza en G7. Lo que M-21 no midió, el hijo (`Task`) de una corrida de Claude y el límite de uso del plan en una corrida larga, se mide en el banco de G7.
 
 ### 4.8 `main` pide abrir un proveedor (B22-S6)
 
@@ -171,9 +184,17 @@ Con M-21 verde, una rebanada aparte (G7) generaliza el host: un `Adaptador` con 
 1. David le dice a `main` por Telegram "abre el proveedor X".
 2. `main` corre `encargo.py solicitar <nombre> --proveedor <id> --cobro <forma>`. El comando no toca la política: escribe una solicitud en `<state_root>/solicitudes/<id>.json` con lo que pidió y la marca de tiempo. Se niega si el nombre o el id está en `closed`: un cierre no se reabre por esta vía.
 3. `main` le contesta a David con la frase literal que tiene que mandarle para confirmar: "confirmo abrir X (<id>, <cobro>)".
-4. Cuando David manda esa frase, el coordinador (Claude en la Mac) corre `encargo.py permitir ... --ref <id del mensaje de Telegram> --cita "<frase>"`. La cita se coteja contra el transcript de la sesión de `main` en la Mini, de solo lectura. El cambio sale como PR, como hoy.
+4. Cuando David manda esa frase, el coordinador (Claude en la Mac) corre `encargo.py permitir ... --ref tg:<session_id>:<seq> --cita "<frase>"`. El cambio sale como PR, como hoy.
 
-Lo nuevo en código es `solicitar`, y que `--ref` acepte también un mensaje de Telegram de la sesión de `main` (`tg:<chatId>:<messageId>`), cotejado por ssh de solo lectura. `main` no corre `permitir`. La skill `encargo-cli` cambia su sección "Proveedores" para decir el flujo.
+**El cotejo de `tg:`.** La fuente es la base del agente `main` en la Mini, `~/.openclaw/agents/main/agent/openclaw-agent.sqlite`, abierta por ssh con `?mode=ro`, igual que `extraer-nativo.py`. La fila es `transcript_events` con ese `session_id` y ese `seq`. Lo que ata el mensaje a David:
+- el `session_id` pertenece a una ventana (`session_windows`) cuyo `session_key` es la sesión directa de Telegram del dueño, `agent:main:telegram:default:direct:<chatId>`. El `chatId` del dueño se lee de `proveedores-permitidos.json` (`ownerTelegramChat`, un campo nuevo con el valor de hoy, `6470689715`, que hoy usan los avisos de `main`);
+- el evento es `type: message` con `message.role == "user"`;
+- la frase de `--cita` es subcadena literal del texto de su `content`;
+- la fecha de la decisión es el `timestamp` del evento.
+
+Si la fila no existe, o no cumple las cuatro, `permitir` se niega con su frase, como hoy con un `P####` que no coteja. El campo `__openclaw.senderIsOwner` no se usa: en las filas leídas viene `false` también en la sesión directa del dueño.
+
+Lo nuevo en código es `solicitar`, y que `--ref` acepte `tg:<session_id>:<seq>` con ese cotejo. `P####` sigue igual. `main` no corre `permitir`. La skill `encargo-cli` cambia su sección "Proveedores" para decir el flujo.
 
 ### 4.9 Fuentes por caducidad
 
@@ -185,7 +206,7 @@ El publicador de SUA-03 ya hace CAS, respaldo, reversa y la foto de perfiles. Lo
 
 - **"Apply sin attest"**: una generación aplicada en la Mini y no certificada en `coverage.json` no abre la ruta por CLI (`generacion-no-certificada`, SUA-03). En nativo, el bloque de una generación aplicada sin certificar se publica igual, porque la ruta nativa no se certifica (conflicto 4 de SUA-03). Se prueba que la ruta por CLI la rechaza y se deja escrito para la nativa.
 - **"Crash entre aplicar y verificar"**: el publicador relee cada digest después de escribir (`releido != sha256hex(contenido)`). Falta una prueba que mate el proceso entre la escritura del bloque y la del estado y compruebe que la siguiente `--aplicar` termina sin conflicto, y que la siguiente `--revertir` deja la generación anterior.
-- **"Revocación permanece tras reversa"**: un proveedor cerrado sigue cerrado después de revertir una generación del paquete (la política está fuera del paquete), y una promoción revertida (4.3) no reabre un id `rechazado`. Las dos se prueban.
+- **"Revocación permanece tras reversa"**: un proveedor cerrado sigue cerrado después de revertir una generación del paquete (la política está fuera del paquete), y una promoción revertida con `sucesion --revertir` (4.3, paso 6) deja ese id `rechazado` y no se vuelve a promover con el mismo catálogo. Las dos se prueban.
 - **"Nuevo destino"**: un alta (4.5) no cambia la autorización de los agentes que ya estaban: su bloque y su competencia quedan iguales.
 
 ## 5. Cómo se prueba
@@ -201,7 +222,9 @@ El publicador de SUA-03 ya hace CAS, respaldo, reversa y la foto de perfiles. Lo
 | I19. Crash entre aplicar y verificar no activa bytes no acreditados | Matar el publicador entre bloque y estado; la siguiente `--aplicar` y la siguiente `--revertir` | — |
 | I19. Revocación permanece tras reversa | Cierre + reversa de generación; promoción revertida + id rechazado | — |
 | Siete adaptadores fuera | `test-agent-work-routing.py` sin esos ids; el contrato | — |
-| B22-S6 | `solicitar` se niega a un cerrado; `permitir --ref tg:...` coteja la frase contra un transcript de fixture | Un pedido real de David a `main`, con su aviso |
+| B22-S6 | `solicitar` se niega a un cerrado; `permitir --ref tg:...` coteja la frase contra una base de fixture con la misma forma (`session_windows`, `transcript_events`): pasa con la sesión directa del dueño y rol `user`, se niega con otra sesión, con rol `assistant` o con una frase que no está | Un pedido real de David a `main`, con su aviso |
+| I10. El canario prueba el candidato | `AGENT_WORK_BANCO_MODELO` llega a `preparar --modelo`; el caso falla si `flota.json` trae otro `model.id` | — |
+| I10. Reversa de una promoción | `sucesion --revertir` vuelve a `anterior` y deja el id `rechazado` con su huella | — |
 
 Las mediciones del coordinador:
 
@@ -210,7 +233,7 @@ Las mediciones del coordinador:
 | M-18 | Sonda de ida y vuelta por tarea gestionada a `ingenieria` | Mini, desde la Mac | 0: el brief lo prohíbe, y se lee `conversation_deliveries` |
 | M-19 | `claw_autoupdate.py --dry-run` en la Mini | Mini, solo lectura | 0 |
 | M-20 | La primera corrida real de `claw_autoupdate` (log de launchd) | Mini, solo lectura | Los que mande el propio autoupdate |
-| M-21 | Fase 0 de Claude por su CLI (los cuatro puntos de 4.7) | Mac, suscripción de David | 0 |
+| M-21 | Fase 0 de Claude por su CLI (los cuatro puntos de 4.7): **medida el 2026-10-16, verde** | Mac, suscripción de David | 0 |
 | M-22 | Una promoción real en la ruta por CLI, o el banco con una línea de fixture | Mac | 1, el aviso de la promoción |
 
 ## 6. El corte en rebanadas
@@ -223,10 +246,10 @@ Las mediciones del coordinador:
 | G4 | `agentes.py descubrir` y `sondear`, `perfiles` con los estados nuevos, el retiro en el publicador | contexto, publicar, encargo, routing | Sí: M-18 |
 | G5 | `solicitar` y `--ref tg:` (B22-S6), la skill `encargo-cli` | encargo, routing | Sí: publicar la skill de `main` |
 | G6 | `fuentes` y su aviso; las pruebas de I19 (crash y revocación) | contexto, publicar, modelos | No |
-| G7 | Claude por su CLI, si M-21 sale verde: el `Adaptador` del host y `claude` | sesión, host, banco | Sí: host al día |
+| G7 | Claude por su CLI (M-21 verde): el `Adaptador` del host, `opencode` sin cambios y `claude`; su banco y su canario | sesión, host, encargo, banco | Sí: host al día |
 | G8 | Cierre: `coverage.json` (`modelSuccession`, la evidencia de la ruta nativa a un agente), filas y recibo `SUA-04.md` | routing, contrato | No |
 
-Orden: G1, luego G2 a G6 en ese orden (G3 necesita G2; G4 a G6 son independientes entre sí). M-21 se mide en paralelo con G2. G7 solo si M-21 sale verde. Al final G8. Las ventanas en vivo se juntan donde se pueda, con el slot libre y sin encargo en vuelo, como en SUA-03.
+Orden: G1, luego G2 a G7 en ese orden (G3 necesita G2; G4 a G7 son independientes entre sí). M-21 ya está medida. Al final G8. Las ventanas en vivo se juntan donde se pueda, con el slot libre y sin encargo en vuelo, como en SUA-03.
 
 ## 7. Lo que no entra en SUA-04
 
@@ -245,7 +268,7 @@ Orden: G1, luego G2 a G6 en ese orden (G3 necesita G2; G4 a G6 son independiente
 1. **El canario de la sucesión gasta suscripción.** Uno por id nuevo, como mucho uno al día, y nunca con un encargo en vuelo.
 2. **La regla de línea diverge entre los dos repos.** La prueba de igualdad la detecta en G cuando goncloud-hermes está en la máquina, y se salta cuando no está. Se sabe que no protege en CI.
 3. **Un `alta-sin-registrar` sin perfil recibe trabajo nativo.** Hoy ya pasa con el bloque "sin perfil". SUA-04 lo hace visible, pero no lo bloquea.
-4. **`--ref tg:` coteja contra un transcript.** Quien controla la sesión de `main` podría escribir esa frase en ella. Lo cubre que el cotejo exige que la frase venga del rol `user` del canal de Telegram de David, y que el cambio sigue saliendo como PR.
+4. **`--ref tg:` coteja contra un transcript.** El rol `user` de la sesión directa de Telegram del dueño lo escribe R con lo que llega de Telegram. Un agente no escribe ahí como `user`, pero quien tiene la Mini sí puede editar la base. Lo cubre el mismo argumento del runbook para `P####`: protege de errores y de un agente que pide por un canal, no de quien edita la base o el código. El cambio sigue saliendo como PR.
 
 ### Decisiones pendientes de David
 
