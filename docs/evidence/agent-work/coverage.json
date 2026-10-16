@@ -13,7 +13,7 @@
   "routes": [
     {"kind": "native-turn", "owner": "OpenClaw (turno del agente)", "certified": false, "contextGeneration": 2, "evidence": "docs/evidence/sistema-agentes-unificado/SUA-03.md (M-17c y las 10 sondas de competencia, medidas sin certificar)"},
     {"kind": "native-child", "owner": "OpenClaw sessions_spawn", "certified": false, "contextGeneration": 2, "evidence": "docs/evidence/sistema-agentes-unificado/SUA-03.md (M-17c y las 10 sondas de competencia, medidas sin certificar)"},
-    {"kind": "native-managed-agent", "owner": "OpenClaw managed_tasks (admitManagedTask)", "certified": false, "contextGeneration": 2, "evidence": "docs/evidence/sistema-agentes-unificado/SUA-03.md (M-17c y las 10 sondas de competencia, medidas sin certificar)"},
+    {"kind": "native-managed-agent", "owner": "OpenClaw managed_tasks (admitManagedTask)", "certified": false, "contextGeneration": 2, "evidence": "docs/evidence/sistema-agentes-unificado/SUA-03.md (sin medir: ningún pedido pasó por esta ruta; el canario A entró por sessions_spawn, fila SUA-03/G5 de followups.md)"},
     {"kind": "cli-managed-task", "owner": "host agent-work (opencode por encargo)", "certified": true, "contextGenerations": [1, 2], "evidence": "docs/evidence/sistema-agentes-unificado/SUA-03-mediciones.md (M-16, banco y generación 2)"},
     {"kind": "cli-child", "owner": "opencode task/bash dentro de la corrida del host", "certified": true, "contextGenerations": [1, 2], "evidence": "docs/evidence/sistema-agentes-unificado/SUA-03-mediciones.md (M-16, banco y generación 2)"}
   ],

@@ -3,7 +3,7 @@
 Bloque SUA-03 del
 [plan](../../superpowers/plans/2026-10-05-sistema-agentes-unificado.md), hecho según su
 [diseño](../../superpowers/specs/2026-10-14-sua-03-trabajadores-design.md). Las
-mediciones viven en [SUA-03-mediciones.md](SUA-03-mediciones.md). R es el checkout de
+mediciones de la ruta por CLI viven en [SUA-03-mediciones.md](SUA-03-mediciones.md), y las nativas en sus fixtures y sus pruebas (sección "Las mediciones"). R es el checkout de
 integración de OpenClaw (`feat/agent-work-integration`). G es este repo.
 
 ## Qué entregó
