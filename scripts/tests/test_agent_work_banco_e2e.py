@@ -342,6 +342,49 @@ class Briefs(unittest.TestCase):
             banco.spool = spool
             self.assertEqual(banco.artifact_path("task-e"), Path("/tmp/el-artefacto.md"))
 
+    def test_conducta_judges_a_claude_stream_with_the_claude_form(self):
+        # B3 de G7-r4: el banco de claude lee el stream de claude con la forma
+        # claude; con la forma opencode (el default de siempre) una lectura real
+        # de claude no cuenta y el veredicto miente.
+        from unittest import mock
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            banco = BancoE2E.__new__(BancoE2E)
+            banco.spool = tmp / "spool"
+            run = banco.run_dir("t-x")
+            run.path.mkdir(parents=True)
+            run.assignment.write_text(
+                json.dumps({"workspaceRef": str(tmp / "repo")}), encoding="utf-8"
+            )
+            record = banco.record("t-x")
+            record.path.mkdir(parents=True)
+            skill = tmp / "contexto" / "skills" / "poteto-mode" / "SKILL.md"
+            record.events.write_text(
+                "\n".join(
+                    [
+                        json.dumps({"type": "assistant", "message": {"content": [
+                            {"type": "tool_use", "id": "c1", "name": "Read",
+                             "input": {"file_path": str(skill)}}]}}),
+                        json.dumps({"type": "user", "message": {"content": [
+                            {"type": "tool_result", "tool_use_id": "c1", "content": "# poteto"}]}}),
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            libro = tmp / "contexto" / "skills" / "poteto-mode" / "playbooks" / "playbook.md"
+            libro.parent.mkdir(parents=True)
+            libro.write_text("### X\n\n1. Lee la skill.\n2. Corre pruebas.\n", encoding="utf-8")
+            artefacto = tmp / "hallazgos.md"
+            artefacto.write_text("nada\n", encoding="utf-8")
+            with mock.patch.object(sys.modules[__name__], "ADAPTER", "claude"):
+                _, veredicto = banco.conducta_verdict("t-x", artefacto, libro)
+            self.assertNotIn(SIN_CONTEXTO, veredicto["razones"], veredicto)
+            with mock.patch.object(sys.modules[__name__], "ADAPTER", "opencode"):
+                _, veredicto = banco.conducta_verdict("t-x", artefacto, libro)
+            self.assertIn(SIN_CONTEXTO, veredicto["razones"], veredicto)
+
 
 def sha256(data):
     return hashlib.sha256(data).hexdigest()

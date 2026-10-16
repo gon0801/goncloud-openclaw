@@ -838,6 +838,188 @@ class ConductaNativa(unittest.TestCase):
         self.assertEqual(conducta.pasos_openclaw(con_error), [])
 
 
+def llamada_claude(identificador, nombre, **entrada):
+    """Una llamada del stream-json de claude (M-21, punto 4): tool_use dentro de
+    un evento assistant."""
+    return json.dumps(
+        {
+            "type": "assistant",
+            "message": {
+                "model": "claude-opus-5-5",
+                "content": [
+                    {"type": "tool_use", "id": identificador, "name": nombre, "input": entrada}
+                ],
+            },
+        }
+    )
+
+
+def resultado_claude(identificador, salida):
+    """El resultado de una llamada de claude: tool_result en un evento user."""
+    return json.dumps(
+        {
+            "type": "user",
+            "message": {
+                "content": [
+                    {"type": "tool_result", "tool_use_id": identificador, "content": salida}
+                ]
+            },
+        }
+    )
+
+
+CLAUDE_FIXTURES = ROOT / "scripts" / "tests" / "fixtures" / "agent-work" / "claude"
+RUN_CLAUDE = "/corrida/enc-1"
+
+
+def corrida_claude(*, con_lista=False):
+    """Una corrida claude que sigue poteto (lecturas con Read y file_path), con o
+    sin la lista de pasos."""
+    pasos = [
+        (
+            "c1",
+            "Read",
+            {"file_path": f"{RUN_CLAUDE}/contexto/skills/poteto-mode/SKILL.md"},
+            "# poteto\n",
+        ),
+        (
+            "c2",
+            "Read",
+            {"file_path": f"{RUN_CLAUDE}/contexto/skills/poteto-mode/playbooks/playbook.md"},
+            "el playbook\n",
+        ),
+        ("c3", "Edit", {"file_path": "/repo/demo/calc.py"}, "calc.py actualizado\n"),
+        (
+            "c4",
+            "Bash",
+            {"command": "python3 -m unittest test_calc.py"},
+            SALIDA,
+        ),
+    ]
+    if con_lista:
+        pasos.insert(
+            2,
+            (
+                "c1b",
+                "TodoWrite",
+                {
+                    "todos": [
+                        {"content": "how over the affected subsystem.", "status": "in_progress"}
+                    ]
+                },
+                "ok",
+            ),
+        )
+    lineas = []
+    for identificador, nombre, entrada, salida in pasos:
+        lineas.append(llamada_claude(identificador, nombre, **entrada))
+        lineas.append(resultado_claude(identificador, salida))
+    return lineas
+
+
+def juzgar_claude(lineas, playbook, resultado="Pruebas: Ran 4 tests in 0.01s, OK."):
+    return conducta.juzgar(
+        conducta.pasos_claude(lineas),
+        playbook=playbook,
+        texto_del_playbook=TEXTO,
+        resultado=resultado,
+    )
+
+
+class ConductaClaude(unittest.TestCase):
+    """La forma claude: el stream-json de claude y lecturas bajo contexto/."""
+
+    def test_pasos_claude_lee_los_streams_reales_p4_y_p5(self):
+        # M-23: los dos streams reales del encierro. Cada Bash queda con su
+        # comando y su salida, emparejado por tool_use_id, y un resultado con
+        # error (exit 1) también terminó y cuenta.
+        esperados = (
+            ("p4.jsonl", ["echo dentro > dentro.txt && echo OK1"]),
+            (
+                "p5.jsonl",
+                [
+                    "echo run > /Users/dn/.local/state/sua-loop/mediciones/m21/b/run.txt"
+                    " && echo OK1",
+                    "echo fuera > /Users/dn/.local/state/sua-loop/mediciones/m21/c/fuera.txt"
+                    " && echo OK2",
+                ],
+            ),
+        )
+        for fixture, comandos in esperados:
+            with self.subTest(fixture):
+                lineas = (CLAUDE_FIXTURES / fixture).read_text(encoding="utf-8").splitlines()
+                pasos = conducta.pasos_claude(lineas)
+                self.assertEqual([paso.tool for paso in pasos], ["bash"] * len(comandos))
+                self.assertEqual([paso.detail for paso in pasos], comandos)
+                self.assertIn("OK1", pasos[0].output)
+
+    def test_la_corrida_claude_con_las_dos_lecturas_queda_roja_solo_por_la_lista(self):
+        # B3 de G7-r4: leídas la skill y el playbook del paquete, las razones de
+        # lectura desaparecen. El claude medido (p3b/p4/p5, 2.1.301) no tiene
+        # ninguna herramienta de lista (sin TodoWrite), así que la lista no puede
+        # salir y el veredicto no es verde: es la limitación declarada.
+        veredicto = juzgar_claude(corrida_claude(), f"{RUN_CLAUDE}/{PLAYBOOK}")
+        self.assertEqual(veredicto.razones, ("no hay lista de pasos (todowrite)",))
+
+    def test_la_corrida_claude_que_deja_la_lista_pasa_completa(self):
+        veredicto = juzgar_claude(corrida_claude(con_lista=True), f"{RUN_CLAUDE}/{PLAYBOOK}")
+        self.assertEqual(veredicto, conducta.Veredicto(True, ()))
+
+    def test_la_lectura_fuera_del_paquete_y_la_tarde_no_cuentan(self):
+        sin_lecturas = [
+            linea for linea in corrida_claude() if '"c1"' not in linea and '"c2"' not in linea
+        ]
+        tarde = sin_lecturas + [
+            llamada_claude(
+                "c9", "Read", file_path=f"{RUN_CLAUDE}/contexto/skills/poteto-mode/SKILL.md"
+            ),
+            resultado_claude("c9", "# poteto\n"),
+        ]
+        fuera = [
+            linea.replace(
+                f"{RUN_CLAUDE}/contexto/skills/poteto-mode/SKILL.md",
+                "/Users/dn/.agents/skills/poteto-mode/SKILL.md",
+            )
+            for linea in corrida_claude()
+        ]
+        for nombre, lineas in (("tarde", tarde), ("fuera", fuera)):
+            with self.subTest(nombre):
+                veredicto = juzgar_claude(lineas, f"{RUN_CLAUDE}/{PLAYBOOK}")
+                self.assertIn(SIN_POTETO, veredicto.razones)
+
+    def test_main_con_forma_claude_juzga_el_stream_desde_el_archivo(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            libro = tmp / "contexto" / "skills" / "poteto-mode" / "playbooks" / "playbook.md"
+            libro.parent.mkdir(parents=True)
+            shutil.copy(FIXTURAS / "playbook.md", libro)
+            (tmp / "resultado.md").write_text(
+                "Pruebas: Ran 4 tests in 0.01s, OK.\n", encoding="utf-8"
+            )
+            lineas = corrida_claude()
+            lineas = [
+                linea.replace(f"{RUN_CLAUDE}/contexto", str(tmp / "contexto")) for linea in lineas
+            ]
+            (tmp / "eventos.jsonl").write_text("\n".join(lineas) + "\n", encoding="utf-8")
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                codigo = conducta.main(
+                    [
+                        "--forma",
+                        "claude",
+                        "--eventos",
+                        str(tmp / "eventos.jsonl"),
+                        "--playbook",
+                        str(libro),
+                        "--resultado",
+                        str(tmp / "resultado.md"),
+                    ]
+                )
+        respuesta = json.loads(out.getvalue())
+        self.assertEqual(codigo, 1, respuesta)
+        self.assertEqual(respuesta["razones"], ["no hay lista de pasos (todowrite)"])
+
+
 class ExtractorNativo(unittest.TestCase):
     def setUp(self):
         temp = tempfile.TemporaryDirectory()

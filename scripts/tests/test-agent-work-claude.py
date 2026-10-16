@@ -97,6 +97,27 @@ class ArgvYEnv(unittest.TestCase):
         # --tools y --allowed-tools llevan la misma lista.
         self.assertEqual(argv[argv.index("--tools") + 1], argv[argv.index("--allowed-tools") + 1])
 
+    def test_con_perfil_el_argv_suma_el_agents_md_de_la_corrida(self):
+        # B3 de G7-r4: sin el AGENTS.md de la corrida, claude nunca leyó la skill
+        # ni el playbook del paquete (banco-r3). Con perfil entra el mismo archivo
+        # que opencode recibe en instructions (run_config), y existe: el paso de
+        # lanzamiento construye el paquete antes de armar el argv.
+        agents = Path(self.tmp) / "run" / "contexto" / "AGENTS.md"
+        agents.parent.mkdir(parents=True)
+        agents.write_text("bloque de la corrida\n", encoding="utf-8")
+        spec = spec_claude(self.tmp, perfil={"id": "ingenieria"}, herramientas=("Read",))
+        argv = sesion.adaptador("claude").argv(spec, Path("/bin/claude"), task_id="t-1")
+        self.assertIn("--append-system-prompt-file", argv)
+        ruta = argv[argv.index("--append-system-prompt-file") + 1]
+        self.assertEqual(ruta, str(spec.run.context / "AGENTS.md"))
+        self.assertTrue(Path(ruta).is_file())
+
+    def test_sin_perfil_el_argv_no_suma_el_agents_md(self):
+        # Sin paquete no hay AGENTS.md de corrida que pasar.
+        spec = spec_claude(self.tmp, herramientas=("Read",))
+        argv = sesion.adaptador("claude").argv(spec, Path("/bin/claude"), task_id="t-1")
+        self.assertNotIn("--append-system-prompt-file", argv)
+
     def test_env_quita_anthropic_api_key_aunque_este(self):
         spec = spec_claude(self.tmp)
         env = sesion.adaptador("claude").env(spec)
