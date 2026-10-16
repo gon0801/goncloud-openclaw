@@ -3,6 +3,7 @@
 
 import json
 import os
+import shutil
 import sqlite3
 import subprocess
 import sys
@@ -98,11 +99,19 @@ class FakeMini:
         concurrente=False,
         turno_cortado=False,
         reporta=True,
+        en_texto=False,
     ):
         self.tarea, self.registrada, self.con_marcador = tarea, registrada, marcador
         self.entregas, self.memoria_cambia, self.spawn = entregas, memoria_cambia, spawn
         self.concurrente, self.turno_cortado = concurrente, turno_cortado
+        self.en_texto = en_texto
         self.reporta = reporta
+        self.tarea_id = "87b98ddf-12b4-466f-94f1-632a6c688ff5" if en_texto else "t-sonda"
+        self.artefacto_ruta = "/w/ingenieria/631c9409-7488-44ca-9c87-5d4ce810c4d2.txt"
+        self.artefacto_concurrente = "/w/ingenieria/aaaaaaaa-1111-4222-8333-444444444444.txt"
+        self.borrados = []
+        self.borrado_pedidos = []
+        self.artefacto_falta = False
         self.llamadas = []
         self.memoria = "aaa  memory/notas.md\n"
         self.turno_corrido = False
@@ -110,6 +119,16 @@ class FakeMini:
     def __call__(self, argv, entrada=None, timeout=None):
         self.llamadas.append((argv, entrada))
         texto = " ".join(argv)
+        if "-c" in argv:
+            # El ssh real une el argv y lo corre el shell de login de la Mini, que es
+            # zsh: un -c sin citar se rompe ahí aunque aquí parezca un argv (B1 de G4b-r3).
+            shell = shutil.which("zsh") or shutil.which("sh")
+            if shell:
+                sintaxis = subprocess.run(
+                    [shell, "-n", "-c", texto], capture_output=True, text=True
+                )
+                if sintaxis.returncode != 0:
+                    return 1, "", sintaxis.stderr.strip()
         if "agents list" in texto:
             return (
                 0,
@@ -132,7 +151,30 @@ class FakeMini:
             if self.memoria_cambia:
                 self.memoria = "bbb  memory/notas.md\n"
             # Sin taskId reportado (F8): un main que no declara su tarea gestionada.
+            if self.en_texto:
+                return (
+                    0,
+                    (
+                        "managed_tasks_submit creó la tarea, taskId: "
+                        "87b98ddf-12b4-466f-94f1-632a6c688ff5, admitida"
+                    ),
+                    "",
+                )
             return 0, json.dumps({"taskId": "t-sonda"} if self.reporta else {}), ""
+        if entrada and "BORRAR_ARTEFACTO" in entrada:
+            ruta = json.loads(argv[2].strip("'"))["ruta"]
+            self.borrado_pedidos.append(ruta)
+            if ruta.startswith("/w/ingenieria/") and ".." not in ruta and ";" not in ruta:
+                self.borrados.append(ruta)
+                return 0, json.dumps({"borrado": True, "causa": None}), ""
+            return 0, json.dumps({"borrado": False, "causa": "fuera del workspace"}), ""
+        if entrada and "LEER_ARTEFACTO" in entrada:
+            ruta = json.loads(argv[2].strip("'"))["ruta"]
+            if self.artefacto_falta and ruta == self.artefacto_ruta:
+                return 1, "", "No such file or directory"
+            if ruta == self.artefacto_concurrente:
+                return 0, "trabajo real de otro\n", ""
+            return 0, "SONDA-7\n" if self.con_marcador else "otro texto\n", ""
         if argv[1] == "-":
             # F6: el código llega por stdin y el pedido como argumento ya citado. Sin
             # stdin válido el fake no contesta: un regreso a -c lo cantan los flujos.
@@ -142,27 +184,45 @@ class FakeMini:
             if self.turno_corrido and self.tarea:
                 tareas = [
                     {
-                        "taskId": "t-sonda",
+                        "taskId": self.tarea_id,
                         "kind": "agent",
                         "agentId": "ingenieria",
                         "estado": "registered" if self.registrada else "result-recorded",
-                        "resultado": "SONDA-7" if self.con_marcador else "otro texto",
+                        "resultado": json.dumps(
+                            {
+                                "kind": "produced",
+                                "artifactRef": self.artefacto_ruta,
+                                "digest": "sha256:x",
+                                "observedRevision": {},
+                            }
+                        ),
                     }
                 ]
             if self.turno_corrido and self.concurrente:
-                tareas.append(
+                # La concurrente es más nueva: va primero, como en el orden real.
+                tareas.insert(
+                    0,
                     {
                         "taskId": "t-real",
                         "kind": "agent",
                         "agentId": "ingenieria",
                         "estado": "result-recorded",
-                        "resultado": "trabajo real de otro",
-                    }
+                        "resultado": json.dumps(
+                            {
+                                "kind": "produced",
+                                "artifactRef": self.artefacto_concurrente,
+                                "digest": "sha256:y",
+                                "observedRevision": {},
+                            }
+                        ),
+                    },
                 )
             pedido = json.loads(argv[2].strip("'"))  # el pedido viaja citado como argumento (F6)
             sesiones = ["agent:ingenieria:managed:ajena"]
             if self.turno_corrido:
-                sesiones.append("agent:ingenieria:managed:t-sonda")
+                sesiones.append(f"agent:ingenieria:managed:{self.tarea_id}")
+            if self.turno_corrido and self.concurrente:
+                sesiones.append("agent:ingenieria:managed:t-real")
             # Fiel al ayudante real: las hijas se filtran con el taskId que el pedido
             # trae; sin él, la lista de hijas vuelve vacía y solo queda sesionesAgente.
             reportada = pedido.get("tareaReportada")
@@ -246,6 +306,74 @@ class Sondear(unittest.TestCase):
         self.assertFalse(any("agent:main:sua04-sonda" in b for b in borradas), borradas)
         self.assertTrue(any("rm" in argv for argv, _ in fake.llamadas))
 
+    def test_la_tarea_que_llego_sin_resultado_dice_su_task_id(self):
+        # 4.5b: main reporta el taskId en su texto y la tarea queda sin resultado: la
+        # causa es esa, no "main no mandó".
+        fake = FakeMini(registrada=True, en_texto=True)
+        fila = sondear_con(fake)
+        self.assertTrue(fila["causa"].startswith("la tarea llegó (87b98ddf-"))
+        self.assertTrue(fila["causa"].endswith("pero el agente no reportó resultado"))
+        self.assertEqual(fila["taskId"], "87b98ddf-12b4-466f-94f1-632a6c688ff5")
+        # F7 de #320: sin el marcador leído en su artefacto, la tarea no es de la sonda con
+        # certeza, y su sesión hija no se borra.
+        borradas = [" ".join(argv) for argv in fake.corridas("sessions delete")]
+        self.assertFalse(any("87b98ddf" in b and "ingenieria" in b for b in borradas), borradas)
+
+    def test_el_artefacto_se_borra_y_el_ajeno_no(self):
+        fake = FakeMini()
+        fila = sondear_con(fake)
+        self.assertTrue(fila["ok"], fila)
+        # F1 de G4b-r4: el borrado va por el ayudante (stdin), nunca con rm y la ruta suelta.
+        self.assertEqual(fake.borrados, [fake.artefacto_ruta])
+        rms = [" ".join(argv) for argv, _ in fake.llamadas if argv and argv[0] == "rm"]
+        self.assertFalse(any(fake.artefacto_ruta in r for r in rms), rms)
+        # Uno ajeno: fuera del workspace no se borra aunque traiga uuid.
+        fake2 = FakeMini()
+        fake2.artefacto_ruta = "/etc/631c9409-7488-44ca-9c87-5d4ce810c4d2.txt"
+        fila2 = sondear_con(fake2)
+        self.assertTrue(fila2["ok"], fila2)
+        self.assertEqual(fake2.borrados, [])
+
+    def test_lectura_fallida_no_borra_nada(self):
+        # F1/F4 de G4b-r4: si la lectura falló, no se pide ningún borrado.
+        fake = FakeMini()
+        fake.artefacto_falta = True
+        fila = sondear_con(fake)
+        self.assertFalse(fila["ok"])
+        self.assertEqual(fake.borrado_pedidos, [])
+
+    def test_sin_marcador_no_borra_nada(self):
+        fake = FakeMini(marcador=False)
+        fila = sondear_con(fake)
+        self.assertFalse(fila["ok"])
+        self.assertEqual(fake.borrado_pedidos, [])
+
+    def test_sin_task_id_toma_la_tarea_cuyo_artefacto_trae_el_marcador(self):
+        # F3 de G4b-r4: sin taskId reportado no se toma la primera nueva: la
+        # concurrente más nueva no es de la sonda y no se toca.
+        fake = FakeMini(reporta=False, concurrente=True)
+        fila = sondear_con(fake)
+        self.assertEqual((fila["ok"], fila["taskId"]), (True, "t-sonda"))
+        self.assertEqual(fake.borrados, [fake.artefacto_ruta])
+        self.assertNotIn(fake.artefacto_concurrente, fake.borrado_pedidos)
+        borradas = [" ".join(argv) for argv in fake.corridas("sessions delete")]
+        self.assertFalse(any("managed:t-real" in b for b in borradas), borradas)
+        self.assertTrue(any("managed:t-sonda" in b for b in borradas), borradas)
+
+    def test_sin_task_id_y_ninguna_con_marcador_sigue_esperando_y_lo_dice(self):
+        fake = FakeMini(reporta=False, marcador=False, concurrente=True)
+        fila = sondear_con(fake)
+        self.assertFalse(fila["ok"])
+        self.assertIn("ninguna tarea nueva", fila["causa"])
+        self.assertEqual(fake.borrado_pedidos, [])
+
+    def test_el_artefacto_que_no_se_puede_leer_lo_dice(self):
+        fake = FakeMini()
+        fake.artefacto_falta = True
+        fila = sondear_con(fake)
+        self.assertFalse(fila["ok"])
+        self.assertIn("no se pudo leer", fila["causa"])
+
     def test_main_que_usa_sessions_spawn(self):
         fila = sondear_con(FakeMini(tarea=False, spawn=True))
         self.assertEqual(
@@ -256,7 +384,8 @@ class Sondear(unittest.TestCase):
     def test_tarea_que_no_llega(self):
         fila = sondear_con(FakeMini(registrada=True))
         self.assertEqual(
-            (fila["ok"], fila["causa"]), (False, "la tarea no llegó a result-recorded en el tope")
+            (fila["ok"], fila["causa"]),
+            (False, "la tarea llegó (t-sonda) pero el agente no reportó resultado"),
         )
 
     def test_una_entrega_hacia_david_falla(self):
@@ -271,6 +400,26 @@ class Sondear(unittest.TestCase):
             (fila["ok"], fila["memoriaIgual"], fila["causa"]),
             (False, False, "memory/ cambió durante la sonda"),
         )
+
+    def test_sonda_de_un_agente_sin_perfil_no_manda_perfil(self):
+        # F2 de G4b-r4: sondear manda --perfil solo si el agente tiene uno.
+        fake = FakeMini()
+        fila = agentes.sondear(
+            "ingenieria",
+            mini="u@h",
+            correr=fake,
+            perfiles={"profiles": [], "agents": []},
+            marca="7",
+            dormir=lambda _: None,
+            reloj=lambda: 0.0,
+            tope=0.0,
+        )
+        self.assertTrue(fila["ok"], fila)
+        mensaje = next(
+            entrada for argv, entrada in fake.llamadas if entrada and "Sonda de" in entrada
+        )
+        self.assertIn("brief.py --agente ingenieria", mensaje)
+        self.assertNotIn("--perfil", mensaje)
 
     def test_la_hija_se_borra_cuando_main_no_reporta_task_id(self):
         # F8: la tarea se reconoció por su resultado, no por lo que main reportó;
@@ -410,6 +559,74 @@ class ConexionReal(unittest.TestCase):
                 self.correr, "agent:main:sua04-sonda-ingenieria-7", "ingenieria", "SONDA-7"
             )
         self.assertIn("conversation_deliveries", str(atrapado.exception))
+
+    def test_el_borrado_del_artefacto_acota_en_la_mini(self):
+        # F1 de G4b-r4: el ayudante de borrado resuelve la ruta en la Mini.
+        uuid = "631c9409-7488-44ca-9c87-5d4ce810c4d2"
+        # Con espacios: se borra bien.
+        con_espacios = self.ws / f"{uuid} con espacios.txt"
+        con_espacios.write_text("SONDA-7\n", encoding="utf-8")
+        hecho = agentes._borrar_artefacto(self.correr, str(con_espacios), str(self.ws))
+        self.assertTrue(hecho["borrado"], hecho)
+        self.assertFalse(con_espacios.exists())
+        # Con "..": la ruta resuelta sale del workspace y no se borra.
+        fuera = self.home / "w" / "fuera"
+        fuera.mkdir(parents=True, exist_ok=True)
+        victima = fuera / f"{uuid}.txt"
+        victima.write_text("no tocar\n", encoding="utf-8")
+        hecho = agentes._borrar_artefacto(
+            self.correr, str(self.ws / ".." / "fuera" / f"{uuid}.txt"), str(self.ws)
+        )
+        self.assertFalse(hecho["borrado"], hecho)
+        self.assertTrue(victima.exists())
+        # Un enlace dentro del workspace: no se borra ni él ni su destino.
+        destino = self.ws / f"{uuid}-destino.txt"
+        destino.write_text("destino\n", encoding="utf-8")
+        enlace = self.ws / f"{uuid}-enlace.txt"
+        enlace.symlink_to(destino)
+        hecho = agentes._borrar_artefacto(self.correr, str(enlace), str(self.ws))
+        self.assertFalse(hecho["borrado"], hecho)
+        self.assertTrue(enlace.is_symlink())
+        self.assertTrue(destino.exists())
+        # Una carpeta con nombre de artefacto: no se borra.
+        carpeta = self.ws / f"{uuid}-carpeta"
+        carpeta.mkdir()
+        hecho = agentes._borrar_artefacto(self.correr, str(carpeta), str(self.ws))
+        self.assertFalse(hecho["borrado"], hecho)
+        self.assertTrue(carpeta.is_dir())
+
+    def test_el_borrado_con_punto_y_coma_no_ejecuta_nada(self):
+        # F1 de G4b-r4: "; touch" en la ruta es un dato, no un comando.
+        uuid = "631c9409-7488-44ca-9c87-5d4ce810c4d2"
+        tocado = self.tmp / "tocado.txt"
+        ruta = f"{self.ws}/{uuid}.txt; touch {tocado}"
+        hecho = agentes._borrar_artefacto(self.correr, ruta, str(self.ws))
+        self.assertFalse(hecho["borrado"], hecho)
+        self.assertFalse(tocado.exists())
+
+
+class DescubrirCli(unittest.TestCase):
+    def test_agentes_json_malformado_da_la_linea_json_y_exit_3(self):
+        # F11 de #318: un --agentes-json que no es la lista no revienta con TypeError.
+        import subprocess
+
+        with tempfile.TemporaryDirectory() as tmp:
+            malo = Path(tmp) / "agentes.json"
+            malo.write_text('{"id": "esto no es una lista"}')
+            hecho = subprocess.run(
+                [
+                    sys.executable,
+                    str(ROOT / "scripts/agent-work/agentes.py"),
+                    "descubrir",
+                    "--agentes-json",
+                    str(malo),
+                ],
+                capture_output=True,
+                text=True,
+            )
+        self.assertEqual(hecho.returncode, 3, hecho.stderr)
+        self.assertIn("la lista de agentes no tiene la forma esperada", hecho.stdout)
+        self.assertNotIn("Traceback", hecho.stderr)
 
 
 if __name__ == "__main__":

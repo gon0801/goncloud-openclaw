@@ -576,9 +576,19 @@ def aplicar_en_la_mini(publicacion: Path, home: Path, agentes_json: Path | None)
             salida_agentes[identificador] = "conflicto: el bloque fue editado"
             conflictos += 1
             continue
+
         # La vuelta de un retirado (F2): el digest que el estado olvidó vive en el
         # respaldo del retiro, y vale como el publicado, como en la reversa.
-        respaldos_retiro = sorted(suya.glob(f"*/agentes-retirados/{identificador}.json"))
+        # El respaldo se elige por número de generación, no por nombre (F12: la 10 va tras la 2).
+        def _generacion_de(respaldo):
+            try:
+                return int(respaldo.parent.parent.name)
+            except ValueError:
+                return -1
+
+        respaldos_retiro = sorted(
+            suya.glob(f"*/agentes-retirados/{identificador}.json"), key=_generacion_de
+        )
         respaldo_retiro = (
             respaldos_retiro[-1]
             if respaldos_retiro
