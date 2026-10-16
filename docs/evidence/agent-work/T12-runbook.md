@@ -105,7 +105,7 @@ ssh gon@100.73.187.5 'R=$(mktemp -d); printf "prueba\n" | python3 ~/.local/share
 
 `reporte.py` va junto a `brief.py` (SUA-04, 4.5b): es lo que el trabajador nativo corre para armar el resultado de `managed_tasks_report` cuando su encargo vino con `--agente`. También solo usa la biblioteca estándar. Los dos sha256 de cada archivo tienen que coincidir.
 
-Los dos sha256 tienen que coincidir. La última línea imprime un JSON con `instructionRef` y `target`. `<instructionRoot>` no puede ser un enlace simbólico: R y `brief.py` lo rechazan.
+La última línea imprime un JSON con `instructionRef` y `target`. `<instructionRoot>` no puede ser un enlace simbólico: R y `brief.py` lo rechazan.
 
 Cómo lo usa `main`, con su tool de exec en la Mini:
 

@@ -765,6 +765,22 @@ class BriefHelper(unittest.TestCase):
             "ninguna.\n<!-- perfil fin -->\n" + self.BRIEF.decode(),
         )
 
+    def test_brief_with_an_agent_and_no_profile_carries_task_and_protocol_only(self):
+        # F2 de G4b-r4: un alta nueva no tiene perfil, y brief.py --agente va sin --perfil.
+        done = self.run_helper("--agente", "meli", "--contrato", "ready.v1")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        fragments = json.loads(done.stdout)
+        self.assertEqual(fragments["target"], {"kind": "agent", "agentId": "meli"})
+        self.assertIn("inputRevision", fragments)
+        digest = fragments["instructionRef"]["ref"].removeprefix("artifact:")
+        escrito = (self.root / digest).read_bytes().decode()
+        self.assertTrue(escrito.startswith("agent-work.launch.v1\ntarea: "), escrito)
+        self.assertNotIn("profile:", escrito)
+        self.assertNotIn("<!-- perfil", escrito)
+        self.assertIn("<!-- protocolo inicio -->", escrito)
+        self.assertIn("reporte.py", escrito)
+        self.assertTrue(escrito.endswith(self.BRIEF.decode()))
+
     def test_brief_refuses_an_unknown_or_unreadable_profile_and_writes_nothing(self):
         unknown = self.run_helper("--perfil", "cocina", "--perfiles", str(self.PERFILES))
         self.assertEqual((unknown.returncode, unknown.stdout), (1, b""))
@@ -812,7 +828,7 @@ class BriefHelper(unittest.TestCase):
              b"--contrato va con --agente"),
             (("--perfil", "meli", "--perfiles", str(self.PERFILES), "--agente", "meli",
               "--contrato", "ready.v1", "--host", "mac-local", "--adapter", "opencode"),
-             b"--agente va con --perfil sin --host"),
+             b"--agente va sin --host"),
         ):
             with self.subTest(args=args):
                 done = self.run_helper(*args)

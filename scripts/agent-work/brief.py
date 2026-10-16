@@ -144,7 +144,7 @@ def main(argv=None):
     parser.add_argument("--model", type=model_id, help="model the adapter launches, as <provider>/<model>")
     parser.add_argument("--perfil", type=profile_id, help="worker profile, for example ingenieria")
     parser.add_argument("--perfiles", type=Path, help="perfiles.v1.json; required by --perfil without --host")
-    parser.add_argument("--agente", type=agent_id, help="native target agentId: with --perfil and without --host")
+    parser.add_argument("--agente", type=agent_id, help="native target agentId: with or without --perfil, without --host")
     parser.add_argument("--contrato", choices=("ready.v1", "review.v1"), help="result contract; required by --agente")
     args = parser.parse_args(argv)
     if bool(args.host) != bool(args.adapter):
@@ -153,8 +153,8 @@ def main(argv=None):
         parser.error("--perfiles goes with --perfil")
     if args.perfil and not args.host and not args.perfiles:
         parser.error("--perfil without --host is a native target and needs --perfiles")
-    if args.agente and (not args.perfil or args.host):
-        parser.error("--agente va con --perfil sin --host")
+    if args.agente and args.host:
+        parser.error("--agente va sin --host")
     if args.agente and not args.contrato:
         parser.error("--agente pide --contrato")
     if args.contrato and not args.agente:
@@ -169,7 +169,7 @@ def main(argv=None):
         # A CLI host reads the profile from its own copy; a native child reads it here.
         section = b"" if args.host else profile_section(profile)
     content = args.file.read_bytes() if args.file else sys.stdin.buffer.read()
-    if (args.model or args.perfil) and content:
+    if (args.model or args.perfil or args.agente) and content:
         # An empty brief stays empty, so write_instruction refuses it instead of publishing a bare header.
         tarea = str(uuid.uuid4()) if args.agente else None
         protocolo = protocol_section(args.root, tarea, args.contrato) if args.agente else b""

@@ -4,6 +4,7 @@ coincide con stableStringify de R. El validador de aquí reescribe en Python las
 managed-task.json.ts (kind, el payload del contrato, artifactRef, digest e observedRevision)."""
 
 import hashlib
+import importlib.util
 import json
 import os
 import re
@@ -21,6 +22,9 @@ PERFILES = ROOT / "scripts/agent-work/contexto/perfiles.v1.json"
 STABLE = Path(
     "/Users/dn/dev/wt/r-sua02-c-gate/packages/normalization-core/dist/stable-stringify.mjs"
 )
+_spec = importlib.util.spec_from_file_location("reporte_bajo_prueba", REPORTE)
+REPORTE_MOD = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(REPORTE_MOD)
 
 
 def canonico(documento) -> str:
@@ -194,6 +198,19 @@ class CanonicoConR(unittest.TestCase):
         {"verdict": "approved", "evidenceRef": "/w/e.txt"},
         {"b": 1, "a": {"z": [3, 1.5, "sí"], "ñ": None}, "A": True},
     ]
+
+    # F6 de G4b-r4: salidas del stableStringify real de R, grabadas con node el
+    # 2026-10-16. Se comparan siempre, también en CI sin node ni el R construido.
+    SALIDAS_STABLE = [
+        '{"evidenceRef":"/w/resultado-ñ.txt"}',
+        '{"evidenceRef":"/w/e.txt","verdict":"approved"}',
+        '{"A":true,"a":{"z":[3,1.5,"sí"],"ñ":null},"b":1}',
+    ]
+
+    def test_fixture_literal_contra_el_canonico_de_reporte(self):
+        for caso, salida in zip(self.CASOS, self.SALIDAS_STABLE, strict=True):
+            with self.subTest(caso=caso):
+                self.assertEqual(REPORTE_MOD.canonico(caso), salida)
 
     def test_python_lo_fija_contra_literales(self):
         # Los literales: el digest sale del texto canónico exacto, no de otra serialización.

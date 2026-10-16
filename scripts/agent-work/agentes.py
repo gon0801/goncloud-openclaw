@@ -208,6 +208,42 @@ def _leer_artefacto(correr, ruta: str) -> str:
     return out
 
 
+AYUDANTE_BORRADO = """
+# BORRAR_ARTEFACTO: borra solo un archivo regular dentro del workspace resuelto;
+# el código va por stdin y la ruta como dato, nunca como texto de shell.
+import json, os, sys
+req = json.loads(sys.argv[1])
+ruta, workspace = req["ruta"], req["workspace"]
+base = os.path.realpath(workspace)
+resuelta = os.path.realpath(ruta)
+if os.path.islink(ruta):
+    print(json.dumps({"borrado": False, "causa": "la ruta es un enlace"}))
+elif resuelta == base or os.path.commonpath([resuelta, base]) != base:
+    print(json.dumps({"borrado": False, "causa": "la ruta resuelta sale del workspace"}))
+elif not os.path.isfile(resuelta):
+    print(json.dumps({"borrado": False, "causa": "no es un archivo regular"}))
+else:
+    os.unlink(resuelta)
+    print(json.dumps({"borrado": True, "causa": None}))
+"""
+
+
+def _borrar_artefacto(correr, ruta: str, workspace: str) -> dict:
+    """El borrado del artefacto en la Mini (F1 de G4b-r4): un `rm` con la ruta que
+    escribió el trabajador ejecutaría lo que la ruta trajera (`;`, `..`, espacios).
+    Aquí la ruta viaja como dato y allá se resuelve con realpath antes de tocar nada."""
+    rc, out, err = correr(
+        ["python3", "-", shlex.quote(json.dumps({"ruta": ruta, "workspace": workspace}))],
+        entrada=AYUDANTE_BORRADO,
+    )
+    if rc != 0:
+        return {"borrado": False, "causa": err.strip() or "sin salida"}
+    try:
+        return json.loads(out)
+    except ValueError:
+        return {"borrado": False, "causa": "el ayudante de borrado no contestó JSON"}
+
+
 def _foto_memoria(correr, workspace: str) -> str:
     orden = (
         f"cd {shlex.quote(workspace)} && find memory -type f -print0 | sort -z | "
@@ -282,8 +318,8 @@ def _task_id_reportado(salida: str):
 MENSAJE = (
     "Sonda de SUA-04 (no avises a David, no escribas a Telegram, no uses sessions_spawn).\n"
     "\n"
-    "1. Escribe el brief con brief.py {perfil} --agente {agente} "
-    "--contrato ready.v1 en la Mini (con --perfiles ~/.local/share/agent-work/perfiles.v1.json): "
+    "1. Escribe el brief con brief.py {brief} "
+    "--contrato ready.v1 en la Mini{perfiles}: "
     "pide contestar exactamente {marcador} y nada más, y reportarlo con managed_tasks_report "
     "usando el resultado que arma reporte.py, como dice la sección de protocolo del brief.\n"
     "2. Pega los tres fragmentos que contesta brief.py (instructionRef, target e inputRevision) "
@@ -320,6 +356,7 @@ def sondear(
     }
     hijas: list = []
     turno_cortado = False
+    artefacto_marcado = False
     vivos: dict = {}
     try:
         vivos = {a["id"]: a for a in lista_viva(mini, correr)}
@@ -340,7 +377,10 @@ def sondear(
         previas = {t["taskId"] for t in estado0["tareas"]}
         sesiones_previas = estado0.get("sesionesAgente") or []
         texto = MENSAJE.format(
-            perfil=f"--perfil {perfil}" if perfil else "(sin --perfil)",
+            brief=f"--perfil {perfil} --agente {agent_id}" if perfil else f"--agente {agent_id}",
+            perfiles=" (con --perfiles ~/.local/share/agent-work/perfiles.v1.json)"
+            if perfil
+            else "",
             marcador=marcador,
             agente=agent_id,
         )
@@ -395,7 +435,25 @@ def sondear(
             if reportada:
                 tarea = next((t for t in nuevas if t["taskId"] == reportada), None)
             else:
-                tarea = next((t for t in nuevas if t["estado"] == "result-recorded"), None)
+                # F3: sin taskId reportado, la tarea de la sonda es la nueva cuyo
+                # ARTEFACTO trae el marcador; una concurrente más nueva no se toma.
+                for candidata in nuevas:
+                    if candidata["estado"] != "result-recorded":
+                        continue
+                    try:
+                        resultado_c = json.loads(candidata.get("resultado") or "")
+                    except ValueError:
+                        continue
+                    ref = resultado_c.get("artifactRef") if isinstance(resultado_c, dict) else None
+                    if not ref:
+                        continue
+                    try:
+                        contenido_c = _leer_artefacto(correr, ref)
+                    except ValueError:
+                        continue
+                    if marcador in contenido_c:
+                        tarea = candidata
+                        break
             if tarea is not None:
                 fila["taskId"], fila["estado"] = tarea["taskId"], tarea["estado"]
                 # La hija de la tarea reconocida por su marcador también es de la sonda
@@ -423,6 +481,7 @@ def sondear(
                         try:
                             contenido = _leer_artefacto(correr, fila["artefacto"])
                             fila["marcador"] = marcador in contenido
+                            artefacto_marcado = fila["marcador"]
                         except ValueError as error:
                             fila["causa"] = (
                                 f"el artefacto {fila['artefacto']} no se pudo leer: {error}"
@@ -431,6 +490,10 @@ def sondear(
             if reloj() - inicio >= tope:
                 if not nuevas and estado.get("spawn"):
                     fila["causa"] = "main usó sessions_spawn en vez de la tarea gestionada"
+                elif tarea is None and not reportada and nuevas:
+                    fila["causa"] = (
+                        "la tarea no llegó: ninguna tarea nueva trae el marcador en su artefacto"
+                    )
                 elif tarea is None and not reportada:
                     fila["causa"] = (
                         "la tarea no llegó: main no mandó una tarea gestionada a este agente"
@@ -466,13 +529,15 @@ def sondear(
         return fila
     finally:
         correr(["rm", "-f", mensaje_remoto])
-        # El artefacto de la sonda se borra, y solo ese (M1): dentro del workspace del
-        # agente y con un uuid en el nombre, que es como el protocolo manda nombrarlo.
+        # El artefacto de la sonda se borra, y solo ese (F1 de G4b-r4): solo la misma
+        # ruta que la sonda leyó y donde encontró el marcador, y el borrado lo acota el
+        # ayudante en la Mini (realpath, archivo regular, dentro del workspace). Si la
+        # lectura falló o el marcador no estaba, no se borra nada: la causa ya lo dice.
         artefacto = fila.get("artefacto")
-        if artefacto:
+        if artefacto and artefacto_marcado:
             workspace = (vivos.get(agent_id) or {}).get("workspace", "")
-            if artefacto.startswith(workspace + "/") and UUID_EN_TEXTO.search(Path(artefacto).name):
-                correr(["rm", "-f", artefacto])
+            if workspace:
+                _borrar_artefacto(correr, artefacto, workspace)
         # Solo lo suyo (F1): la sesión de main de la sonda y la hija de su tarea. Con el
         # turno cortado, la sesión de main se conserva (F5).
         if not turno_cortado:
