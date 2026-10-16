@@ -114,12 +114,63 @@ def gateway(args, method, params):
 
 
 def get(args, corrida):
+    """Estado de la corrida en el tablero (SUA-06 §4.3): administrada (revisión
+    por eventos), sinRevision (solo doc legado: ok sin revision) o sinRegistro
+    (desconocida con el campo). Cualquier otra respuesta sigue siendo el error
+    de siempre."""
     response = gateway(args, "runbook.progress.get", {"corrida": corrida})
-    if response.get("ok") is not True or not isinstance(response.get("revision"), int) or response["revision"] < 0 or not isinstance(response.get("doc"), dict):
+    if response.get("ok") is not True:
+        if response.get("razon") == "desconocida" and response.get("sinRegistro") is True:
+            return {"estado": "sinRegistro"}
         raise RuntimeError("get no devolvió documento y revisión aceptados")
-    if response["doc"].get("corrida") != corrida:
+    doc = response.get("doc")
+    if not isinstance(doc, dict):
+        raise RuntimeError("get no devolvió documento y revisión aceptados")
+    if doc.get("corrida") != corrida:
         raise RuntimeError("get devolvió otra corrida")
-    return response
+    revision = response.get("revision")
+    if revision is None:
+        return {"estado": "sinRevision", "doc": doc}
+    if not isinstance(revision, int) or revision < 0:
+        raise RuntimeError("get no devolvió documento y revisión aceptados")
+    return {"estado": "administrada", "revision": revision, "doc": doc}
+
+
+def requerir_administrada(estado, corrida):
+    if estado["estado"] != "administrada":
+        raise RuntimeError(f"corrida {corrida} no administrada por eventos")
+    return estado
+
+
+def archivar_cola(base, corrida):
+    """La corrida no existe en el tablero ni como doc legado: la cola entera se
+    archiva por fecha y la pasada termina sin error."""
+    queue = base / "queue"
+    destino = base / ("archivo-" + datetime.now(timezone.utc).strftime("%Y-%m-%d"))
+    mkdir(destino)
+    for path in sorted(queue.glob("*.json")):
+        os.replace(path, destino / path.name)
+        fsync_dir(queue)
+        fsync_dir(destino)
+    print(f"progress-events: {corrida}: corrida sin registro en el tablero; "
+          f"cola archivada en {destino}", file=sys.stderr)
+    return destino
+
+
+def avisar_sin_revision(base, corrida):
+    marker = base / ".sin-revision"
+    if marker.exists():
+        return
+    print(f"progress-events: {corrida}: sin revisión administrada "
+          f"(solo documento legado); cola en espera", file=sys.stderr)
+    create_immutable(marker, b"")
+
+
+def quitar_marcador_sin_revision(base):
+    marker = base / ".sin-revision"
+    if marker.exists():
+        marker.unlink()
+        fsync_dir(base)
 
 
 def worker_can_rebase(event, doc):
@@ -403,7 +454,19 @@ def publish(args, max_events=None, quiet=False):
             event["expectedRevision"] = attempt["expectedRevision"]
         # An event already accepted by the gateway can be retried with its original ID.
         if event.get("kind") != "run.opened" and "expectedRevision" not in event:
-            event["expectedRevision"] = get(args, args.corrida)["revision"]
+            estado_get = get(args, args.corrida)
+            if estado_get["estado"] == "sinRegistro":
+                archivar_cola(base, args.corrida)
+                if not quiet:
+                    print(json.dumps({"published": count}))
+                return count
+            if estado_get["estado"] == "sinRevision":
+                avisar_sin_revision(base, args.corrida)
+                if not quiet:
+                    print(json.dumps({"published": count}))
+                return count
+            quitar_marcador_sin_revision(base)
+            event["expectedRevision"] = estado_get["revision"]
         if "expectedRevision" in event:
             replace_atomic(attempt_path, encoded({"id": identifier, "expectedRevision": event["expectedRevision"]}))
         response = gateway(args, "runbook.progress.event", event)
@@ -413,7 +476,7 @@ def publish(args, max_events=None, quiet=False):
                 supersede_import(base, path, original_event, reason, response.get("revision"))
                 continue
             if event.get("kind") == "run.opened" and reason == "corrida ya existe":
-                accepted = get(args, args.corrida)
+                accepted = requerir_administrada(get(args, args.corrida), args.corrida)
                 intended_doc = event.get("doc")
                 intended = intended_doc.get("carriles", []) if isinstance(intended_doc, dict) else []
                 accepted_lanes = accepted["doc"].get("carriles", [])
@@ -427,7 +490,7 @@ def publish(args, max_events=None, quiet=False):
             # A stale revision is only reconsidered after reading the authoritative state.
             conflict = response.get("reason") == "revision conflict" or response.get("razon") == "conflicto"
             if conflict and event.get("kind") in ("round.started", "round.ready", "round.verdict", "part.worker"):
-                latest = get(args, args.corrida)
+                latest = requerir_administrada(get(args, args.corrida), args.corrida)
                 if event.get("kind") != "part.worker" or worker_can_rebase(event, latest["doc"]):
                     current = latest["revision"]
                     if current != event.get("expectedRevision"):
@@ -503,7 +566,7 @@ def publish_all(args):
 
 def sync(args):
     corrida = check(args.corrida, RUN_RE, "corrida")
-    response = get(args, corrida)
+    response = requerir_administrada(get(args, corrida), corrida)
     stamp = now()
     metadata = {"corrida": corrida, "revision": response["revision"], "syncedAt": stamp}
     markdown = (f"# Estado de {corrida}\n\nrevisión: {response['revision']}\nsincronizado: {stamp}\n\n"
