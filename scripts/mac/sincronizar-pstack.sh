@@ -141,8 +141,17 @@ enlazar() {
   mkdir -p "$RESPALDO/$tipo"
   if [ -e "$destino" ] || [ -L "$destino" ]; then
     guardado="$RESPALDO/$tipo/$(basename "$destino")"
-    # Si ese nombre ya está respaldado, lo de ahora es un enlace nuestro de otra corrida.
-    if [ -e "$guardado" ] || [ -L "$guardado" ]; then rm -rf "$destino"; else mv "$destino" "$guardado"; fi
+    if [ ! -e "$guardado" ] && [ ! -L "$guardado" ]; then
+      mv "$destino" "$guardado"
+    elif [ -L "$destino" ] && grep -qxF "$destino" "$CREADOS" 2>/dev/null; then
+      # Un enlace que activar creó en otra corrida: se rehace, no hay nada que guardar.
+      rm "$destino"
+    else
+      # El nombre ya está respaldado pero lo de ahora no es nuestro (alguien lo cambió después de
+      # activar): se guarda aparte con fecha, nunca se borra.
+      mv "$destino" "$guardado.$(date -u +%Y%m%dT%H%M%SZ)"
+      log "respaldado aparte: $destino (ya había un respaldo con ese nombre)"
+    fi
   fi
   ln -s "$objetivo" "$destino"
   grep -qxF "$destino" "$CREADOS" 2>/dev/null || printf '%s\n' "$destino" >> "$CREADOS"

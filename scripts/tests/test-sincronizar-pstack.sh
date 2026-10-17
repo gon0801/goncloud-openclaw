@@ -96,6 +96,14 @@ bash "$S" activar >/dev/null || fail "4: el segundo activar falló"
 [ "$(wc -l < "$respaldo/creados.txt" | tr -d " ")" = "$antes" ] || fail "4: el segundo activar registró enlaces"
 [ -f "$respaldo/agents-skills/poteto-mode/VIEJO" ] || fail "4: el segundo activar pisó el respaldo"
 
+# 4b. alguien cambia un enlace nuestro por contenido propio después de activar: la siguiente
+# activación lo guarda aparte, no lo borra.
+rm "$HOME/.agents/skills/poteto-mode"; mkdir "$HOME/.agents/skills/poteto-mode"; echo mio > "$HOME/.agents/skills/poteto-mode/MIO"
+bash "$S" activar >/dev/null || fail "4b: activar falló"
+ls "$respaldo"/agents-skills/poteto-mode.*/MIO >/dev/null 2>&1 || fail "4b: borró el contenido propio que reapareció bajo un nombre ya respaldado"
+[ -f "$respaldo/agents-skills/poteto-mode/VIEJO" ] || fail "4b: pisó el respaldo original"
+[ "$(readlink "$HOME/.agents/skills/poteto-mode")" = "$RAIZ/skills/poteto-mode" ] || fail "4b: no volvió a enlazar"
+
 # 5. una skill que el original retira deja de estar enlazada, salvo los enlaces que ya estaban.
 rm -rf "$RAIZ/skills/how" "$RAIZ/skills/tdd"
 bash "$S" activar >/dev/null || fail "5: activar falló tras retirar how"
