@@ -3,7 +3,7 @@
  * con estados con nombre: ningún fallo de disco lanza; todo camino termina en
  * un estado de la unión ArchivoRaiz. Cero HTML (eso vive en render.ts).
  */
-import { lstatSync, readdirSync, readFileSync, realpathSync } from "node:fs";
+import { closeSync, constants, fstatSync, lstatSync, openSync, readdirSync, readFileSync, realpathSync } from "node:fs";
 import { isAbsolute, join, relative, sep } from "node:path";
 
 import { validarRootId } from "./contrato.ts";
@@ -41,6 +41,8 @@ export function leerArchivoRaiz(raicesDir: string, stem: string): ArchivoRaiz {
     return { estado: "ilegible", detalle: errno(err) };
   }
   if (st.isSymbolicLink()) return { estado: "enlace" };
+  // Un FIFO bloquearía el readFileSync síncrono y con él todo el gateway.
+  if (!st.isFile()) return { estado: "ilegible", detalle: "no-regular" };
 
   // La contención es contra raicesDir REAL: un proyecciones/ reemplazado por
   // symlink que escape no se lee, aunque cada archivo dentro parezca legítimo.
@@ -61,11 +63,19 @@ export function leerArchivoRaiz(raicesDir: string, stem: string): ArchivoRaiz {
   const rel = relative(base, real);
   if (rel === ".." || rel.startsWith(`..${sep}`) || isAbsolute(rel)) return { estado: "fuera" };
 
+  // Un solo descriptor sin seguir enlaces: si el archivo cambió desde el lstat
+  // por un enlace o un FIFO, el open falla o el fstat lo rechaza.
   let crudo: string;
+  let fd: number | undefined;
   try {
-    crudo = readFileSync(rutaArchivo, "utf8");
+    fd = openSync(rutaArchivo, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+    if (!fstatSync(fd).isFile()) return { estado: "ilegible", detalle: "no-regular" };
+    crudo = readFileSync(fd, "utf8");
   } catch (err) {
+    if (errno(err) === "ELOOP") return { estado: "enlace" };
     return { estado: "ilegible", detalle: errno(err) };
+  } finally {
+    if (fd !== undefined) closeSync(fd);
   }
   let doc: unknown;
   try {

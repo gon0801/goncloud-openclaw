@@ -4,6 +4,7 @@
  * <raicesDir>/proyecciones/ y render puro con `ahora` por parámetro. Sin HTTP.
  */
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -12,7 +13,7 @@ import { describe, it } from "node:test";
 import { validarRootId } from "./contrato.ts";
 import { validarProyeccion } from "./proyeccion.ts";
 import { leerArchivoRaiz, leerRaices } from "./raices.ts";
-import { formatearHace, renderRaices, renderRaiz } from "./render.ts";
+import { formatearHace, renderRaices, renderRaiz, SCRIPT_RAIZ } from "./render.ts";
 
 /** Base válida: la proyección vigente del fixture de scripts/tests (root-03). */
 function docProyeccion(cambios: Record<string, unknown> = {}): Record<string, unknown> {
@@ -257,6 +258,17 @@ describe("leerRaices / leerArchivoRaiz (frontera de disco)", () => {
     }
   });
 
+  it("un FIFO no se abre para leer: ilegible no-regular, sin bloquear", () => {
+    const { raices, limpiar } = dirRaices();
+    try {
+      mkdirSync(join(raices, "proyecciones"), { recursive: true });
+      execFileSync("mkfifo", [join(raices, "proyecciones", "root-03.json")]);
+      assert.deepEqual(leerArchivoRaiz(raices, "root-03"), { estado: "ilegible", detalle: "no-regular" });
+    } finally {
+      limpiar();
+    }
+  });
+
   it("archivo inexistente: ausente", () => {
     const { raices, limpiar } = dirRaices();
     try {
@@ -292,6 +304,15 @@ describe("render de raíces (puro, ahora por parámetro)", () => {
     assert.equal(formatearHace(86399000), "hace 23 h");
     assert.equal(formatearHace(86400000), "hace 1 d");
     assert.equal(formatearHace(5 * 86400000), "hace 5 d");
+  });
+
+  it("sin conexión: el banner viaja oculto y el script lo muestra si el fetch falla", () => {
+    for (const html of [renderRaices({ estado: "vacio" }, 0), renderRaiz("root-03", { estado: "ausente" }, 0)]) {
+      assert.ok(html.includes('<div id="conexion" hidden>sin conexión</div>'), html);
+      assert.ok(html.includes(`<script>${SCRIPT_RAIZ}</script>`));
+    }
+    assert.match(SCRIPT_RAIZ, /\.catch\(function\(\)\{document\.getElementById\("conexion"\)\.hidden=false;\}\)/);
+    assert.match(SCRIPT_RAIZ, /if\(r\.ok\)\{location\.reload\(\);return;\}document\.getElementById\("conexion"\)\.hidden=false;/);
   });
 
   it("lista vacío: 'sin raíces' con nombre, sin tabla", () => {
