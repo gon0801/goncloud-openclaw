@@ -183,7 +183,7 @@ activar() {
 }
 
 restaurar() {
-  local par dir destino item creado
+  local par dir destino item creado nombre
   [ -d "$RESPALDO" ] || falla "no hay respaldo en $RESPALDO"
   # Primero se quitan todos los enlaces que activar creó en cualquier corrida; lo que había antes
   # vuelve después desde el respaldo.
@@ -197,7 +197,14 @@ restaurar() {
     [ -d "$dir" ] || continue
     for item in "$dir"/* ; do
       [ -e "$item" ] || [ -L "$item" ] || continue
-      rm -rf "${destino:?}/$(basename "$item")"
+      nombre=$(basename "$item")
+      # Las copias con fecha que guardó enlazar se quedan en el respaldo archivado.
+      case "$nombre" in *.[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]T[0-9][0-9][0-9][0-9][0-9][0-9]Z) continue ;; esac
+      # Lo que alguien puso ahí después de activar no se borra: va al respaldo archivado.
+      if [ -e "$destino/$nombre" ] || [ -L "$destino/$nombre" ]; then
+        mv "$destino/$nombre" "$dir/$nombre.ajeno-$(date -u +%Y%m%dT%H%M%SZ)"
+        log "guardado en el respaldo: $destino/$nombre (apareció después de activar)"
+      fi
       mv "$item" "$destino/"
     done
   done

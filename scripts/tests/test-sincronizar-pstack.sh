@@ -117,7 +117,12 @@ bash "$S" activar >/dev/null || fail "5: activar falló con la skill nueva"
 
 # 6. restaurar deshace la activación, también los enlaces de skills que no existían antes.
 [ -L "$HOME/.agents/skills/deslop" ] || fail "6: activar no había enlazado deslop"
+# alguien pone contenido propio donde estaba un enlace nuestro con respaldo: restaurar no lo borra.
+rm "$HOME/.agents/skills/poteto-mode"; mkdir "$HOME/.agents/skills/poteto-mode"; echo mio2 > "$HOME/.agents/skills/poteto-mode/MIO2"
 bash "$S" restaurar >/dev/null || fail "6: restaurar falló"
+archivado=$(ls -d "$HOME"/.agents/.respaldo-pstack.restaurado-* | head -1)
+ls "$archivado"/agents-skills/poteto-mode.ajeno-*/MIO2 >/dev/null 2>&1 || fail "6: restaurar borró el contenido que apareció después de activar"
+ls -d "$HOME"/.agents/skills/poteto-mode.2* >/dev/null 2>&1 && fail "6: restaurar devolvió una copia con fecha a la carpeta viva"
 [ -f "$HOME/.agents/skills/poteto-mode/VIEJO" ] || fail "6: no volvió la skill vieja"
 [ -e "$HOME/.agents/skills/deslop" ] || [ -L "$HOME/.agents/skills/deslop" ] && fail "6: quedó el enlace nuevo a deslop"
 [ -e "$HOME/.claude/agents/poteto-agent.md" ] && fail "6: quedó el agente nuevo enlazado"
