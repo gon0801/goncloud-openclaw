@@ -25,13 +25,13 @@ skill() {  # skill <dir> <nombre> <valor de la marca o vacío>
   } > "$1/$2/SKILL.md"
 }
 
-arbol() {  # arbol <salida.tgz> [sin-poteto]
+arbol() {  # arbol <salida.tgz> [sin-poteto | sin-adaptador]
   local r="$T/arbol-$$-$RANDOM/cursor-plugins-abc1234"
   mkdir -p "$r/harness/pstack/claude-code/agents" "$r/harness/pstack/claude-code/docs/harness" "$r/cursor-team-kit/skills"
   [ "${2:-}" = sin-poteto ] || skill "$r/harness/pstack/claude-code/skills" poteto-mode true
   skill "$r/harness/pstack/claude-code/skills" tdd true
   skill "$r/harness/pstack/claude-code/skills" how ""
-  echo "# adaptador" > "$r/harness/pstack/claude-code/docs/harness/claude-code.md"
+  [ "${2:-}" = sin-adaptador ] || echo "# adaptador" > "$r/harness/pstack/claude-code/docs/harness/claude-code.md"
   echo "poteto" > "$r/harness/pstack/claude-code/agents/poteto-agent.md"
   echo "sicko" > "$r/harness/pstack/claude-code/agents/comment-sicko.md"
   skill "$r/cursor-team-kit/skills" deslop ""
@@ -44,6 +44,7 @@ mkdir -p "$HOME/.agents/skills" "$HOME/.claude/skills" "$HOME/.claude/agents"
 export PSTACK_MIN_SKILLS=3 PSTACK_TEAM_KIT=deslop
 arbol "$T/bueno.tgz"
 arbol "$T/roto.tgz" sin-poteto
+arbol "$T/sin-adaptador.tgz" sin-adaptador
 RAIZ="$HOME/.agents/pstack-oficial"
 
 # Lo que hay hoy: una skill del espejo viejo (directorio real), un enlace relativo de Claude que
@@ -52,6 +53,7 @@ skill "$HOME/.agents/skills" poteto-mode ""
 echo viejo > "$HOME/.agents/skills/poteto-mode/VIEJO"
 ln -s ../../.agents/skills/tdd "$HOME/.claude/skills/tdd"
 skill "$HOME/.agents/skills" babysit ""
+ln -s ../../.agents/skills/ajena-borrada "$HOME/.claude/skills/ajena-borrada"
 
 # 1. preparar: copia, apaga la marca solo en el frontmatter, deja el ORIGEN.
 PSTACK_TARBALL="$T/bueno.tgz" bash "$S" preparar > "$T/p1.log" 2>&1 || { cat "$T/p1.log"; fail "1: preparar falló con el árbol bueno"; }
@@ -71,6 +73,8 @@ cp "$RAIZ/ORIGEN" "$T/origen-bueno"
 PSTACK_TARBALL="$T/roto.tgz" bash "$S" preparar >/dev/null 2>&1 && fail "2: preparar aceptó un árbol sin poteto-mode"
 cmp -s "$RAIZ/ORIGEN" "$T/origen-bueno" || fail "2: el árbol roto pisó la copia buena"
 [ -e "$RAIZ.nueva" ] && fail "2: dejó la copia a medias"
+PSTACK_TARBALL="$T/sin-adaptador.tgz" bash "$S" preparar >/dev/null 2>&1 && fail "2: preparar aceptó un árbol sin docs/harness/claude-code.md"
+cmp -s "$RAIZ/ORIGEN" "$T/origen-bueno" || fail "2: el árbol sin adaptador pisó la copia buena"
 
 # 3. activar: enlaza, respalda lo que había, deja en paz lo ajeno y el enlace relativo bueno.
 bash "$S" activar > "$T/activar.log" || fail "3: activar falló"
@@ -82,6 +86,7 @@ bash "$S" activar > "$T/activar.log" || fail "3: activar falló"
 respaldo=$(ls -d "$HOME"/.agents/.respaldo-pstack-* 2>/dev/null | head -1)
 [ -f "$respaldo/agents-skills/poteto-mode/VIEJO" ] || fail "3: no respaldó la skill vieja"
 [ -f "$HOME/.agents/.pstack-oficial-activo" ] || fail "3: no dejó la marca de activa"
+[ -L "$HOME/.claude/skills/ajena-borrada" ] || fail "3: borró un enlace roto ajeno"
 
 # 4. repetir activar no cambia nada ni crea respaldos nuevos.
 antes=$(ls -d "$HOME"/.agents/.respaldo-pstack-* | wc -l)
@@ -95,9 +100,13 @@ bash "$S" activar >/dev/null || fail "5: activar falló tras retirar how"
 [ -L "$HOME/.agents/skills/how" ] && fail "5: quedó el enlace roto a how en ~/.agents/skills"
 [ -L "$HOME/.claude/skills/how" ] && fail "5: quedó el enlace roto a how en ~/.claude/skills"
 
-# 6. restaurar deshace la activación.
+# 6. restaurar deshace la activación, también los enlaces de skills que no existían antes.
+[ -L "$HOME/.agents/skills/deslop" ] || fail "6: activar no había enlazado deslop"
 bash "$S" restaurar "$respaldo" >/dev/null || fail "6: restaurar falló"
 [ -f "$HOME/.agents/skills/poteto-mode/VIEJO" ] || fail "6: no volvió la skill vieja"
+[ -e "$HOME/.agents/skills/deslop" ] || [ -L "$HOME/.agents/skills/deslop" ] && fail "6: quedó el enlace nuevo a deslop"
+[ -e "$HOME/.claude/agents/poteto-agent.md" ] && fail "6: quedó el agente nuevo enlazado"
+[ "$(readlink "$HOME/.claude/skills/tdd")" = "../../.agents/skills/tdd" ] || fail "6: restaurar tocó un enlace que activar no creó"
 [ -f "$HOME/.agents/.pstack-oficial-activo" ] && fail "6: la marca de activa sigue"
 
 # 7. la corrida de launchd: con el árbol roto avisa y sale 1; con el bueno y activa, activa.
@@ -109,6 +118,11 @@ touch "$HOME/.agents/.pstack-oficial-activo"
 PSTACK_AVISO_CMD="$T/aviso.sh" PSTACK_TARBALL="$T/bueno.tgz" bash "$S" >/dev/null || fail "7: la corrida buena falló"
 [ "$(readlink "$HOME/.agents/skills/poteto-mode")" = "$RAIZ/skills/poteto-mode" ] || fail "7: la corrida buena con la marca no activó"
 [ "$(wc -l < "$T/avisos.txt" | tr -d " ")" = 1 ] || fail "7: la corrida buena avisó"
+# un activar que falla a media corrida (la carpeta de agentes es un archivo) sale 1 y avisa.
+rm -rf "$HOME/.claude/agents"; touch "$HOME/.claude/agents"
+PSTACK_AVISO_CMD="$T/aviso.sh" PSTACK_TARBALL="$T/bueno.tgz" bash "$S" >/dev/null 2>&1 && fail "7: la corrida con activar roto salió 0"
+[ "$(wc -l < "$T/avisos.txt" | tr -d " ")" = 2 ] || fail "7: activar roto no avisó"
+rm -f "$HOME/.claude/agents"; mkdir -p "$HOME/.claude/agents"
 
 # 8. el hook de arranque calla sin la marca y da el aviso con ella.
 A="$PWD/scripts/mac/pstack-arranque.sh"
