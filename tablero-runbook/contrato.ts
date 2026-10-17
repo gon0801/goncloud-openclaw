@@ -36,6 +36,11 @@ export const VERIFICADO_VALORES = ["pendiente", "ok", "fallo", "unknown"] as con
 /** Validar ES sanitizar. Clave de disco y de URL. */
 export const FASE_RE = /^[0-9]{1,3}(\.[0-9]{1,3})?$/;
 export const CORRIDA_RE = /^[a-z0-9][a-z0-9-]{0,40}$/;
+/**
+ * `.` y `..` casan la regex y son rutas relativas: se excluyen AQUÍ, en el
+ * lector, porque el hueco sigue abierto del lado del emisor (proyeccion.py).
+ */
+export const ROOT_ID_RE = /^[A-Za-z0-9._-]{1,80}$/;
 /** `owner/repo`; nunca empieza con `-` (spec, valores cerrados). */
 export const REPO_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,38}\/[A-Za-z0-9._-]{1,100}$/;
 
@@ -158,6 +163,10 @@ export type ProgresoDoc = {
 
 export function validarFase(s: unknown): boolean {
   return typeof s === "string" && FASE_RE.test(s);
+}
+
+export function validarRootId(s: unknown): boolean {
+  return typeof s === "string" && ROOT_ID_RE.test(s) && s !== "." && s !== "..";
 }
 
 function esTexto(v: unknown, max: number): boolean {

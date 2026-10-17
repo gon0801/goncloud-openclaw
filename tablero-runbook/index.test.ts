@@ -7,6 +7,7 @@
  * usa. Registrar un hook o una tool lanza: es el contrato de blast radius.
  */
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
@@ -127,6 +128,40 @@ async function llamarRuta(
 
 function fixtureDoc(name: string): ProgresoDoc {
   return JSON.parse(readFileSync(join(here, "fixtures", name), "utf8"));
+}
+
+// ---------------------------------------------------------------------------
+// Raíces (SUA-06 §4.4): proyecciones sistema-agentes.proyeccion.v1 bajo
+// <stateDir>/raices/proyecciones/, servidas por el MISMO prefix /runbook/tablero.
+// ---------------------------------------------------------------------------
+
+function docProyeccion(cambios: Record<string, unknown> = {}): Record<string, unknown> {
+  return structuredClone({
+    schema: "sistema-agentes.proyeccion.v1",
+    rootId: "root-03",
+    planRevision: 1,
+    controlEpoch: 1,
+    generatedAt: "2026-10-13T12:00:00Z",
+    progress: { declared: 66, observed: 33, accepted: null },
+    units: [
+      {
+        unitId: "unit-c",
+        state: "running",
+        host: "mac-local",
+        executor: "opencode",
+        modelId: null,
+        nextCheckAt: "2026-10-13T12:05:00Z",
+        error: null,
+      },
+    ],
+    freshness: { staleAfterMs: 300000 },
+    ...cambios,
+  });
+}
+
+function escribirProyeccion(stateDir: string, stem: string, doc: unknown): void {
+  mkdirSync(join(stateDir, "raices", "proyecciones"), { recursive: true });
+  writeFileSync(join(stateDir, "raices", "proyecciones", `${stem}.json`), JSON.stringify(doc), "utf8");
 }
 
 // ---------------------------------------------------------------------------
@@ -873,17 +908,27 @@ it("v2-native-workers: el HTML del tablero es identico por RPC y HTTP", async ()
     rmSync(dir, { recursive: true, force: true });
   });
 
-  it("pestaña registrada con el descriptor literal de la DoD", async () => {
+  it("pestañas registradas: Runbook intacta + Raíces nueva, literales", async () => {
     const dir = mkdtempSync(join(tmpdir(), "tablero-74-tab-"));
     const host = await cargar({ stateDir: dir });
-    assert.deepEqual(host.descriptores, [{
-      surface: "tab",
-      id: "runbook",
-      label: "Runbook",
-      path: "/runbook/tablero/6",
-      group: "control",
-      requiredScopes: ["operator.read"],
-    }]);
+    assert.deepEqual(host.descriptores, [
+      {
+        surface: "tab",
+        id: "runbook",
+        label: "Runbook",
+        path: "/runbook/tablero/6",
+        group: "control",
+        requiredScopes: ["operator.read"],
+      },
+      {
+        surface: "tab",
+        id: "raices",
+        label: "Raíces",
+        path: "/runbook/tablero/raices",
+        group: "control",
+        requiredScopes: ["operator.read"],
+      },
+    ]);
     rmSync(dir, { recursive: true, force: true });
   });
 
@@ -1109,5 +1154,288 @@ it("v2-native-workers: el HTML del tablero es identico por RPC y HTTP", async ()
     assert.equal(props.github.properties.ghPath.default, "C:\\Users\\ehven\\.openclaw\\tools\\bin\\gh.exe");
     assert.deepEqual(props.fases.default, ["6"]);
     assert.equal(props.stateDir.default, "C:\\Users\\ehven\\.openclaw-state\\tablero-runbook");
+    // SUA-06 §4.4: raicesDir se DECLARA sin default; en runtime deriva de stateDir.
+    assert.equal(props.raicesDir?.type, "string");
+    assert.ok(!("default" in props.raicesDir), "raicesDir no debe traer default de manifest");
+  });
+
+  it("raices: lista con dos proyecciones válidas → 200 con ambas, no 400 de fase", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "tablero-p4-lista-"));
+    try {
+      escribirProyeccion(dir, "root-03", docProyeccion());
+      escribirProyeccion(dir, "root-09", docProyeccion({ rootId: "root-09" }));
+      const host = await cargar({ stateDir: dir });
+      const res = await llamarRuta(host.rutas, "/runbook/tablero/raices");
+      assert.equal(res.statusCode, 200);
+      assert.ok(res.body.includes("root-03"));
+      assert.ok(res.body.includes("root-09"));
+      assert.ok(!res.body.includes("fase inválida"));
+      assert.equal(res.headers["Content-Type"], "text/html; charset=utf-8");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("raices: detalle de una raíz → 200 con sus unidades", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "tablero-p4-detalle-"));
+    try {
+      escribirProyeccion(dir, "root-03", docProyeccion());
+      const host = await cargar({ stateDir: dir });
+      const res = await llamarRuta(host.rutas, "/runbook/tablero/raices/root-03");
+      assert.equal(res.statusCode, 200);
+      assert.ok(res.body.includes("unit-c"));
+      assert.ok(res.body.includes("root-03"));
+      assert.ok(res.body.includes('<a href="/runbook/tablero/raices">← raíces</a>'));
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("raices: sin proyecciones/ → 200 'sin raíces'", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "tablero-p4-vacio-"));
+    try {
+      const host = await cargar({ stateDir: dir });
+      const res = await llamarRuta(host.rutas, "/runbook/tablero/raices");
+      assert.equal(res.statusCode, 200);
+      assert.ok(res.body.includes("sin raíces"));
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("raices: raicesDir en un archivo regular → 200 con estado error nombrando ENOTDIR", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "tablero-p4-enotdir-"));
+    try {
+      const archivo = join(dir, "raices-es-archivo.txt");
+      writeFileSync(archivo, "x", "utf8");
+      const host = await cargar({ stateDir: dir, raicesDir: archivo });
+      const res = await llamarRuta(host.rutas, "/runbook/tablero/raices");
+      assert.equal(res.statusCode, 200);
+      assert.ok(res.body.includes("no se pudo leer el directorio de proyecciones"));
+      assert.ok(res.body.includes("ENOTDIR"));
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("raices: proyección inválida junto a una válida → 200 con ambas y fila 'proyección inválida'", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "tablero-p4-invalida-"));
+    try {
+      escribirProyeccion(dir, "mala", docProyeccion({ progress: { declared: 150, observed: 33, accepted: null } }));
+      escribirProyeccion(dir, "buena", docProyeccion({ rootId: "buena" }));
+      const host = await cargar({ stateDir: dir });
+      const res = await llamarRuta(host.rutas, "/runbook/tablero/raices");
+      assert.equal(res.statusCode, 200);
+      assert.ok(res.body.includes("mala"));
+      assert.ok(res.body.includes("buena"));
+      assert.ok(res.body.includes("proyección inválida"));
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("raices: vieja por staleAfterMs → 'vieja'; fresca sin 'vieja'", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "tablero-p4-vieja-"));
+    try {
+      escribirProyeccion(dir, "vieja", docProyeccion({ generatedAt: "2020-01-01T00:00:00Z", freshness: { staleAfterMs: 300000 } }));
+      escribirProyeccion(dir, "fresca", docProyeccion({
+        rootId: "fresca",
+        generatedAt: new Date(Date.now() - 60_000).toISOString(),
+        freshness: { staleAfterMs: 300000 },
+      }));
+      const host = await cargar({ stateDir: dir });
+      const resVieja = await llamarRuta(host.rutas, "/runbook/tablero/raices/vieja");
+      assert.equal(resVieja.statusCode, 200);
+      assert.ok(resVieja.body.includes('<span class="vieja">vieja</span>'));
+      const resFresca = await llamarRuta(host.rutas, "/runbook/tablero/raices/fresca");
+      assert.equal(resFresca.statusCode, 200);
+      assert.ok(!resFresca.body.includes('<span class="vieja">'));
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("raices: accepted null es '?' y jamás 0", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "tablero-p4-null-"));
+    try {
+      escribirProyeccion(dir, "root-03", docProyeccion());
+      const host = await cargar({ stateDir: dir });
+      const res = await llamarRuta(host.rutas, "/runbook/tablero/raices/root-03");
+      assert.equal(res.statusCode, 200);
+      assert.ok(res.body.includes('<span class="desconocido">?</span>'));
+      assert.ok(!res.body.includes("width:0%"));
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("raices XSS: stem con <b> y state con <script> salen escapados; un solo <script> en el body", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "tablero-p4-xss-"));
+    try {
+      escribirProyeccion(dir, "raiz-<b>", docProyeccion({
+        units: [{
+          unitId: "unit-x",
+          state: '<script>alert("x")</script>',
+          host: "h",
+          executor: "e",
+          modelId: null,
+          nextCheckAt: "2026-10-13T12:05:00Z",
+          error: null,
+        }],
+      }));
+      const host = await cargar({ stateDir: dir });
+      const res = await llamarRuta(host.rutas, "/runbook/tablero/raices");
+      assert.equal(res.statusCode, 200);
+      assert.ok(res.body.includes("raiz-&lt;b&gt;"));
+      assert.ok(!res.body.includes("<b>"));
+      assert.ok(!res.body.includes("<script>alert"));
+      assert.equal(res.body.split("<script").length - 1, 1, "el refresh debe ser el único <script>");
+      const detalle = await llamarRuta(host.rutas, "/runbook/tablero/raices/" + encodeURIComponent("raiz-<b>"));
+      assert.ok([200, 400].includes(detalle.statusCode));
+      if (detalle.statusCode === 200) {
+        assert.ok(detalle.body.includes("&lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt;"));
+        assert.ok(!detalle.body.includes("<script>alert"));
+      }
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("raices: rutas malas → 400 sin leer fuera de raicesDir; symlink se lista sin leerse", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "tablero-p4-rutas-"));
+    try {
+      writeFileSync(join(dir, "sentinela-xyz.json"), "SENTINELA-FUERA-123", "utf8");
+      escribirProyeccion(dir, "root-03", docProyeccion());
+      symlinkSync(join(dir, "sentinela-xyz.json"), join(dir, "raices", "proyecciones", "fuga.json"));
+      const host = await cargar({ stateDir: dir });
+      for (const url of [
+        "/runbook/tablero/raices/..%2F..%2Fx",
+        "/runbook/tablero/raices/..",
+        "/runbook/tablero/raices/.",
+        "/runbook/tablero/raices/a%2Fb",
+        "/runbook/tablero/raices/%zz",
+      ]) {
+        const res = await llamarRuta(host.rutas, url);
+        assert.equal(res.statusCode, 400, `${url} debió ser 400`);
+        assert.ok(res.body.includes("raíz inválida"), `${url} no explica la forma esperada`);
+        assert.ok(!res.body.includes("SENTINELA-FUERA-123"));
+      }
+      const lista = await llamarRuta(host.rutas, "/runbook/tablero/raices");
+      assert.equal(lista.statusCode, 200);
+      assert.ok(lista.body.includes("fuga"));
+      assert.ok(!lista.body.includes("SENTINELA-FUERA-123"));
+      const fuga = await llamarRuta(host.rutas, "/runbook/tablero/raices/fuga");
+      assert.equal(fuga.statusCode, 404);
+      assert.ok(fuga.body.includes("(enlace)"));
+      assert.ok(!fuga.body.includes("SENTINELA-FUERA-123"));
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("raices: /runbook/progress/raices sigue contestando el 400 de fase (gate)", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "tablero-p4-gate-"));
+    try {
+      const host = await cargar({ stateDir: dir });
+      const res = await llamarRuta(host.rutas, "/runbook/progress/raices");
+      assert.equal(res.statusCode, 400);
+      assert.equal(res.body, JSON.stringify({ ok: false, razon: "fase inválida" }));
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("raices: responsiva 390 (B1) — tabla en contenedor con overflow y textos partibles; la fecha vive en title", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "tablero-p4-b1-"));
+    try {
+      escribirProyeccion(dir, "root-03", docProyeccion());
+      const host = await cargar({ stateDir: dir });
+      const lista = await llamarRuta(host.rutas, "/runbook/tablero/raices");
+      const detalle = await llamarRuta(host.rutas, "/runbook/tablero/raices/root-03");
+      assert.equal(lista.statusCode, 200);
+      assert.equal(detalle.statusCode, 200);
+
+      const cssLista = lista.body.match(/<style>([\s\S]*?)<\/style>/)?.[1] ?? "";
+      const cssDetalle = detalle.body.match(/<style>([\s\S]*?)<\/style>/)?.[1] ?? "";
+      assert.ok(cssLista.length > 0 && cssDetalle.length > 0, "falta el <style>");
+      for (const css of [cssLista, cssDetalle]) {
+        // El contenedor de la tabla nunca empuja el body: se desplaza adentro.
+        assert.ok(
+          css.includes(".envolver{overflow-x:auto;max-width:100%}"),
+          "la tabla debe vivir en un contenedor con overflow-x y max-width:100%",
+        );
+        // Ningún estilo fija un ancho mínimo: nada puede estirar el documento más que el viewport.
+        assert.ok(!css.includes("min-width"), "el CSS no debe fijar min-width");
+        // Los textos largos parten en cualquier carácter en vez de empujar el ancho.
+        assert.ok(
+          css.includes(".sub,footer,td{overflow-wrap:anywhere}"),
+          "los bloques de texto deben partir con overflow-wrap:anywhere",
+        );
+      }
+      // m1: la tabla envuelta de verdad (marcado del contenedor alrededor de <table>).
+      assert.ok(
+        /<div class="envolver"><table>/.test(lista.body) && /<div class="envolver"><table>/.test(detalle.body),
+        "la tabla debe estar dentro del contenedor .envolver",
+      );
+      // m1: la fecha cruda con milisegundos no se pinta; viaja en title.
+      assert.ok(!/plan 1 · época 1 · \d{4}-\d{2}-\d{2}T/.test(detalle.body), "el ISO crudo no debe verse en la línea meta");
+      assert.ok(detalle.body.includes('title="2026-10-13T12:00:00Z"'), "la fecha completa debe viajar en title");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("raices: CSP con el sha256 del script inline servido", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "tablero-p4-csp-"));
+    try {
+      escribirProyeccion(dir, "root-03", docProyeccion());
+      const host = await cargar({ stateDir: dir });
+      const res = await llamarRuta(host.rutas, "/runbook/tablero/raices");
+      const m = res.body.match(/<script>([\s\S]*?)<\/script>/);
+      assert.ok(m, "la página no trae el script de refresh");
+      const hash = createHash("sha256").update(m[1], "utf8").digest("base64");
+      assert.equal(
+        res.headers["Content-Security-Policy"],
+        `default-src 'none'; style-src 'unsafe-inline'; script-src 'sha256-${hash}'; connect-src 'self'`,
+      );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("raices: /raices/<stem>.json → 404 (el sufijo NO se quita)", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "tablero-p4-json-"));
+    try {
+      escribirProyeccion(dir, "root-03", docProyeccion());
+      const host = await cargar({ stateDir: dir });
+      const res = await llamarRuta(host.rutas, "/runbook/tablero/raices/root-03.json");
+      assert.equal(res.statusCode, 404);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("raices: tope de unidades en el detalle (200 filas + '… y N unidades más')", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "tablero-p4-tope-"));
+    try {
+      const units = Array.from({ length: 250 }, (_, i) => ({
+        unitId: `unit-${String(i).padStart(3, "0")}`,
+        state: "running",
+        host: "mac-local",
+        executor: "opencode",
+        modelId: null,
+        nextCheckAt: "2026-10-13T12:05:00Z",
+        error: null,
+      }));
+      escribirProyeccion(dir, "root-03", docProyeccion({ units }));
+      const host = await cargar({ stateDir: dir });
+      const res = await llamarRuta(host.rutas, "/runbook/tablero/raices/root-03");
+      assert.equal(res.statusCode, 200);
+      assert.ok(res.body.includes(">unit-199<"));
+      assert.ok(!res.body.includes(">unit-200<"));
+      assert.ok(res.body.includes("… y 50 unidades más"));
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
