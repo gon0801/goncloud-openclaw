@@ -972,3 +972,12 @@ reproducible vuelve en dos rondas consecutivas; no se mergea abierto. Trabajo
 independiente puede seguir. Este plan no promete resolver falta de autoridad,
 credenciales o servicios externos ignorando su estado. Un solo PR
 `faseu6/cierre` reunirá los recibos finales; ningún estado cambia ahora a completo.
+
+## Recertificación automática de la ruta de encargos (2026-10-17)
+
+Decidido por David el 2026-10-17: una actualización de opencode o de claude ya no cierra la ruta hasta que alguien la recertifique; el host mide la versión nueva solo y la abre si todo sale verde. Diseño y filas R.1 a R.5 en [docs/superpowers/specs/2026-10-17-recertificacion-automatica-design.md](docs/superpowers/specs/2026-10-17-recertificacion-automatica-design.md).
+
+| Fila | Estado |
+| --- | --- |
+| R.1 a R.4, construcción | cc:TODO |
+| R.5, en vivo con opencode 1.19.3 y claude 2.1.302 | cc:TODO |
