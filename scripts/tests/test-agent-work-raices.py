@@ -341,6 +341,16 @@ class ExcepcionMalformada(Pasada):
         self.assertNotIn("rota-exc-00-raiz", notados)
 
 
+class ExcepcionSinUnitId(Pasada):
+    def test_sin_la_clave_unitid_sale_como_de_la_raiz(self):
+        snapshot = fixture("excepciones")
+        del snapshot["exceptions"][0]["unitId"]
+        avisos = AvisarDoble()
+        self.correr({"root-excepciones": snapshot}, avisar_fn=avisos)
+        self.assertIn("*root-excepciones*/(raíz) · CONFIRMAR_PLAN (exc-00-raiz)", avisos.textos[0])
+        self.assertEqual(self.resultado["errores"], [])
+
+
 class DosPasadasALaVez(Pasada):
     def test_con_el_candado_ocupado_la_pasada_se_salta(self):
         avisos = AvisarDoble()

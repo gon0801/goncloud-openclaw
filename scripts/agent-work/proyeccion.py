@@ -424,7 +424,7 @@ def _excepcion_avisable(excepcion: dict) -> str | None:
 def _mensaje_excepciones(debidas: list[tuple[str, dict]]) -> str:
     lineas = [f"⚠️ *Excepciones sin respuesta* ({len(debidas)})"]
     for root_id, excepcion in debidas[:8]:
-        unidad = excepcion["unitId"] or "(raíz)"
+        unidad = excepcion.get("unitId") or "(raíz)"
         desde = _instante(excepcion["raisedAt"], "raisedAt").strftime("%H:%MZ")
         lineas.append("")
         lineas.append(
