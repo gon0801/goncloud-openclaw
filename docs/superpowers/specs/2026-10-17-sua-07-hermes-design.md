@@ -50,7 +50,12 @@ Así, la mayor parte de los ensayos corre en la Mac. La PC solo certifica el ada
 
 ### 3.2 Lo compartido con G: copia fijada
 
-Lo de G se copia a `shared/sistema-agentes/` de H: `contrato.py`, los fixtures de `scripts/tests/fixtures/sistema-agentes/`, `manifiesto-ensayos.json`, `politica-calidad.json`, y `proyeccion.py` con `spool.py` (de donde sale `derivar`, §3.6). Junto va un `pin.json` con el commit de G y el `sha256` de cada archivo.
+Lo de G se copia a `shared/sistema-agentes/g/` de H, en espejo de sus rutas en G: `scripts/sistema_agentes/contrato.py`, `scripts/sistema_agentes/derivar.py`, los fixtures de `scripts/tests/fixtures/sistema-agentes/` (con `manifiesto-ensayos.json`) y `docs/evidence/agent-work/politica-calidad.json`. Junto va un `pin.json` con el commit de G y el `sha256` de cada archivo.
+
+Hay dos razones para copiar en espejo:
+
+- `contrato.py` busca `politica-calidad.json` por su ruta relativa en G (`contrato.py:657`), así que se copia sin editarlo.
+- `derivar` hoy vive en `scripts/agent-work/proyeccion.py`, que importa `fcntl`, y `fcntl` no existe en Windows. Por eso H0 empieza en G: saca `derivar` y sus ayudantes a `scripts/sistema_agentes/derivar.py`, un módulo puro sin `fcntl`, `subprocess` ni `socket`. `proyeccion.py` lo importa y no cambia de conducta. La copia de H solo trae ese módulo puro.
 
 - Una prueba de H recalcula los digests.
 - Un job de la CI de H baja esos archivos de G (repo público) en el commit fijado y los compara byte a byte.
@@ -98,7 +103,7 @@ El plugin `goncloud-team` gana `goncloud_root_submit`, `goncloud_root_read`, `go
 
 ### 3.6 Proyección, flota y poteto
 
-- **Proyección:** `goncloud_root_read` devuelve un snapshot con la forma de `managedTasks.root.read` de R. La proyección sale de la copia fijada de `derivar` de G (`proyeccion.py`, que trae `spool.py`), así que H y el panel cuentan el porcentaje igual (I14). Los documentos `proyeccion.v1` se escriben en `%HERMES_HOME%\raices\proyecciones`. Subirlos al panel de la Mini es de SUA-09H (fila).
+- **Proyección:** `goncloud_root_read` devuelve un snapshot con la forma de `managedTasks.root.read` de R. La proyección sale de la copia fijada de `derivar` de G (`sistema_agentes/derivar.py`), así que H y el panel cuentan el porcentaje igual (I14). Los documentos `proyeccion.v1` se escriben en `%HERMES_HOME%\raices\proyecciones`. Subirlos al panel de la Mini es de SUA-09H (fila).
 - **Flota:** cada intento lleva `flota.v1` con el perfil de H como `specialist`, `host: "gon-pc"`, el modelo exacto o `null`, y la generación de configuración (`goncloud-managed.json`, `source_revision`).
 - **Poteto:** `configure_team.py` copia el contexto canónico de poteto (fijado con su digest) al SOUL de los perfiles de equipo. La atestación de flota cita ese digest (I08). Una sonda por perfil, como las de `probe_route.py`, mide que llegó.
 - **Advisor:** si un perfil no emite eventos, la cobertura se declara `unknown`, y su caída no aprueba ni despacha (I18).
@@ -154,14 +159,15 @@ Cada ensayo del bloque se parte en las cláusulas de su `distingue` del manifies
 
 | Rebanada | Qué | Depende de |
 |---|---|---|
-| H0 | Copia fijada de G (`shared/sistema-agentes/`, con `proyeccion.py` y `spool.py`, más `pin.json`), su prueba de digests, el job de CI que compara con G, `tests/ensayos-h.json` con su recorrido, e I01 e I02 | — |
-| H1 | Store y frontera transaccional (bandeja de salida), `decidir` con regla4, control y efectos, con el doble del kanban (I03–I06, I12, I13, I20) | H0 |
+| H0a | En G: `derivar` a `scripts/sistema_agentes/derivar.py`, puro y sin `fcntl`; `proyeccion.py` lo importa; una prueba lo importa con `fcntl` bloqueado | — |
+| H0b | En H: la copia en espejo (`shared/sistema-agentes/g/`, `pin.json`), su prueba de digests, el job de CI que compara con G, `tests/ensayos-h.json` con su recorrido, e I01 e I02 | H0a |
+| H1 | Store y frontera transaccional (bandeja de salida), `decidir` con regla4, control y efectos, con el doble del kanban (I03–I06, I12, I13, I20) | H0b |
 | H2 | Adaptador kanban, ticker y herramientas `goncloud_root_*` en `goncloud-team`; pruebas reales en la PC sobre una copia de `HERMES_HOME`, y el primer par `(versión, code_sha)` en `certificadas.json` | H1 |
 | H3 | Autoridad (I07), excepciones por Telegram y proyección (I14, I16) | H1 |
 | H4 | Flota, poteto, capacidades, `certificar.py` y la puerta por par certificado (I08–I11, I18); instalador y reversa para SUA-09H | H2, H3 |
 | H5 | Ventana viva en la PC, una raíz chica de punta a punta con una excepción forzada por Telegram, recibo `SUA-07.md` y filas | H4 |
 
-H1 y H3 pueden ir en paralelo una vez que esté H0. Cada rebanada es un PR en goncloud-hermes; el recibo va en G.
+H1 y H3 pueden ir en paralelo una vez que esté H0b. Cada rebanada es un PR en goncloud-hermes; el recibo va en G.
 
 ## 7. Lo que no entra en SUA-07
 
