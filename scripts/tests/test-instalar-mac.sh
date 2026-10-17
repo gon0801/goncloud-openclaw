@@ -75,6 +75,10 @@ done
 for f in brief.py contexto.py contracts.py flota.py host.py lineas.py modelos.py native_gateway.py progress_bridge.py resources.py routing.py sesion.py spool.py cutover.py proyeccion.py; do
   cmp -s "scripts/agent-work/$f" "$HOME/bin/agent-work/$f" || fail "agent-work/$f falta o difiere"
 done
+# El paquete chico de sistema_agentes que proyeccion.py importa (SUA-07 H0a).
+for f in __init__.py derivar.py; do
+  cmp -s "scripts/sistema_agentes/$f" "$HOME/bin/agent-work/sistema_agentes/$f" || fail "agent-work/sistema_agentes/$f falta o difiere"
+done
 # La carpeta de datos del paquete (SUA-03): cada archivo, entera, competencia incluida.
 for f in $(cd scripts/agent-work/contexto && find . -type f | sed 's|^\./||' | sort); do
   cmp -s "scripts/agent-work/contexto/$f" "$HOME/bin/agent-work/contexto/$f" || fail "agent-work/contexto/$f falta o difiere"
@@ -244,6 +248,21 @@ chmod +x "$T/bin/git-contexto"
 out="$(GIT_BIN="$T/bin/git-contexto" bash "$INST" 2>&1)" && fail "instalo con el blob de contexto adulterado"
 printf '%s' "$out" | grep -q "contexto/poteto.v1.json" || fail "no nombra el blob distinto de contexto: $out"
 [ -e "$T/casa2b/bin" ] && fail "escribio archivos antes de fallar el blob de contexto"
+
+# (7c) blob contra la rama para sistema_agentes/ (SUA-07 H0a): derivar.py no se
+# instala adulterado (mutacion: fase_blobs sin el bucle de sistema_agentes).
+export HOME="$T/casa2s"; mkdir -p "$HOME"
+cat >"$T/bin/git-sistema" <<STUB
+#!/bin/sh
+case "\$*" in
+  *rev-parse*sistema_agentes/derivar.py*) printf '0000000000000000000000000000000000000000\n';;
+  *) exec "$T/bin/git-integrado" "\$@";;
+esac
+STUB
+chmod +x "$T/bin/git-sistema"
+out="$(GIT_BIN="$T/bin/git-sistema" bash "$INST" 2>&1)" && fail "instalo con el blob de derivar.py adulterado"
+printf '%s' "$out" | grep -q "derivar.py" || fail "no nombra el blob distinto de sistema_agentes: $out"
+[ -e "$T/casa2s/bin" ] && fail "escribio archivos antes de fallar el blob de sistema_agentes"
 
 # (8) archivo ausente en la rama se declara y no aborta.
 cat >"$T/bin/git-ausente" <<STUB

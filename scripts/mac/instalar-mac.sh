@@ -37,6 +37,9 @@ LINEA_SOURCE="source ~/bin/agent-tmux-shell.zsh"
 # conserva el +x).
 BINS="progress-events.py agent-tmux.sh agent-tmux-shell.zsh tmux-activity-watch.sh claude-stop-openclaw-event.sh shot.sh tablero-trabajo.sh"
 AGENT_WORK_FILES="brief.py contexto.py contracts.py flota.py host.py lineas.py modelos.py native_gateway.py progress_bridge.py resources.py routing.py sesion.py spool.py cutover.py proyeccion.py"
+# El modulo puro que proyeccion.py importa (SUA-07 H0a) viaja como paquete chico de
+# sistema_agentes: solo lo que el host de la Mac usa, no el resto del paquete.
+SISTEMA_AGENTES_FILES="__init__.py derivar.py"
 
 di() { printf '%s\n' "$1"; }
 falla() { printf 'instalar-mac: error: %s\n' "$1" >&2; exit 1; }
@@ -86,6 +89,12 @@ fase_blobs() {
     real="$("$GIT_BIN" -C "$RAIZ" hash-object "$RAIZ/agent-work/$f" 2>/dev/null)" || falla "no se pudo leer $rel"
     [ "$esperado" = "$real" ] || falla "blob distinto de $REF en $rel"
   done
+  for f in $SISTEMA_AGENTES_FILES; do
+    rel="scripts/sistema_agentes/$f"
+    esperado="$("$GIT_BIN" -C "$RAIZ" rev-parse "$REF:$rel" 2>/dev/null)" || { avisa "sin referencia en $REF: $rel (se declara y se sigue)"; continue; }
+    real="$("$GIT_BIN" -C "$RAIZ" hash-object "$RAIZ/sistema_agentes/$f" 2>/dev/null)" || falla "no se pudo leer $rel"
+    [ "$esperado" = "$real" ] || falla "blob distinto de $REF en $rel"
+  done
   # El paquete de datos de SUA-03 (manifiesto, perfiles, competencia) pasa por el mismo guard:
   # un blob distinto de la rama aborta antes de tocar disco; ausente en la rama, se declara y se
   # sigue (bots de #304: se instalaba sin comprobacion).
@@ -113,6 +122,7 @@ modo_dry() {
   di "instalaria desde $AQUI (ref $REF@$(ref_sha)) a HOME=$HOME uid=$QUIEN_UID:"
   for f in $BINS; do sha="$(blob_de "$AQUI/$f")"; di "  bin/$f  (blob ${sha})"; done
   for f in $AGENT_WORK_FILES; do sha="$(blob_de "$RAIZ/agent-work/$f")"; di "  bin/agent-work/$f  (blob ${sha})"; done
+  for f in $SISTEMA_AGENTES_FILES; do sha="$(blob_de "$RAIZ/sistema_agentes/$f")"; di "  bin/agent-work/sistema_agentes/$f  (blob ${sha})"; done
   di "  bin/agent-work/contexto/  (carpeta entera: manifiesto, perfiles y competencia)"
   di "  Library/LaunchAgents/$PL_NOMBRE y $PL2_NOMBRE  (generadas con HOME=$HOME)"
   di "  .tmux.conf  (blob $(blob_de "$AQUI/tmux.conf"))"
@@ -129,6 +139,9 @@ modo_verificar() {
   [ ! -f "$BIN_DIR/progress-events.py" ] || [ -x "$BIN_DIR/progress-events.py" ] || { di "SIN +x: bin/progress-events.py"; mal=$((mal+1)); }
   for f in $AGENT_WORK_FILES; do
     [ -f "$BIN_DIR/agent-work/$f" ] && cmp -s "$RAIZ/agent-work/$f" "$BIN_DIR/agent-work/$f" || { di "DIFIERE: bin/agent-work/$f"; mal=$((mal+1)); continue; }
+  done
+  for f in $SISTEMA_AGENTES_FILES; do
+    [ -f "$BIN_DIR/agent-work/sistema_agentes/$f" ] && cmp -s "$RAIZ/sistema_agentes/$f" "$BIN_DIR/agent-work/sistema_agentes/$f" || { di "DIFIERE: bin/agent-work/sistema_agentes/$f"; mal=$((mal+1)); continue; }
   done
   [ -x "$BIN_DIR/agent-work/cutover.py" ] || { di "SIN +x: bin/agent-work/cutover.py"; mal=$((mal+1)); }
   if [ ! -d "$BIN_DIR/agent-work/contexto" ]; then di "FALTA: bin/agent-work/contexto"; mal=$((mal+1)); else
@@ -176,6 +189,10 @@ modo_instalar() {
   done
   for f in $AGENT_WORK_FILES; do
     copiar_si_difiere "$RAIZ/agent-work/$f" "$BIN_DIR/agent-work/$f" || falla "no se pudo instalar agent-work/$f"
+  done
+  mkdir -p "$BIN_DIR/agent-work/sistema_agentes" || falla "no se pudo crear agent-work/sistema_agentes"
+  for f in $SISTEMA_AGENTES_FILES; do
+    copiar_si_difiere "$RAIZ/sistema_agentes/$f" "$BIN_DIR/agent-work/sistema_agentes/$f" || falla "no se pudo instalar agent-work/sistema_agentes/$f"
   done
   # La carpeta de datos del paquete de SUA-03 (manifiesto, perfiles y competencia): archivo por
   # archivo, sin tocar lo que ya esta igual, y sin dejar dato viejo que el repo ya no trae.
@@ -241,6 +258,7 @@ modo_instalar() {
   di "instalado desde $AQUI (ref $REF@$(ref_sha)):"
   for f in $BINS; do sha="$(blob_de "$AQUI/$f")"; di "  bin/$f  ${sha}"; done
   for f in $AGENT_WORK_FILES; do sha="$(blob_de "$RAIZ/agent-work/$f")"; di "  bin/agent-work/$f  ${sha}"; done
+  for f in $SISTEMA_AGENTES_FILES; do sha="$(blob_de "$RAIZ/sistema_agentes/$f")"; di "  bin/agent-work/sistema_agentes/$f  ${sha}"; done
   di "  LaunchAgents/$PL_NOMBRE y $PL2_NOMBRE  (generadas HOME=$HOME)"
   di "  .tmux.conf  $(blob_de "$AQUI/tmux.conf")"
   di "  .zshrc: $LINEA_SOURCE"
