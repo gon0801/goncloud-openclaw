@@ -43,7 +43,7 @@ Contra el contrato (tabla completa en `capa-durable-vs-contrato.md`):
 
 El código nuevo va en un paquete `plugins/goncloud-team/raices/` de goncloud-hermes, en dos capas:
 
-- **Núcleo:** solo biblioteca estándar y Python 3.11. Trae el validador, `decidir`, el store y la proyección. Corre en la Mac y en la CI de H, sin `hermes_cli`.
+- **Núcleo:** solo biblioteca estándar, compatible con Python 3.9 como el resto de G (en la PC corre con el 3.11 del venv de H). Trae el validador, `decidir`, el store y la proyección. Corre en la Mac y en la CI de H, sin `hermes_cli`.
 - **Adaptador kanban:** `raices/kanban.py`, la única pieza que importa `hermes_cli.kanban_db`. Sus pruebas reales corren en la PC. En la Mac usa un doble con la misma interfaz.
 
 Así, la mayor parte de los ensayos corre en la Mac. La PC solo certifica el adaptador.
@@ -85,7 +85,7 @@ Una caída entre los pasos 1 y 3 termina en reintentar con la misma clave: exact
 
 `raices/decidir.py` es una función pura, `decidir(vista) -> necesidades`, con la misma semántica que `managed-root.decide.ts` de R:
 
-- **Necesidades:** `first`, `correction`, `relay` y `verify` (un criterio sin claim pide su verificación, con su `criterionId` y su intento, como `managed-root.decide.ts:100,512-519`), con `findingsRef` y `findingsRefs`.
+- **Necesidades:** como en R (`managed-root.decide.ts:85-100`), una necesidad `assignment` con su razón (`first`, `correction` o `relay`, con `findingsRef` y `findingsRefs`) y una necesidad `verify` cuando un criterio no tiene claim, con su `criterionId` y su intento (`:512-519`).
 - **Política:** las rondas salen de `politica-calidad.json`. Las rondas 1 a 5 son de corrección con el mismo implementador. La ronda 6 es el relevo, que abre las 5 del implementador nuevo (rondas 6 a 10). Si a la ronda 10 la unidad no converge, se levanta `NECESITA_DAVID`. Así lo fija R (`managed-root.decide.test.ts`, el bucle de rondas 0 a 10 de SUA-05 H1R): el relevo sí consume una ronda, y en total son 10, no 11. El contador va por linaje y no se reinicia con hallazgos nuevos (I12).
 - **Revisor y segundo modelo:** el revisor de una unidad excluye a todos sus autores efectivos (`revisorExcluyeAutores`), y ningún paso pide revisión a un segundo modelo (`segundoModelo: false`). En H esto es vivo: las etapas corren por el router de suscripciones, que puede dar el reviewer en otra posición u otro modelo. `decidir` fija el revisor por perfil y el router no puede sumar una segunda revisión. Un relevo cambia de implementador, nunca agrega revisores.
 - **Cambio de política:** la política vigente es la copia fijada de `politica-calidad.json`, con la decisión fechada de David que la sostiene. H no tiene otra forma de cambiarla que un PR que mueve el pin. Una raíz conserva la versión de política con la que abrió (`meta.qualityPolicy.version`).
@@ -104,7 +104,7 @@ El plugin `goncloud-team` gana `goncloud_root_submit`, `goncloud_root_read`, `go
 ### 3.6 Proyección, flota y poteto
 
 - **Proyección:** `goncloud_root_read` devuelve un snapshot con la forma de `managedTasks.root.read` de R. La proyección sale de la copia fijada de `derivar` de G (`sistema_agentes/derivar.py`), así que H y el panel cuentan el porcentaje igual (I14). Los documentos `proyeccion.v1` se escriben en `%HERMES_HOME%\raices\proyecciones`. Subirlos al panel de la Mini es de SUA-09H (fila).
-- **Flota:** cada intento lleva `flota.v1` con el perfil de H como `specialist`, `host: "gon-pc"`, el modelo exacto o `null`, y la generación de configuración (`goncloud-managed.json`, `source_revision`).
+- **Flota:** cada intento lleva `flota.v1` con el perfil de H como `specialist`, `host: "gon-pc"`, el modelo exacto (`{"id": "<proveedor/modelo>"}`) o, si el router no lo dice, `{"id": null, "reason": "..."}` con la causa, y la generación de configuración (`goncloud-managed.json`, `source_revision`).
 - **Poteto:** `configure_team.py` copia el contexto canónico de poteto (fijado con su digest) al SOUL de los perfiles de equipo. La atestación de flota cita ese digest (I08). Una sonda por perfil, como las de `probe_route.py`, mide que llegó.
 - **Advisor:** si un perfil no emite eventos, la cobertura se declara `unknown`, y su caída no aprueba ni despacha (I18).
 
@@ -139,7 +139,7 @@ Cada ensayo del bloque se parte en las cláusulas de su `distingue` del manifies
 | I11 | Un perfil nuevo da ida y vuelta; uno incompleto se ve; su competencia, caducidad y memoria se conservan | PC |
 | I12 | La corrección converge o se detiene a las 10 rondas (el relevo es la ronda 6); hallazgos nuevos y el relevo no reinician el linaje; la política solo cambia con el pin (decisión de David); una raíz vieja conserva su política; ningún paso pide revisión a un segundo modelo; el revisor excluye a los autores | Mac |
 | I13 | Revisión y CI del head, criterio y entorno vigentes; un `LISTO`, un merge, un rollback o un criterio borrado no fabrican éxito | Mac |
-| I14 | La proyección de H da el mismo estado y porcentaje que `derivar` de G; dos raíces, CI en espera y unidades sin PR | Mac |
+| I14 | Aviso y proyección comparten estado y porcentaje (la de H sale de `derivar` de G); dos raíces, CI en espera y unidades sin PR se representan bien. `no-aplica` en H: "panel" (las raíces de H llegan al panel en SUA-09H, §7) | Mac |
 | I16 | Un PID reutilizado, una sesión caída, datos corruptos y métricas ausentes no atribuyen ni matan nada ajeno | Mac y PC |
 | I18 | Un perfil sin eventos declara cobertura `unknown`; su caída no aprueba ni despacha | Mac |
 | I20 | Presupuesto raíz, cupo global (`max_in_progress`) y por perfil, y escritor exclusivo; el par atómico con dos y tres plazas ocupadas | Mac y PC |
@@ -167,7 +167,7 @@ Cada ensayo del bloque se parte en las cláusulas de su `distingue` del manifies
 | H4 | Flota, poteto, capacidades, `certificar.py` y la puerta por par certificado (I08–I11, I18); instalador y reversa para SUA-09H | H2, H3 |
 | H5 | Ventana viva en la PC, una raíz chica de punta a punta con una excepción forzada por Telegram, recibo `SUA-07.md` y filas | H4 |
 
-H1 y H3 pueden ir en paralelo una vez que esté H0b. Cada rebanada es un PR en goncloud-hermes; el recibo va en G.
+H2 y H3 pueden ir en paralelo una vez que esté H1. Cada rebanada es un PR en goncloud-hermes; el recibo va en G.
 
 ## 7. Lo que no entra en SUA-07
 
