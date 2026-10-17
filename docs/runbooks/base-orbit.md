@@ -124,6 +124,11 @@ Esperado, en orden: sin salida; sin salida; `{"merge":true,"merge_despliega":"no
 
 14. **Rondas por la sección 4 del loop, sin desviación**: solo un bloqueante con reproducción abre ronda, los bots revisan el delta de la corrección sobre el PR, se repite hasta la primera ronda sin bloqueantes (tope 5+5 con relevo, regla 4 de quality-kit en `politica-calidad.json`), y un bloqueante nunca va al plan ni se promueve abierto. La ronda la cierra el coordinador (el rol que corre el loop y es dueño del hilo del PR: comenta, descarta, adjudica, empuja y mergea; loop §1) y el merge entra por las compuertas de la sección 6. Los PRs de docs (plan, cierre) llevan CI verde + la evidencia del bot adjudicada, sin CodeRabbit obligatorio. (La regla del 2026-09-15, «sin tope, se repite mientras la ronda anterior haya encontrado algo», se reemplazó el 2026-09-18: volvía la revisión una cadena sin fin; la cruzada local salió del flujo el 2026-10-12.)
 
+15. **Una plataforma o forma nueva no está "construida" hasta que corre sobre datos reales.** Medido en REPRICING 02 X.4 (2026-10-17): Mercado Libre pasó poteto-mode completo y cuatro rondas de revisión con datos sintéticos de **un miembro por publicación**, y al encender aparecieron cuatro defectos (#463 a #466) que solo se veían con las publicaciones reales de 5 o 6 variantes. Tres se veían en solo lectura. Por eso:
+    - **Al implementar**, las pruebas incluyen la forma más compleja medida en producción por el camino de la regla 6 (cuántas variantes, monedas, canales, orígenes de envío). El LISTO pega esa medición. Una prueba que solo cubre el caso simple no cierra la fila.
+    - **Tras el despliegue D y antes de sembrar la fila X**, el lead corre en producción y pega en el brief: la cobertura de escenarios del universo con el desglose de motivos (un motivo que bloquea más del 10 % de las unidades es hallazgo y frena la siembra), el dry-run de la sonda (sin `--acepto-mutacion-real`) sobre el conejillo de forma más compleja, y la primera corrida en `shadow` con al menos una unidad de esa forma.
+    - **El revisor no aprueba** la sección ni la lectura de la fila X sin esas salidas. Lo que solo una escritura real puede probar (la forma del PUT) se declara como riesgo abierto hasta la sonda; no se reporta como terminado.
+
 ---
 
 ## Compuertas comunes y cola
