@@ -9,7 +9,7 @@ configuración versionada es `gon0801/goncloud-hermes` (rama `feat/hermes-team`)
 Fuentes medidas el 2026-10-16, fuera del repo, en `~/.local/state/sua-loop/mediciones/sua07/`:
 `inventario-pc-2026-10-16.md` (paso 1, solo lectura en la PC) y
 `capa-durable-vs-contrato.md` (lectura de goncloud-hermes en `a8722f1`). Este diseño
-cita sus resultados.
+cita sus resultados. Las citas de código se re-verificaron en `origin/feat/hermes-team` `4e4112e`.
 
 ## 1. Lo que hay hoy (paso 1 del bloque)
 
@@ -28,7 +28,7 @@ Contra el contrato (tabla completa en `capa-durable-vs-contrato.md`):
 
 - **No hay** raíz con plan variable ni criterios, autoridad con `efecto_admisible`, control con época y recibo, `committedEffects`, `excepcion.v1`, `proyeccion.v1`, poteto, ni la política `quality-kit.regla4`.
 - **Hay algo parecido:** la tarea raíz con `idempotency_key`, las etapas como unidades, los *leases* del router como claim, el sobre JSON de resultado y el `status` redactado.
-- **Choca:** la cadena actual corta en 2 rondas de revisión (`workflow.py:887,961-992`, `shared/CONTRACT.md:23`). Además, sus campos `request_key` e `idempotency_key` son nombres que el contrato prohíbe.
+- **Choca:** la cadena actual corta en 2 rondas de revisión (`workflow.py:887,961-992`, `shared/CONTRACT.md:25`). Además, sus campos `request_key` e `idempotency_key` son nombres que el contrato prohíbe.
 - **Ninguna prueba de H** usa los fixtures de G, y las que importan `hermes_cli` solo corren en la PC.
 
 ## 2. Lo que no cambia
@@ -50,7 +50,7 @@ Así, la mayor parte de los ensayos corre en la Mac. La PC solo certifica el ada
 
 ### 3.2 Lo compartido con G: copia fijada
 
-Lo de G se copia a `shared/sistema-agentes/` de H: `contrato.py`, los fixtures de `scripts/tests/fixtures/sistema-agentes/`, `manifiesto-ensayos.json` y `politica-calidad.json`. Junto va un `pin.json` con el commit de G y el `sha256` de cada archivo.
+Lo de G se copia a `shared/sistema-agentes/` de H: `contrato.py`, los fixtures de `scripts/tests/fixtures/sistema-agentes/`, `manifiesto-ensayos.json`, `politica-calidad.json`, y `proyeccion.py` con `spool.py` (de donde sale `derivar`, §3.6). Junto va un `pin.json` con el commit de G y el `sha256` de cada archivo.
 
 - Una prueba de H recalcula los digests.
 - Un job de la CI de H baja esos archivos de G (repo público) en el commit fijado y los compara byte a byte.
@@ -80,12 +80,14 @@ Una caída entre los pasos 1 y 3 termina en reintentar con la misma clave: exact
 
 `raices/decidir.py` es una función pura, `decidir(vista) -> necesidades`, con la misma semántica que `managed-root.decide.ts` de R:
 
-- **Necesidades:** `first`, `correction` o `relay`, con `findingsRef` y `findingsRefs`.
+- **Necesidades:** `first`, `correction`, `relay` y `verify` (un criterio sin claim pide su verificación, con su `criterionId` y su intento, como `managed-root.decide.ts:100,512-519`), con `findingsRef` y `findingsRefs`.
 - **Política:** las rondas salen de `politica-calidad.json`. Son 5 de corrección, 1 relevo y 5 más; a la ronda 10 se levanta `NECESITA_DAVID`. El contador va por linaje y no se reinicia con hallazgos nuevos (I12).
+- **Revisor y segundo modelo:** el revisor de una unidad excluye a todos sus autores efectivos (`revisorExcluyeAutores`), y ningún paso pide revisión a un segundo modelo (`segundoModelo: false`). En H esto es vivo: las etapas corren por el router de suscripciones, que puede dar el reviewer en otra posición u otro modelo. `decidir` fija el revisor por perfil y el router no puede sumar una segunda revisión. Un relevo cambia de implementador, nunca agrega revisores.
+- **Cambio de política:** la política vigente es la copia fijada de `politica-calidad.json`, con la decisión fechada de David que la sostiene. H no tiene otra forma de cambiarla que un PR que mueve el pin. Una raíz conserva la versión de política con la que abrió (`meta.qualityPolicy.version`).
 - **Aceptación:** una unidad se acepta solo con un claim `passed` por cada criterio, del head y el entorno vigentes (I13).
 - **Autoridad:** antes de cada efecto se evalúa `efecto_admisible` con la autoridad embebida en `meta`, al arrancar y al reanudar (I07). Se prueba con `autoridad/efectos.json`.
 
-El trabajo lo corre un cron de H con `--script` y `--no-agent`, como `respaldo-diario-hermes` (`README.md:71`), cada minuto si el ticker lo admite (se mide en H2). En cada vuelta concilia las tarjetas con sus intentos, decide y despacha. El gateway no gana código nuevo en su proceso.
+El trabajo lo corre un cron de H con `--script` y `--no-agent`, como `respaldo-diario-hermes` (`README.md:73`), cada minuto si el ticker lo admite (se mide en H2). En cada vuelta concilia las tarjetas con sus intentos, decide y despacha. El gateway no gana código nuevo en su proceso.
 
 ### 3.5 Entradas, control y excepciones
 
@@ -103,25 +105,41 @@ El plugin `goncloud-team` gana `goncloud_root_submit`, `goncloud_root_read`, `go
 
 ### 3.7 Versión y capacidades
 
-`raices/capacidades.py` lee la versión viva (`hermes --version` y `code_sha` de `gateway_state.json`) y comprueba que el kanban tenga `create_task` con `idempotency_key`, `link_tasks`, `complete_task` y `block_task`. Si falta alguna, la ruta de raíces se niega a abrir, con su causa, y la cadena actual sigue intacta (plan: "una capacidad faltante impide aceptar esa ruta"). Al subir H de versión, el ticker vuelve a comprobarlo. El repo deja de afirmar 0.21.2: documenta la versión certificada.
+La versión de H se acredita como par exacto. `raices/certificadas.json` en el repo lista los pares `(versión, code_sha)` certificados en la PC. Un par entra ahí solo después de pasar en esa PC las pruebas reales del adaptador (H2):
+
+- deduplicación por `idempotency_key`;
+- exclusión de `write_txn` con dos escritores;
+- `link_tasks`, `complete_task` y `block_task`.
+
+`raices/capacidades.py` lee el par vivo (`hermes --version` y `code_sha` de `gateway_state.json`) y la ruta de raíces abre solo si ese par está certificado. La presencia de las cuatro funciones queda como fallo rápido previo, no como permiso.
+
+Como H se actualiza solo (vigía de las 8:35), tras cada subida la ruta de raíces queda cerrada, con la causa `version-no-certificada`, hasta que `raices/certificar.py` (H4) corra en la PC y un PR agregue el par nuevo. Lo mismo vale para una capacidad que se movió: es una capacidad que falta. La cadena actual sigue intacta en los dos casos (plan: "una capacidad faltante impide aceptar esa ruta"). El repo deja de afirmar 0.21.2 y documenta los pares certificados.
 
 ## 4. Cómo se prueba
 
-| Ensayo | Dónde | Prueba |
-|---|---|---|
-| I01, I02 | Mac/CI de H | La copia fijada de `contrato.py` contra los fixtures de `planes/`, igual que en G |
-| I03, I04 | Mac (doble del kanban) y PC (kanban real en una copia de `HERMES_HOME`) | A+B→C con dos tickers y la caída en cada punto de la bandeja de salida: una sola C |
-| I05, I06 | Mac | `pause`/`cancel` contra un efecto con permiso de inicio; un efecto `uncertain` exige conciliación |
-| I07 | Mac | `autoridad/efectos.json` contra `efecto_admisible` |
-| I08, I11 | PC | Sonda por perfil: poteto llega; un perfil nuevo da ida y vuelta; uno incompleto se ve |
-| I09, I10 | PC | El modelo efectivo es el pedido; la subida automática de H no rompe un intento abierto |
-| I12, I13 | Mac | `decidir` con 10 rondas; un `LISTO` o un merge no aceptan nada |
-| I14, I16 | Mac | `derivar` sobre snapshots de H; un PID reutilizado o un JSON roto no atribuyen nada |
-| I18 | Mac | Perfil sin eventos: cobertura `unknown`, sin aprobación |
-| I20 | Mac | Presupuesto raíz y cupo por perfil (`max_in_progress_per_profile`) con dos y tres plazas ocupadas |
-| Aislamiento | Mac y PC | La batería corre sin `openclaw` en el PATH y con la Mini inalcanzable |
+Cada ensayo del bloque se parte en las cláusulas de su `distingue` del manifiesto. `tests/ensayos-h.json` de H guarda una fila por cláusula, con la prueba que la cubre o `no-aplica` y su razón. La batería recorre `manifiesto-ensayos.json` y ese archivo, y se pone roja si a una cláusula le falta prueba, si una prueba citada no existe o si un `no-aplica` no trae razón. Contar un caso por ensayo no basta.
 
-La batería de H gana un archivo que recorre `manifiesto-ensayos.json` y exige un caso por cada ensayo del bloque. Un ensayo sin caso deja la prueba en rojo.
+| Ensayo | Cláusulas | Dónde |
+|---|---|---|
+| I01 | Pedido natural, plan y fila importada conservan alcance, supuestos y criterios | Mac/CI |
+| I02 | Ciclo, ID duplicado, dependencia faltante y criterio faltante se rechazan antes de lanzar | Mac/CI |
+| I03 | A+B→C con dos tickers y el ACK perdido: exactamente una C bajo la raíz | Mac (doble) y PC (kanban real en copia de `HERMES_HOME`) |
+| I04 | Caída entre commit y admisión, y entre admisión y consumo: recupera tareas y gasto; termina el turno y sigue el plan | Mac y PC |
+| I05 | Pausa y cancelación contra un permiso `started`; un envío posterior al ACK que ya estaba comprometido queda en `committedEffects`; el replay del control da el recibo original; un `resume` con época vieja se rechaza; un evento tardío no resucita la unidad | Mac |
+| I06 | Un efecto confirmado no se repite; uno incierto conserva su estado y exige conciliación | Mac |
+| I07 | Autoridad negativa, revocación, otra sesión, diseño, borrador de mail y SHA futuro restringen efectos (`autoridad/efectos.json`) | Mac |
+| I08 | Poteto completo llega a cada ruta viva de H (turno de claw, hijo CLI por tarjeta); sin poteto, la ruta no se admite | PC |
+| I09 | El modelo efectivo es el pedido (perfil y router contra el modelo que corrió); un intento nuevo conserva su snapshot; permisos efectivos medidos (toolsets del hijo); el reviewer no escribe en la fuente. `no-aplica`: "opencode dentro del grupo del slot" (H no usa opencode ni grupos de macOS; el aislamiento equivalente es el cupo por perfil, I20) | PC |
+| I10 | Un par certificado nuevo entra solo por `certificar.py` más PR; uno sin certificar cierra la ruta; un intento abierto conserva su snapshot tras la subida | PC |
+| I11 | Un perfil nuevo da ida y vuelta; uno incompleto se ve; su competencia, caducidad y memoria se conservan | PC |
+| I12 | La corrección converge o se detiene a las 10 rondas; hallazgos nuevos y el relevo no reinician el linaje; la política solo cambia con el pin (decisión de David); una raíz vieja conserva su política; ningún paso pide revisión a un segundo modelo; el revisor excluye a los autores | Mac |
+| I13 | Revisión y CI del head, criterio y entorno vigentes; un `LISTO`, un merge, un rollback o un criterio borrado no fabrican éxito | Mac |
+| I14 | La proyección de H da el mismo estado y porcentaje que `derivar` de G; dos raíces, CI en espera y unidades sin PR | Mac |
+| I16 | Un PID reutilizado, una sesión caída, datos corruptos y métricas ausentes no atribuyen ni matan nada ajeno | Mac y PC |
+| I18 | Un perfil sin eventos declara cobertura `unknown`; su caída no aprueba ni despacha | Mac |
+| I20 | Presupuesto raíz, cupo global (`max_in_progress`) y por perfil, y escritor exclusivo; el par atómico con dos y tres plazas ocupadas | Mac y PC |
+| Excepción | Una excepción sale por el Telegram de claw, la respuesta entra por `goncloud_root_resolve` y un reaviso vencido vuelve a salir | PC (H5, forzada dentro de la raíz chica) |
+| Aislamiento | La batería corre sin `openclaw` en el PATH y con la Mini inalcanzable | Mac y PC |
 
 ## 5. Quién es dueño de cada cosa
 
@@ -136,12 +154,12 @@ La batería de H gana un archivo que recorre `manifiesto-ensayos.json` y exige u
 
 | Rebanada | Qué | Depende de |
 |---|---|---|
-| H0 | Copia fijada de G (`shared/sistema-agentes/`, `pin.json`), su prueba de digests, el job de CI que compara con G, e I01 e I02 | — |
+| H0 | Copia fijada de G (`shared/sistema-agentes/`, con `proyeccion.py` y `spool.py`, más `pin.json`), su prueba de digests, el job de CI que compara con G, `tests/ensayos-h.json` con su recorrido, e I01 e I02 | — |
 | H1 | Store y frontera transaccional (bandeja de salida), `decidir` con regla4, control y efectos, con el doble del kanban (I03–I06, I12, I13, I20) | H0 |
-| H2 | Adaptador kanban, ticker y herramientas `goncloud_root_*` en `goncloud-team`; pruebas reales en la PC sobre una copia de `HERMES_HOME` | H1 |
+| H2 | Adaptador kanban, ticker y herramientas `goncloud_root_*` en `goncloud-team`; pruebas reales en la PC sobre una copia de `HERMES_HOME`, y el primer par `(versión, code_sha)` en `certificadas.json` | H1 |
 | H3 | Autoridad (I07), excepciones por Telegram y proyección (I14, I16) | H1 |
-| H4 | Flota, poteto, capacidades y versión (I08–I11, I18); instalador y reversa para SUA-09H | H2, H3 |
-| H5 | Ventana viva en la PC, una raíz chica de punta a punta, recibo `SUA-07.md` y filas | H4 |
+| H4 | Flota, poteto, capacidades, `certificar.py` y la puerta por par certificado (I08–I11, I18); instalador y reversa para SUA-09H | H2, H3 |
+| H5 | Ventana viva en la PC, una raíz chica de punta a punta con una excepción forzada por Telegram, recibo `SUA-07.md` y filas | H4 |
 
 H1 y H3 pueden ir en paralelo una vez que esté H0. Cada rebanada es un PR en goncloud-hermes; el recibo va en G.
 
