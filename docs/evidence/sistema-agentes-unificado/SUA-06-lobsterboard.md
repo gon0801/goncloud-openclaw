@@ -14,6 +14,6 @@ Lo que muestra de claw:
 - Red: los widgets de clima, bolsa, citas, GitHub y la versión salen a internet (terceros) desde el servidor.
 - Seguridad (para el paso 4): sin contraseña, los POST (por ejemplo /api/templates/import) no piden autenticación; el `id` de plantilla entra a path.join sin normalizar (posible lectura de un config.json fuera de templates/); el error de /api/auth devuelve la ruta del archivo.
 
-Conclusión: LobsterBoard original no muestra datos de claw (rutas de disco que OpenClaw 2026.9.x ya no usa, sin API REST), no sirve en el celular y para mostrar nuestro estado haría falta una página nuestra metida en un iframe. Es el caso del paso 5 del plan: "si requiere reescritura amplia, detener la UI con evidencia y alternativas" -> decisión de David.
+Conclusión: LobsterBoard original no muestra datos de claw (rutas de disco que OpenClaw 2026.9.x ya no usa, sin API REST), no sirve en el celular, y para mostrar nuestro estado habría que escribir la página nosotros: LobsterBoard solo la enmarcaría con su `iframe-embed`. Es el caso del paso 5 del plan: "Hacer sólo ajustes ligados a faltantes. Si requiere reescritura amplia, detener la entrega UI con evidencia y alternativas; no sustituirla automáticamente." Las alternativas (A a D) están en el §8 del [diseño](../../superpowers/specs/2026-10-16-sua-06-seguimiento-y-panel-design.md).
 
 Decisión: David eligió el 2026-10-16 una página de solo lectura en el plugin `tablero-runbook` del gateway (diseño de SUA-06, §8). LobsterBoard no se adopta ni se instala.
