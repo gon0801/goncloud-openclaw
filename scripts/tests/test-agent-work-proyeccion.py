@@ -6,6 +6,8 @@ sucios y el snapshot roto son ValueError con nombre. leer y listar corren contra
 openclaw de doble que registra su argv y contesta una respuesta fijada.
 """
 
+import contextlib
+import io
 import json
 import os
 import subprocess
@@ -62,13 +64,22 @@ class Derivar(unittest.TestCase):
             ("reported", "cli:banco-cli", "mac-local"),
         )
         self.assertEqual(
-            (filas["unit-b"]["state"], filas["unit-b"]["executor"], filas["unit-b"]["host"],
-             filas["unit-b"]["error"]),
+            (
+                filas["unit-b"]["state"],
+                filas["unit-b"]["executor"],
+                filas["unit-b"]["host"],
+                filas["unit-b"]["error"],
+            ),
             ("running", "agent:agent-b", GATEWAY, "transport-unavailable"),
         )
         self.assertEqual(
-            (filas["unit-c"]["state"], filas["unit-c"]["executor"], filas["unit-c"]["host"],
-             filas["unit-c"]["error"], filas["unit-c"]["modelId"]),
+            (
+                filas["unit-c"]["state"],
+                filas["unit-c"]["executor"],
+                filas["unit-c"]["host"],
+                filas["unit-c"]["error"],
+                filas["unit-c"]["modelId"],
+            ),
             ("accepted", "cli:verif-cli", "mini-local", None, None),
         )
         self.assertEqual(filas["unit-a"]["nextCheckAt"], "2026-10-16T12:05:00Z")
@@ -139,9 +150,14 @@ class CliDerivar(unittest.TestCase):
 
     def test_derivar_imprime_la_proyeccion_del_fixture(self):
         hecho = self.correr(
-            "derivar", str(FIXTURES / "raiz-estados.json"),
-            "--stale-after-ms", "600000", "--intervalo-ms", str(INTERVALO),
-            "--host-gateway", GATEWAY,
+            "derivar",
+            str(FIXTURES / "raiz-estados.json"),
+            "--stale-after-ms",
+            "600000",
+            "--intervalo-ms",
+            str(INTERVALO),
+            "--host-gateway",
+            GATEWAY,
         )
         self.assertEqual(hecho.returncode, 0, hecho.stderr)
         impresa = json.loads(hecho.stdout)
@@ -163,9 +179,16 @@ class CliDerivar(unittest.TestCase):
             notados = Path(temp) / "notados.json"
             notados.write_text('{"exc-01": "2026-10-16T11:30:00Z"}', encoding="utf-8")
             hecho = self.correr(
-                "derivar", str(FIXTURES / "excepciones.json"),
-                "--stale-after-ms", str(STALE), "--intervalo-ms", str(INTERVALO),
-                "--notados", str(notados), "--host-gateway", GATEWAY,
+                "derivar",
+                str(FIXTURES / "excepciones.json"),
+                "--stale-after-ms",
+                str(STALE),
+                "--intervalo-ms",
+                str(INTERVALO),
+                "--notados",
+                str(notados),
+                "--host-gateway",
+                GATEWAY,
             )
         self.assertEqual(hecho.returncode, 0, hecho.stderr)
         impresa = json.loads(hecho.stdout)
@@ -183,8 +206,12 @@ class CliDerivar(unittest.TestCase):
             roto = Path(temp) / "snapshot-roto.json"
             roto.write_bytes(b"esto { no es json")
             hecho = self.correr(
-                "derivar", str(roto),
-                "--stale-after-ms", str(STALE), "--intervalo-ms", str(INTERVALO),
+                "derivar",
+                str(roto),
+                "--stale-after-ms",
+                str(STALE),
+                "--intervalo-ms",
+                str(INTERVALO),
             )
         self.assertNotEqual(hecho.returncode, 0)
         self.assertIn("snapshot-roto", hecho.stderr)
@@ -193,8 +220,9 @@ class CliDerivar(unittest.TestCase):
 
 class LeerListar(unittest.TestCase):
     SCRIPT = ROOT / "scripts/agent-work/proyeccion.py"
-    LISTA = {"roots": [{"rootId": "root-estados", "state": "active",
-                        "openedAt": "2026-10-16T09:05:00Z"}]}
+    LISTA = {
+        "roots": [{"rootId": "root-estados", "state": "active", "openedAt": "2026-10-16T09:05:00Z"}]
+    }
 
     def setUp(self):
         temp = tempfile.TemporaryDirectory()
@@ -224,25 +252,64 @@ class LeerListar(unittest.TestCase):
         self.snapshot = FIXTURES / "raiz-estados.json"
 
     def correr(self, *argumentos, con_env=True):
-        entorno = dict(os.environ, LANG="en_US.UTF-8", FAKE_LOG=str(self.log),
-                       FAKE_SNAPSHOT=str(self.snapshot), FAKE_LISTA=json.dumps(self.LISTA))
+        entorno = dict(
+            os.environ,
+            LANG="en_US.UTF-8",
+            FAKE_LOG=str(self.log),
+            FAKE_SNAPSHOT=str(self.snapshot),
+            FAKE_LISTA=json.dumps(self.LISTA),
+        )
         if con_env:
             entorno["OPENCLAW_BIN"] = str(self.bin)
         else:
             entorno.pop("OPENCLAW_BIN", None)
         return subprocess.run(
             [sys.executable, str(self.SCRIPT), *argumentos],
-            capture_output=True, text=True, timeout=60, env=entorno, cwd=str(ROOT),
+            capture_output=True,
+            text=True,
+            timeout=60,
+            env=entorno,
+            cwd=str(ROOT),
         )
 
     def llamadas(self):
         return [json.loads(linea) for linea in self.log.read_text().splitlines()]
 
+    def test_un_gateway_colgado_sale_con_el_protocolo_y_no_con_traceback(self):
+        def colgado(*_args, **kwargs):
+            raise subprocess.TimeoutExpired(cmd="openclaw", timeout=kwargs.get("timeout"))
+
+        original = proyeccion.subprocess.run
+        proyeccion.subprocess.run = colgado
+        self.addCleanup(setattr, proyeccion.subprocess, "run", original)
+        with contextlib.redirect_stderr(io.StringIO()) as err:
+            salida = proyeccion.main(
+                [
+                    "leer",
+                    "--root",
+                    "root-estados",
+                    "--stale-after-ms",
+                    "1",
+                    "--intervalo-ms",
+                    "1",
+                    "--openclaw-bin",
+                    str(self.bin),
+                ]
+            )
+        self.assertEqual(salida, 2)
+        self.assertTrue(err.getvalue().startswith("proyeccion: "), err.getvalue())
+
     def test_leer_por_env_llama_root_read_y_deriva(self):
         hecho = self.correr(
-            "leer", "--root", "root-estados",
-            "--stale-after-ms", str(STALE), "--intervalo-ms", str(INTERVALO),
-            "--host-gateway", GATEWAY,
+            "leer",
+            "--root",
+            "root-estados",
+            "--stale-after-ms",
+            str(STALE),
+            "--intervalo-ms",
+            str(INTERVALO),
+            "--host-gateway",
+            GATEWAY,
         )
         self.assertEqual(hecho.returncode, 0, hecho.stderr)
         impresa = json.loads(hecho.stdout)
@@ -250,15 +317,26 @@ class LeerListar(unittest.TestCase):
         self.assertEqual(impresa["rootId"], "root-estados")
         self.assertEqual(impresa["progress"], {"declared": 66, "observed": 66, "accepted": 33})
         self.assertEqual(contrato.validar(impresa), [])
-        self.assertEqual(self.llamadas(), [
-            {"method": "managedTasks.root.read", "params": {"rootId": "root-estados"}},
-        ])
+        self.assertEqual(
+            self.llamadas(),
+            [
+                {"method": "managedTasks.root.read", "params": {"rootId": "root-estados"}},
+            ],
+        )
 
     def test_leer_por_flag_openclaw_bin(self):
         hecho = self.correr(
-            "leer", "--root", "root-estados",
-            "--stale-after-ms", str(STALE), "--intervalo-ms", str(INTERVALO),
-            "--host-gateway", GATEWAY, "--openclaw-bin", str(self.bin),
+            "leer",
+            "--root",
+            "root-estados",
+            "--stale-after-ms",
+            str(STALE),
+            "--intervalo-ms",
+            str(INTERVALO),
+            "--host-gateway",
+            GATEWAY,
+            "--openclaw-bin",
+            str(self.bin),
             con_env=False,
         )
         self.assertEqual(hecho.returncode, 0, hecho.stderr)
@@ -266,8 +344,13 @@ class LeerListar(unittest.TestCase):
 
     def test_leer_raiz_desconocida_es_error_con_nombre(self):
         hecho = self.correr(
-            "leer", "--root", "no-existe",
-            "--stale-after-ms", str(STALE), "--intervalo-ms", str(INTERVALO),
+            "leer",
+            "--root",
+            "no-existe",
+            "--stale-after-ms",
+            str(STALE),
+            "--intervalo-ms",
+            str(INTERVALO),
         )
         self.assertEqual(hecho.returncode, 2)
         self.assertIn("no devolvió un snapshot", hecho.stderr)
@@ -277,9 +360,12 @@ class LeerListar(unittest.TestCase):
         hecho = self.correr("listar")
         self.assertEqual(hecho.returncode, 0, hecho.stderr)
         self.assertEqual(json.loads(hecho.stdout), self.LISTA)
-        self.assertEqual(self.llamadas(), [
-            {"method": "managedTasks.root.list", "params": {}},
-        ])
+        self.assertEqual(
+            self.llamadas(),
+            [
+                {"method": "managedTasks.root.list", "params": {}},
+            ],
+        )
 
 
 if __name__ == "__main__":

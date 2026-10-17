@@ -9,8 +9,36 @@ Biblioteca estándar.
 
 from __future__ import annotations
 
+import json
 import os
 import subprocess
+
+
+def _message_id(stdout: str) -> int | None:
+    """El messageId del primer objeto JSON de la salida, si es una confirmación válida.
+
+    Solo un entero positivo cuenta (una cadena de dígitos se convierte): el checkpoint
+    del emisor de raíces no avanza con un envío que el gateway no confirmó.
+    """
+    lineas = stdout.splitlines(keepends=True)
+    for indice, linea in enumerate(lineas):
+        if not linea.lstrip().startswith("{"):
+            continue
+        try:
+            respuesta, _ = json.JSONDecoder().raw_decode("".join(lineas[indice:]).lstrip())
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(respuesta, dict):
+            return None
+        crudo = respuesta.get("messageId")
+        if isinstance(crudo, bool):
+            return None
+        if isinstance(crudo, int) and crudo > 0:
+            return crudo
+        if isinstance(crudo, str) and crudo.isdigit() and int(crudo) > 0:
+            return int(crudo)
+        return None
+    return None
 
 
 def avisar(texto: str, *, policy, openclaw_bin, dry_run: bool = False) -> dict:
@@ -45,4 +73,8 @@ def avisar(texto: str, *, policy, openclaw_bin, dry_run: bool = False) -> dict:
             "enviado": False,
             "causa": f"openclaw salió {hecho.returncode}: {hecho.stderr.strip()[:200]}",
         }
-    return {"enviado": True, "destino": destino, "salida": hecho.stdout.strip()[:500]}
+    resultado = {"enviado": True, "destino": destino, "salida": hecho.stdout.strip()[:500]}
+    message_id = _message_id(hecho.stdout)
+    if message_id is not None:
+        resultado["messageId"] = message_id
+    return resultado
