@@ -11,13 +11,14 @@
 #   en `true`, falla y deja la copia anterior como estaba.
 # activar: apunta ~/.agents/skills/<skill> y ~/.claude/skills/<skill> a la copia, y
 #   ~/.claude/agents/{poteto-agent,comment-sicko}.md a sus agentes. Lo que había antes y no era un
-#   enlace a la copia se mueve a un respaldo con fecha, y los enlaces nuevos quedan anotados ahí
-#   para que restaurar los quite. Repetirlo no cambia nada.
+#   enlace a la copia se mueve a un solo respaldo ($PSTACK_RESPALDO), y cada enlace que activar crea
+#   queda en su registro acumulado: restaurar deshace todas las activaciones y la limpieza de
+#   enlaces rotos solo toca los que activar creó. Repetirlo no cambia nada.
 # Sin argumentos (lo que corre launchd): preparar y, si la copia ya está activa, activar.
 # Una corrida que falla avisa por claw o, si claw no contesta, con una notificación de la Mac.
 #
 # Uso: sincronizar-pstack.sh [preparar | activar | estado]
-# Reversa: sincronizar-pstack.sh restaurar <dir de respaldo> (lo imprime activar).
+# Reversa: sincronizar-pstack.sh restaurar.
 set -euo pipefail
 
 RAIZ=${PSTACK_OFICIAL:-$HOME/.agents/pstack-oficial}
@@ -25,8 +26,8 @@ SKILLS_DIR=${PSTACK_SKILLS_DIR:-$HOME/.agents/skills}
 CLAUDE_SKILLS=${PSTACK_CLAUDE_SKILLS:-$HOME/.claude/skills}
 CLAUDE_AGENTS=${PSTACK_CLAUDE_AGENTS:-$HOME/.claude/agents}
 MARCA=${PSTACK_MARCA_ACTIVA:-$HOME/.agents/.pstack-oficial-activo}
-# Las skills que activar enlazó alguna vez: la limpieza de enlaces rotos solo toca estas.
-GESTIONADAS=${PSTACK_GESTIONADAS:-$HOME/.agents/.pstack-oficial-gestionadas}
+RESPALDO=${PSTACK_RESPALDO:-$HOME/.agents/.respaldo-pstack}
+CREADOS="$RESPALDO/creados.txt"
 MIN_SKILLS=${PSTACK_MIN_SKILLS:-40}
 # Las de cursor-team-kit que ya usábamos con el port; el resto del kit no se instala.
 TEAM_KIT=${PSTACK_TEAM_KIT:-deslop fix-ci fix-merge-conflicts get-pr-comments make-pr-easy-to-review thermo-nuclear-code-quality-review what-did-i-get-done}
@@ -36,7 +37,7 @@ log() { printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*"; }
 falla() { log "FALLA: $*"; exit 1; }
 
 avisar() {
-  local texto="La sincronización nocturna de pstack con cursor/plugins falló: ${1:-sin detalle}. Las skills siguen en la copia anterior. Dile a David, tal cual, que le pida a Claude en la Mac revisar ~/Library/Logs/sincronizar-pstack.log."
+  local texto="La sincronización nocturna de pstack con cursor/plugins falló: ${1:-sin detalle}. Si falló preparar, la copia no cambió; si falló activar, la copia es nueva y algunos enlaces pueden faltar. Dile a David, tal cual, que le pida a Claude en la Mac revisar ~/Library/Logs/sincronizar-pstack.log."
   if [ -n "${PSTACK_AVISO_CMD:-}" ]; then
     "$PSTACK_AVISO_CMD" "$texto" || true
     return 0
@@ -110,8 +111,9 @@ preparar() {
   n=$(find "$nueva/skills" -mindepth 2 -maxdepth 2 -name SKILL.md | wc -l | tr -d ' ')
   [ "$n" -ge "$MIN_SKILLS" ] || falla "solo $n skills (mínimo $MIN_SKILLS)"
   for archivo in "$nueva"/skills/*/SKILL.md; do
-    if frontmatter "$archivo" | grep -q -E '^disable-model-invocation:[[:space:]]*true'; then
-      falla "$(basename "$(dirname "$archivo")") quedó con disable-model-invocation: true (el formato cambió)"
+    # Cualquier valor que no sea exactamente false (True, "true", yes...) es un formato nuevo.
+    if frontmatter "$archivo" | grep -E '^disable-model-invocation:' | grep -q -v -x 'disable-model-invocation: false'; then
+      falla "$(basename "$(dirname "$archivo")") quedó con disable-model-invocation distinto de false (el formato cambió)"
     fi
   done
   printf 'origen: cursor/plugins %s\nfecha: %s\nskills: %s\n' "$(basename "$top")" \
@@ -131,62 +133,58 @@ mismo_destino() {
   a=$(real "$1") && b=$(real "$2") && [ -n "$a" ] && [ "$a" = "$b" ]
 }
 
-# Enlaza $1 a $2; lo que había y no resolvía a lo mismo va a $3. Un enlace relativo que ya
-# llega al mismo lugar (como los de ~/.claude/skills) se queda como está.
+# Enlaza $1 a $2; lo que había y no resolvía a lo mismo va a $RESPALDO/$3. Un enlace relativo que
+# ya llega al mismo lugar (como los de ~/.claude/skills) se queda como está y no se registra.
 enlazar() {
-  local destino=$1 objetivo=$2 respaldo=$3
+  local destino=$1 objetivo=$2 tipo=$3 guardado
   if [ -L "$destino" ] && [ -e "$destino" ] && mismo_destino "$destino" "$objetivo"; then return 0; fi
-  mkdir -p "$respaldo"
+  mkdir -p "$RESPALDO/$tipo"
   if [ -e "$destino" ] || [ -L "$destino" ]; then
-    mv "$destino" "$respaldo/"
+    guardado="$RESPALDO/$tipo/$(basename "$destino")"
+    # Si ese nombre ya está respaldado, lo de ahora es un enlace nuestro de otra corrida.
+    if [ -e "$guardado" ] || [ -L "$guardado" ]; then rm -rf "$destino"; else mv "$destino" "$guardado"; fi
   fi
   ln -s "$objetivo" "$destino"
-  printf '%s\n' "$destino" >> "$respaldo/../creados.txt"
+  grep -qxF "$destino" "$CREADOS" 2>/dev/null || printf '%s\n' "$destino" >> "$CREADOS"
 }
 
 activar() {
-  local fecha respaldo s nombre enlace
+  local s nombre enlace
   [ -f "$RAIZ/ORIGEN" ] || falla "no hay copia preparada en $RAIZ (corre preparar)"
-  fecha=$(date -u +%Y%m%dT%H%M%SZ)
-  respaldo="$HOME/.agents/.respaldo-pstack-$fecha"
-  mkdir -p "$SKILLS_DIR" "$CLAUDE_SKILLS" "$CLAUDE_AGENTS"
+  mkdir -p "$SKILLS_DIR" "$CLAUDE_SKILLS" "$CLAUDE_AGENTS" "$RESPALDO"
+  touch "$CREADOS"
   for s in "$RAIZ"/skills/*/; do
     nombre=$(basename "$s")
-    grep -qxF "$nombre" "$GESTIONADAS" 2>/dev/null || printf '%s\n' "$nombre" >> "$GESTIONADAS"
-    enlazar "$SKILLS_DIR/$nombre" "$RAIZ/skills/$nombre" "$respaldo/agents-skills"
-    enlazar "$CLAUDE_SKILLS/$nombre" "$SKILLS_DIR/$nombre" "$respaldo/claude-skills"
+    enlazar "$SKILLS_DIR/$nombre" "$RAIZ/skills/$nombre" agents-skills
+    enlazar "$CLAUDE_SKILLS/$nombre" "$SKILLS_DIR/$nombre" claude-skills
   done
   for a in $AGENTES; do
-    enlazar "$CLAUDE_AGENTS/$a" "$RAIZ/agents/$a" "$respaldo/claude-agents"
+    enlazar "$CLAUDE_AGENTS/$a" "$RAIZ/agents/$a" claude-agents
   done
   # Una skill que el original retiró deja enlaces rotos hacia la copia: se quitan, pero solo los
-  # de skills que activar gestionó; un enlace roto ajeno se queda.
+  # que activar creó; un enlace roto ajeno o preexistente se queda.
   for enlace in "$SKILLS_DIR"/* "$CLAUDE_SKILLS"/*; do
     [ -L "$enlace" ] || continue
     [ -e "$enlace" ] && continue
-    grep -qxF "$(basename "$enlace")" "$GESTIONADAS" 2>/dev/null || continue
+    grep -qxF "$enlace" "$CREADOS" || continue
     rm "$enlace"; log "retirada: $(basename "$enlace")"
   done
   touch "$MARCA"
-  if [ -d "$respaldo" ]; then
-    log "activada; lo anterior quedó en $respaldo (reversa: $0 restaurar $respaldo)"
-  else
-    log "activada; nada que mover"
-  fi
+  log "activada; lo anterior está en $RESPALDO (reversa: $0 restaurar)"
 }
 
 restaurar() {
-  local respaldo=${1:?uso: restaurar <dir de respaldo>} par dir destino item creado
-  [ -d "$respaldo" ] || falla "no existe $respaldo"
-  # Primero se quitan los enlaces que activar creó (los de skills nuevas incluidos); lo que había
-  # antes vuelve después desde el respaldo.
-  if [ -f "$respaldo/creados.txt" ]; then
+  local par dir destino item creado
+  [ -d "$RESPALDO" ] || falla "no hay respaldo en $RESPALDO"
+  # Primero se quitan todos los enlaces que activar creó en cualquier corrida; lo que había antes
+  # vuelve después desde el respaldo.
+  if [ -f "$CREADOS" ]; then
     while IFS= read -r creado; do
       [ -L "$creado" ] && rm "$creado"
-    done < "$respaldo/creados.txt"
+    done < "$CREADOS"
   fi
   for par in "agents-skills:$SKILLS_DIR" "claude-skills:$CLAUDE_SKILLS" "claude-agents:$CLAUDE_AGENTS"; do
-    dir="$respaldo/${par%%:*}"; destino=${par#*:}
+    dir="$RESPALDO/${par%%:*}"; destino=${par#*:}
     [ -d "$dir" ] || continue
     for item in "$dir"/* ; do
       [ -e "$item" ] || [ -L "$item" ] || continue
@@ -194,8 +192,9 @@ restaurar() {
       mv "$item" "$destino/"
     done
   done
+  mv "$RESPALDO" "$RESPALDO.restaurado-$(date -u +%Y%m%dT%H%M%SZ)"
   rm -f "$MARCA"
-  log "restaurado desde $respaldo; la copia del original sigue en $RAIZ pero ya no está activa"
+  log "restaurado; la copia del original sigue en $RAIZ pero ya no está activa"
 }
 
 estado() {
@@ -206,7 +205,7 @@ estado() {
 case "${1:-}" in
   preparar) preparar ;;
   activar) activar ;;
-  restaurar) restaurar "${2:-}" ;;
+  restaurar) restaurar ;;
   estado) estado ;;
   "")
     # Cada paso en su propio proceso: dentro de un `if !` bash apaga set -e, y una copia a medias
@@ -216,5 +215,5 @@ case "${1:-}" in
       if ! bash "$0" activar; then avisar "activar no terminó"; exit 1; fi
     fi
     ;;
-  *) echo "uso: $0 [preparar | activar | estado | restaurar <dir>]" >&2; exit 2 ;;
+  *) echo "uso: $0 [preparar | activar | estado | restaurar]" >&2; exit 2 ;;
 esac

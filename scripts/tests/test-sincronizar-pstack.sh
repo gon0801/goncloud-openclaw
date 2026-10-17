@@ -25,11 +25,11 @@ skill() {  # skill <dir> <nombre> <valor de la marca o vacío>
   } > "$1/$2/SKILL.md"
 }
 
-arbol() {  # arbol <salida.tgz> [sin-poteto | sin-adaptador]
+arbol() {  # arbol <salida.tgz> [sin-poteto | sin-adaptador | marca-rara]
   local r="$T/arbol-$$-$RANDOM/cursor-plugins-abc1234"
   mkdir -p "$r/harness/pstack/claude-code/agents" "$r/harness/pstack/claude-code/docs/harness" "$r/cursor-team-kit/skills"
   [ "${2:-}" = sin-poteto ] || skill "$r/harness/pstack/claude-code/skills" poteto-mode true
-  skill "$r/harness/pstack/claude-code/skills" tdd true
+  if [ "${2:-}" = marca-rara ]; then skill "$r/harness/pstack/claude-code/skills" tdd True; else skill "$r/harness/pstack/claude-code/skills" tdd true; fi
   skill "$r/harness/pstack/claude-code/skills" how ""
   [ "${2:-}" = sin-adaptador ] || echo "# adaptador" > "$r/harness/pstack/claude-code/docs/harness/claude-code.md"
   echo "poteto" > "$r/harness/pstack/claude-code/agents/poteto-agent.md"
@@ -45,6 +45,7 @@ export PSTACK_MIN_SKILLS=3 PSTACK_TEAM_KIT=deslop
 arbol "$T/bueno.tgz"
 arbol "$T/roto.tgz" sin-poteto
 arbol "$T/sin-adaptador.tgz" sin-adaptador
+arbol "$T/marca-rara.tgz" marca-rara
 RAIZ="$HOME/.agents/pstack-oficial"
 
 # Lo que hay hoy: una skill del espejo viejo (directorio real), un enlace relativo de Claude que
@@ -75,6 +76,7 @@ cmp -s "$RAIZ/ORIGEN" "$T/origen-bueno" || fail "2: el árbol roto pisó la copi
 [ -e "$RAIZ.nueva" ] && fail "2: dejó la copia a medias"
 PSTACK_TARBALL="$T/sin-adaptador.tgz" bash "$S" preparar >/dev/null 2>&1 && fail "2: preparar aceptó un árbol sin docs/harness/claude-code.md"
 cmp -s "$RAIZ/ORIGEN" "$T/origen-bueno" || fail "2: el árbol sin adaptador pisó la copia buena"
+PSTACK_TARBALL="$T/marca-rara.tgz" bash "$S" preparar >/dev/null 2>&1 && fail "2: preparar aceptó disable-model-invocation: True"
 
 # 3. activar: enlaza, respalda lo que había, deja en paz lo ajeno y el enlace relativo bueno.
 bash "$S" activar > "$T/activar.log" || fail "3: activar falló"
@@ -83,29 +85,36 @@ bash "$S" activar > "$T/activar.log" || fail "3: activar falló"
 [ "$(readlink "$HOME/.claude/skills/tdd")" = "../../.agents/skills/tdd" ] || fail "3: rehizo un enlace relativo que ya llegaba bien"
 [ "$(readlink "$HOME/.claude/agents/poteto-agent.md")" = "$RAIZ/agents/poteto-agent.md" ] || fail "3: falta el agente poteto-agent"
 [ -d "$HOME/.agents/skills/babysit" ] && [ ! -L "$HOME/.agents/skills/babysit" ] || fail "3: tocó una skill ajena"
-respaldo=$(ls -d "$HOME"/.agents/.respaldo-pstack-* 2>/dev/null | head -1)
+respaldo="$HOME/.agents/.respaldo-pstack"
 [ -f "$respaldo/agents-skills/poteto-mode/VIEJO" ] || fail "3: no respaldó la skill vieja"
 [ -f "$HOME/.agents/.pstack-oficial-activo" ] || fail "3: no dejó la marca de activa"
 [ -L "$HOME/.claude/skills/ajena-borrada" ] || fail "3: borró un enlace roto ajeno"
 
-# 4. repetir activar no cambia nada ni crea respaldos nuevos.
-antes=$(ls -d "$HOME"/.agents/.respaldo-pstack-* | wc -l)
-sleep 1
+# 4. repetir activar no cambia nada ni registra enlaces nuevos.
+antes=$(wc -l < "$respaldo/creados.txt" | tr -d " ")
 bash "$S" activar >/dev/null || fail "4: el segundo activar falló"
-[ "$(ls -d "$HOME"/.agents/.respaldo-pstack-* | wc -l | tr -d " ")" = "$(echo $antes)" ] || fail "4: el segundo activar movió cosas"
+[ "$(wc -l < "$respaldo/creados.txt" | tr -d " ")" = "$antes" ] || fail "4: el segundo activar registró enlaces"
+[ -f "$respaldo/agents-skills/poteto-mode/VIEJO" ] || fail "4: el segundo activar pisó el respaldo"
 
-# 5. una skill que el original retira deja de estar enlazada.
-rm -rf "$RAIZ/skills/how"
+# 5. una skill que el original retira deja de estar enlazada, salvo los enlaces que ya estaban.
+rm -rf "$RAIZ/skills/how" "$RAIZ/skills/tdd"
 bash "$S" activar >/dev/null || fail "5: activar falló tras retirar how"
 [ -L "$HOME/.agents/skills/how" ] && fail "5: quedó el enlace roto a how en ~/.agents/skills"
 [ -L "$HOME/.claude/skills/how" ] && fail "5: quedó el enlace roto a how en ~/.claude/skills"
+[ -L "$HOME/.claude/skills/tdd" ] || fail "5: borró el enlace relativo que ya existía antes de activar"
+# una sincronización posterior agrega una skill; restaurar también la deshace.
+skill "$RAIZ/skills" nueva ""
+bash "$S" activar >/dev/null || fail "5: activar falló con la skill nueva"
+[ -L "$HOME/.agents/skills/nueva" ] || fail "5: no enlazó la skill nueva"
 
 # 6. restaurar deshace la activación, también los enlaces de skills que no existían antes.
 [ -L "$HOME/.agents/skills/deslop" ] || fail "6: activar no había enlazado deslop"
-bash "$S" restaurar "$respaldo" >/dev/null || fail "6: restaurar falló"
+bash "$S" restaurar >/dev/null || fail "6: restaurar falló"
 [ -f "$HOME/.agents/skills/poteto-mode/VIEJO" ] || fail "6: no volvió la skill vieja"
 [ -e "$HOME/.agents/skills/deslop" ] || [ -L "$HOME/.agents/skills/deslop" ] && fail "6: quedó el enlace nuevo a deslop"
 [ -e "$HOME/.claude/agents/poteto-agent.md" ] && fail "6: quedó el agente nuevo enlazado"
+[ -L "$HOME/.agents/skills/nueva" ] && fail "6: quedó el enlace de una activación posterior"
+[ -d "$respaldo" ] && fail "6: el respaldo no se archivó tras restaurar"
 [ "$(readlink "$HOME/.claude/skills/tdd")" = "../../.agents/skills/tdd" ] || fail "6: restaurar tocó un enlace que activar no creó"
 [ -f "$HOME/.agents/.pstack-oficial-activo" ] && fail "6: la marca de activa sigue"
 
