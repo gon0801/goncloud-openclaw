@@ -1560,6 +1560,13 @@ class Recertificar(Mac):
         closed = self.preparar()
         self.assertEqual(closed["causa"], "ruta-roja")
         self.assertIn("m3b", closed["frase"])
+        doc["routes"]["mac-local/opencode"]["1.19.3"] = {
+            "estado": "rojo", "commit": "a" * 40, "causa": "m7", "sondas": {"m7": "no pasa"}}
+        (self.state / "versiones-medidas.json").write_text(json.dumps(doc))
+        (self.state / "catalogo.json").unlink(missing_ok=True)
+        otra_vez = self.preparar()
+        self.assertEqual((otra_vez["ok"], otra_vez.get("espera")), (True, "recertificando"))
+        self.assertNotEqual(otra_vez.get("causa"), "ruta-roja")
 
     def test_infraestructura_tambien_espera_sin_rechazar(self):
         (self.bin / "version").write_text("1.19.3\n")

@@ -296,12 +296,16 @@ def preparar(repo: Path | None, modelo: str | None, *, perfil: str | None = None
     closed = cargar_ruta(checkout, state_root, HOST_ID, adapter_id).open_for(
         version_cli, manifiesto["generation"] if manifiesto else None, canary=canary)
     medida = entrada_medida(state_root, HOST_ID, adapter_id, version_cli)
-    if (isinstance(closed, RouteNotCertified) and isinstance(medida, dict)
-            and medida.get("estado") == "rojo"):
+    head = _head(checkout)
+    rojo_terminal = (isinstance(medida, dict) and medida.get("estado") == "rojo"
+                     and medicion_terminal(medida, head))
+    if isinstance(closed, RouteNotCertified) and rojo_terminal:
         return explicar(ruta_roja(medida, adapter_id, version_cli))
     # Mientras la versión se mide, el pedido se registra igual: no hay rechazo de ruta ni de host.
-    midiendo = (closed is not None and isinstance(medida, dict)
-                and medida.get("estado") in ("probando", "infraestructura"))
+    # Un rojo de otro commit tampoco es cierre: el host lo vuelve a medir.
+    midiendo = (closed is not None and isinstance(medida, dict) and (
+        medida.get("estado") in ("probando", "infraestructura")
+        or (medida.get("estado") == "rojo" and not rojo_terminal)))
     workspace = None
     if repo is not None:
         workspace = Workspace.for_repository(str(repo), allowed_root=allowed_root)
