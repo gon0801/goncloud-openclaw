@@ -1369,6 +1369,110 @@ class Sucesion(Mac):
         self.assertEqual((entry["actual"], entry["estado"]), ("zai-coding-plan/glm-5.4-flash", "promovido"))
 
 
+class Recertificar(Mac):
+    """El ejecutor mide una versión que coverage no trae y la anota en el registro."""
+
+    def veredictos(self, *malas):
+        from recertificar import Veredicto
+        nombres = ("m1", "m2", "m3a", "m3b", "m3c", "pwd", "m7")
+        return tuple(Veredicto(nombre, "no pasa" if nombre in malas else "pasa", nombre) for nombre in nombres)
+
+    def medir(self, *, sondas=None, banco=None, avisos=None, version="1.19.3", ruta="mac-local/opencode", now=1_800_000_000.0):
+        textos = [] if avisos is None else avisos
+
+        def enviar(texto, **kwargs):
+            textos.append(texto)
+            return {"enviado": True}
+
+        return encargo.recertificar(
+            state_root=self.state, checkout=self.checkout, ruta=ruta, now=now, version=version,
+            opencode_bin=self.bin / "opencode", claude_bin=self.bin / "claude",
+            correr_sondas=self.veredictos if sondas is None else sondas,
+            correr_banco=(lambda env, cwd: (0, "case=ingenieria desenlace=verde causa=ninguna\n")) if banco is None else banco,
+            enviar_aviso=enviar)
+
+    def registro(self):
+        return json.loads((self.state / "versiones-medidas.json").read_text())
+
+    def entrada(self, version="1.19.3", ruta="mac-local/opencode"):
+        return self.registro()["routes"][ruta][version]
+
+    def test_sondas_y_banco_verdes_anotan_la_version_y_la_ruta_la_abre(self):
+        avisos = []
+        answer = self.medir(avisos=avisos)
+        entry = self.entrada()
+        self.assertEqual((answer["accion"], entry["estado"], entry["banco"]), ("verde", "verde", "verde"))
+        self.assertEqual(entry["sondas"]["m1"], "pasa")
+        self.assertTrue(entry["evidencia"].startswith("recertificacion/mac-local-opencode/1.19.3"))
+        self.assertNotIn("Users", entry["evidencia"])
+        self.assertEqual(len(entry["digest"]), 64)
+        self.assertEqual(entry["aviso"]["enviado"], True)
+        self.assertIn("ya trabaja con opencode 1.19.3", avisos[0])
+        self.assertIsNone(encargo.cargar_ruta(self.checkout, self.state, "mac-local").open_for("1.19.3", None, canary=False))
+
+    def test_una_sonda_roja_cierra_deja_rojo_con_esa_sonda_y_avisa(self):
+        avisos = []
+        banco = []
+        answer = self.medir(
+            sondas=lambda adaptador, binario, checkout: self.veredictos("m3b"),
+            banco=lambda env, cwd: banco.append(1) or (0, "case=ingenieria desenlace=verde causa=ninguna\n"),
+            avisos=avisos)
+        entry = self.entrada()
+        self.assertEqual((answer["accion"], entry["estado"], entry["sondas"]["m3b"]), ("rojo", "rojo", "no pasa"))
+        self.assertEqual(banco, [])
+        self.assertIn("m3b", avisos[0])
+        self.assertIn(entry["evidencia"], avisos[0])
+        closed = encargo.cargar_ruta(self.checkout, self.state, "mac-local").open_for("1.19.3", None, canary=False)
+        self.assertIsNotNone(closed)
+
+    def test_una_version_terminal_o_ya_en_coverage_no_se_vuelve_a_medir(self):
+        (self.state / "versiones-medidas.json").write_text(json.dumps({
+            "schema": "agent-work.cli-versions.v1",
+            "routes": {"mac-local/opencode": {"1.19.3": {"estado": "verde", "sondas": {"m1": "pasa"}}}}}))
+        antes = self.registro()
+        llamado = []
+        answer = self.medir(sondas=lambda *args, **kwargs: llamado.append(1) or self.veredictos())
+        self.assertEqual((answer["accion"], llamado, self.registro()), ("ya-medida", [], antes))
+        antes["routes"]["mac-local/opencode"]["1.19.3"]["estado"] = "rojo"
+        (self.state / "versiones-medidas.json").write_text(json.dumps(antes))
+        answer = self.medir(sondas=lambda *args, **kwargs: llamado.append(1) or self.veredictos())
+        self.assertEqual((answer["accion"], llamado), ("ya-medida", []))
+        answer = self.medir(version="1.18.35", sondas=lambda *args, **kwargs: llamado.append(1) or self.veredictos())
+        self.assertEqual(answer["accion"], "ya-certificada")
+        self.assertNotIn("1.18.35", self.registro()["routes"]["mac-local/opencode"])
+        self.assertEqual(llamado, [])
+
+    def test_infraestructura_avisa_desde_el_primero_y_a_la_tercera_queda_rojo(self):
+        avisos = []
+        banco = lambda env, cwd: (0, "el banco no imprimió desenlace\n")
+        for intento in (1, 2):
+            answer = self.medir(banco=banco, avisos=avisos)
+            entry = self.entrada()
+            self.assertEqual((answer["accion"], entry["estado"], entry["intentos"]),
+                             ("infraestructura", "infraestructura", intento))
+        answer = self.medir(banco=banco, avisos=avisos)
+        entry = self.entrada()
+        self.assertEqual((answer["accion"], entry["estado"], entry["intentos"]), ("rojo", "rojo", 3))
+        self.assertEqual(len(avisos), 3)
+        self.assertIn(entry["evidencia"], avisos[0])
+
+    def test_el_host_ocupado_pospone_sin_escribir(self):
+        self.beat(slot="running", taskId="t-1", model="zai-coding-plan/glm-5.3", since=time.time())
+        llamado = []
+        answer = self.medir(
+            now=time.time(),
+            sondas=lambda *args, **kwargs: llamado.append(1) or self.veredictos())
+        self.assertEqual((answer["accion"], llamado), ("host-ocupado", []))
+        self.assertFalse((self.state / "versiones-medidas.json").exists())
+
+    def test_una_ruta_sandbox_no_se_mide(self):
+        self.sandbox_tested()
+        llamado = []
+        answer = self.medir(sondas=lambda *args, **kwargs: llamado.append(1) or self.veredictos())
+        self.assertEqual((answer["accion"], llamado), ("ruta-sin-certificar", []))
+        self.assertFalse((self.state / "versiones-medidas.json").exists())
+
+
 class Diario(Mac):
     """SUA-04 (4.9): `encargo.py diario`, la pasada que corre el mismo launchd de 4.3: sucesion
     --aplicar y después fuentes --aviso, cada uno aislado, en una sola línea JSON."""
