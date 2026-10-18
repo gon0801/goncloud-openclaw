@@ -33,8 +33,8 @@ from modelos import (POLICY_FILE, CatalogStore, CatalogUnavailable, ContextoInco
 from progress_bridge import transfer_host_projection, transfer_projection
 import proyeccion
 from resources import BoundaryBusy
-from sesion import (ADAPTADORES, COVERAGE_FILE, GroupBoundaryBackend, LaunchHeader, LaunchSpec, MalformedHeader,
-                    Package, Route, adaptador, plan_launch, session_name)
+from sesion import (ADAPTADORES, GroupBoundaryBackend, LaunchHeader, LaunchSpec, MalformedHeader,
+                    Package, adaptador, cargar_ruta, plan_launch, session_name)
 from spool import atomic_json, canonical, incident_identity
 
 CHECKOUT = Path(__file__).resolve().parents[2]
@@ -700,11 +700,7 @@ class RunHost:
         """The launch of one claim, or why not. A CLI that does not answer its version has no
         certified route. A provider or a model the catalog lacks is looked up once more: the operator may
         just have run `opencode auth login`."""
-        try:
-            coverage = json.loads((self.checkout / COVERAGE_FILE).read_text(encoding="utf-8"))
-        except (OSError, ValueError):
-            coverage = {}
-        route = Route.load(coverage, self.client.host_id, adapter_id)
+        route = cargar_ruta(self.checkout, self.state_root, self.client.host_id, adapter_id)
         package = self.package(brief)
         if not isinstance(package, (Package, type(None))):
             return package

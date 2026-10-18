@@ -51,7 +51,7 @@ from modelos import (MODEL_PATTERN, POLICY_FILE, PROVIDER, Billing, Catalog, Cat
                      WorkspaceRefused, authorize, catalogo_claude, explicar, pedido, policy_document,
                      succession_actual)
 from sesion import (ALLOWED_ROOT, COVERAGE_FILE, EXIT_NO_SCRATCH, EXIT_NO_WORKSPACE, EXIT_OUTSIDE_GROUP, PROFILE_ID,
-                    Route, Workspace, adaptador, model_in_use, read_events)
+                    Route, Workspace, adaptador, cargar_ruta, model_in_use, read_events)
 
 HOST_ID = "mac-local"
 ADAPTER_ID = "opencode"
@@ -292,12 +292,9 @@ def preparar(repo: Path | None, modelo: str | None, *, perfil: str | None = None
     beat = latido(state_root, now)
     # Un host canario vivo corre también una ruta todavía sin certificar: su canario es un pedido real.
     canary = isinstance(beat, HostBeat) and beat.canary
-    if adapter_id == "claude":
-        closed = Route.load(coverage, HOST_ID, "claude").open_for(
-            _version_claude(claude_bin), manifiesto["generation"] if manifiesto else None, canary=canary)
-    else:
-        closed = Route.load(coverage, HOST_ID).open_for(catalog.cli_version,
-                                                        manifiesto["generation"] if manifiesto else None, canary=canary)
+    closed = cargar_ruta(checkout, state_root, HOST_ID, adapter_id).open_for(
+        _version_claude(claude_bin) if adapter_id == "claude" else catalog.cli_version,
+        manifiesto["generation"] if manifiesto else None, canary=canary)
     if closed is not None:
         return explicar(closed)
     if isinstance(beat, HostDown):

@@ -159,7 +159,7 @@ class Route:
     certified_context_generations: frozenset[str] = frozenset()
 
     @staticmethod
-    def load(coverage: object, host_id: str, adapter_id: str = "opencode") -> "Route":
+    def load(coverage: object, host_id: str, adapter_id: str = "opencode", medidas: object = None) -> "Route":
         """De coverage.json, sin lanzar con ninguna forma de archivo. La ruta existe solo si
         hostAdapterRoute declara para ese host una entrada de ese adaptador de forma `run-per-task`:
         recién entonces vale el estado de hostAdapterCoverage. Lo que falta o está mal escrito es
@@ -176,7 +176,12 @@ class Route:
         versions = (key for key in measured if isinstance(key, str)) if isinstance(measured, dict) else ()
         contexts = entry.get("contextGenerations")
         generations = (key for key in contexts if isinstance(key, str)) if isinstance(contexts, dict) else ()
-        return Route(host_id, adapter_id, ROUTE_FORM, status, frozenset(versions), frozenset(generations))
+        certified = frozenset(versions)
+        # Solo una ruta certified suma verdes del registro. Una sandbox con un verde escrito a mano
+        # sigue cerrada: el candado de coverage no se abre desde el registro.
+        if status == "certified":
+            certified = certified | _versiones_verdes(medidas, host_id, adapter_id)
+        return Route(host_id, adapter_id, ROUTE_FORM, status, certified, frozenset(generations))
 
     def open_for(self, cli_version: str, generation: int | None = None, *, canary: bool
                  ) -> "None | RouteNotCertified | GenerationNotCertified":
@@ -194,6 +199,39 @@ class Route:
             certified = tuple(sorted(int(key) for key in self.certified_context_generations if key.isdigit()))
             return GenerationNotCertified(generation, certified)
         return None
+
+
+def _versiones_verdes(medidas: object, host_id: str, adapter_id: str) -> frozenset[str]:
+    """Versiones con estado verde de una ruta en el registro. Otra forma, u otro estado, no suma."""
+    if not isinstance(medidas, dict):
+        return frozenset()
+    routes = medidas.get("routes")
+    if not isinstance(routes, dict):
+        return frozenset()
+    entry = routes.get(f"{host_id}/{adapter_id}")
+    if not isinstance(entry, dict):
+        return frozenset()
+    return frozenset(version for version, record in entry.items()
+                     if isinstance(version, str) and isinstance(record, dict) and record.get("estado") == "verde")
+
+
+MEDIDAS_FILE = Path("versiones-medidas.json")
+
+
+def cargar_ruta(checkout: Path, state_root: Path, host_id: str, adapter_id: str = "opencode") -> Route:
+    """Lee coverage.json y el registro de versiones medidas. Un registro ilegible es un registro vacío."""
+    try:
+        coverage = json.loads((Path(checkout) / COVERAGE_FILE).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        coverage = {}
+    medidas = None
+    try:
+        parsed = json.loads((Path(state_root) / MEDIDAS_FILE).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        parsed = None
+    if isinstance(parsed, dict):
+        medidas = parsed
+    return Route.load(coverage, host_id, adapter_id, medidas)
 
 
 @dataclass(frozen=True)

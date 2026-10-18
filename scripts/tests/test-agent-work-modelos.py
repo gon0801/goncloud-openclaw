@@ -782,6 +782,65 @@ class Routes(unittest.TestCase):
         self.assertEqual(route.open_for("1.18.35", 3, canary=False), modelos.GenerationNotCertified(3, (1, 2)))
         self.assertIsNone(route.open_for("1.18.35", 3, canary=True))
 
+    def coverage_certified(self, status="certified"):
+        return {"hostAdapterCoverage": {"mac-local": {"opencode": status, "claude": status}},
+                "hostAdapterRoute": {"mac-local": {
+                    "opencode": {"form": "run-per-task", "certifiedCliVersions": {"1.18.35": "B22-fase0.md"}},
+                    "claude": {"form": "run-per-task", "certifiedCliVersions": {"2.1.301": "SUA-04"}}}}}
+
+    def medidas_verde(self, version="1.19.3", estado="verde", ruta="mac-local/opencode"):
+        return {"schema": "agent-work.cli-versions.v1",
+                "routes": {ruta: {version: {"estado": estado, "medidoEn": "2026-10-17T23:40:00Z"}}}}
+
+    def test_una_version_verde_abre_la_ruta_certified_sin_estar_en_coverage(self):
+        route = sesion.Route.load(self.coverage_certified(), "mac-local", medidas=self.medidas_verde())
+        self.assertIsNone(route.open_for("1.19.3", canary=False))
+        self.assertEqual(route.open_for("1.19.4", canary=False),
+                         modelos.RouteNotCertified("1.19.4", ("1.18.35", "1.19.3")))
+        self.assertIsNone(route.open_for("1.18.35", canary=False))
+        for estado in ("rojo", "probando", "infraestructura"):
+            with self.subTest(estado=estado):
+                route = sesion.Route.load(self.coverage_certified(), "mac-local",
+                                          medidas=self.medidas_verde(estado=estado))
+                self.assertEqual(route.open_for("1.19.3", canary=False),
+                                 modelos.RouteNotCertified("1.19.3", ("1.18.35",)))
+        ajena = sesion.Route.load(self.coverage_certified(), "mac-local", "claude",
+                                  self.medidas_verde())
+        self.assertEqual(ajena.open_for("1.19.3", canary=False),
+                         modelos.RouteNotCertified("1.19.3", ("2.1.301",), "claude"))
+
+    def test_una_ruta_sandbox_no_suma_un_verde_escrito_a_mano(self):
+        # Prueba 6: sandbox-tested-uncertified no se recertifica sola.
+        medidas = self.medidas_verde()
+        route = sesion.Route.load(self.coverage_certified("sandbox-tested-uncertified"), "mac-local",
+                                  medidas=medidas)
+        self.assertEqual(route.status, "sandbox-tested-uncertified")
+        self.assertNotIn("1.19.3", route.certified_cli_versions)
+        self.assertEqual(route.open_for("1.19.3", canary=False), modelos.RouteNotCertified("1.19.3", ()))
+        self.assertEqual(route.open_for("1.18.35", canary=False), modelos.RouteNotCertified("1.18.35", ()))
+
+    def test_un_registro_ilegible_deja_la_ruta_como_la_deja_coverage(self):
+        # Prueba 7: JSON roto, forma mala o archivo ausente no abren ni cierran nada.
+        coverage = self.coverage_certified()
+        sola = sesion.Route.load(coverage, "mac-local")
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            checkout = root / "checkout"
+            (checkout / "docs/evidence/agent-work").mkdir(parents=True)
+            (checkout / "docs/evidence/agent-work/coverage.json").write_text(json.dumps(coverage), encoding="utf-8")
+            state = root / "state"
+            state.mkdir()
+            self.assertEqual(sesion.cargar_ruta(checkout, state, "mac-local"), sola)
+            (state / "versiones-medidas.json").write_text("{no es json", encoding="utf-8")
+            self.assertEqual(sesion.cargar_ruta(checkout, state, "mac-local"), sola)
+            (state / "versiones-medidas.json").write_text(json.dumps(["verde"]), encoding="utf-8")
+            self.assertEqual(sesion.cargar_ruta(checkout, state, "mac-local"), sola)
+            (state / "versiones-medidas.json").write_text(json.dumps(self.medidas_verde()), encoding="utf-8")
+            abierta = sesion.cargar_ruta(checkout, state, "mac-local")
+            self.assertIsNone(abierta.open_for("1.19.3", canary=False))
+            self.assertEqual(abierta.open_for("1.19.4", canary=False),
+                             modelos.RouteNotCertified("1.19.4", ("1.18.35", "1.19.3")))
+
 
 class Plans(Policies):
     OPERATION = "ab" * 32
