@@ -5,14 +5,14 @@
   cuánto se alejó la versión pública de OpenClaw de nuestra rama de integración
   y avisa por Telegram una sola vez por versión.
   Install:
-    mkdir -p ~/Library/Logs/goncloud &&
+    mkdir -p ~/bin ~/Library/Logs/goncloud &&
     cp scripts/mac/vigia-rebase-r.sh ~/bin/ &&
     cp scripts/mac/ai.goncloud.vigia-rebase-r.plist ~/Library/LaunchAgents/ &&
-    launchctl bootstrap gui/501 ~/Library/LaunchAgents/ai.goncloud.vigia-rebase-r.plist
+    launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/ai.goncloud.vigia-rebase-r.plist
   Correr ya (sin esperar al lunes 09:00):
-    launchctl kickstart gui/501/ai.goncloud.vigia-rebase-r
+    launchctl kickstart gui/$(id -u)/ai.goncloud.vigia-rebase-r
   Remove:
-    launchctl bootout gui/501/ai.goncloud.vigia-rebase-r
+    launchctl bootout gui/$(id -u)/ai.goncloud.vigia-rebase-r
 -->
 <plist version="1.0">
 <dict>

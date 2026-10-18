@@ -16,6 +16,16 @@
 #      después; el fetch solo puede sumar el tag nuevo.
 #   9. El script es de solo lectura sobre R (nada de checkout/rebase/merge/
 #      worktree) y el plist es válido, apunta al script y corre lunes 09:00.
+# 10. La marca solo con envío confirmado: salida del CLI sin messageId no
+#      marca y sale != 0; el reintento con messageId sí (G#345 F2).
+# 11. Fetch roto (tag inexistente en origin): != 0 sin aviso ni marca (F1).
+# 12. merge-tree roto (rc=2, doble de git): != 0 sin aviso ni marca; quitar el
+#      guard de rc deja 11 y 12 en rojo (F1).
+# 13. Base más nueva que latest (R adelante del canal): al día, sin aviso
+#      (F3 / CR 4308463341).
+# 14. merge-tree rc=1 sin archivos listados (renombre de directorio) NO es
+#      "0 choques": reporte y aviso dicen conflicto no clasificable (CR
+#      4308463348).
 #
 # Uso: bash scripts/tests/test-vigia-rebase-r.sh
 set -u
@@ -42,9 +52,30 @@ E
 cat > "$SB/bin/ssh" <<'E'
 #!/bin/sh
 printf '%s\n' "$*" >> "${FAKE_SSH_LOG:?}"
+# El CLI de openclaw soporta --json y contesta el messageId del mensaje
+# entregado (verificado con `openclaw message send --help`, OpenClaw
+# 2026.9.7). FAKE_SSH_SIN_ID=1 contesta JSON sin messageId: envío sin
+# confirmación.
+if [ -n "${FAKE_SSH_SIN_ID:-}" ]; then
+  printf '{"ok":true,"result":{}}\n'
+else
+  printf '{"ok":true,"result":{"messageId":"tg-falso-1"}}\n'
+fi
 exit "${FAKE_SSH_RC:-0}"
 E
-chmod +x "$SB/bin/npm" "$SB/bin/ssh"
+GIT_REAL="$(command -v git)"
+cat > "$SB/bin/git" <<E
+#!/bin/sh
+if [ -n "\${FAKE_MERGETREE_RC:-}" ]; then
+  for a in "\$@"; do
+    # Silencio y rc: rc=1 sin salida simula el choque sin archivos listados
+    # (renombre de directorio, CR 4308463348); rc>1, un merge-tree roto.
+    [ "\$a" = "merge-tree" ] && exit "\$FAKE_MERGETREE_RC"
+  done
+fi
+exec "$GIT_REAL" "\$@"
+E
+chmod +x "$SB/bin/npm" "$SB/bin/ssh" "$SB/bin/git"
 SSH_LOG="$SB/llamadas-ssh.txt"; export SSH_LOG FAKE_SSH_LOG="$SSH_LOG"
 : > "$SSH_LOG"
 
@@ -207,6 +238,11 @@ grep -q 'set -euo pipefail' "$S" || fail "el script no corre con set -euo pipefa
 printf '%s\n' "$codigo" | grep -q 'ConnectTimeout=10' || fail "el ssh no trae ConnectTimeout=10"
 printf '%s\n' "$codigo" | grep -qF 'IdentitiesOnly=yes -i "$LLAVE"' || fail "el ssh no fija la llave id_gateway"
 grep -qE 'beta' <<<"$codigo" && fail "el vigía mira canales beta"
+# El comentario de instalación del plist crea ~/bin (y el dir de logs) y usa
+# el uid de quien instala, no gui/501 a fuego (G#345 CR 4308463336/3339).
+grep -qF 'mkdir -p ~/bin' "$P" || fail "el plist no crea ~/bin antes de copiar el script"
+grep -qF 'gui/$(id -u)' "$P" || fail "el plist no usa gui/\$(id -u) en launchctl"
+grep -qF 'gui/501' "$P" && fail "el plist trae gui/501 a fuego"
 python3 - "$P" <<'E' || fail "plist inválido o no corre lunes 09:00"
 import plistlib,sys
 d=plistlib.load(open(sys.argv[1],'rb'))
@@ -218,5 +254,83 @@ assert d['EnvironmentVariables']['PATH'].startswith('/opt/homebrew/bin')
 assert d['StandardOutPath']==d['StandardErrorPath']=='/Users/dn/Library/Logs/goncloud/vigia-rebase-r.log'
 assert not d.get('RunAtLoad', False) and not d.get('KeepAlive')
 E
+
+# 10. La marca solo con envío confirmado (G#345 F2): el doble del CLI contesta
+#     JSON sin messageId y el vigía no marca y sale != 0; el reintento con
+#     messageId confirmado sí marca. Versión v2026.5.1, todavía sin avisar.
+git -C "$W" checkout -q upstream-trabajo
+printf 'mas mas\n' > "$W/CHANGELOG.md"
+git -C "$W" add . && git -C "$W" commit -qm "publico6"
+git -C "$W" tag v2026.5.1
+git -C "$W" push -q "$UP" upstream-trabajo:main v2026.5.1
+rc=0
+correr FAKE_NPM_VERSION=2026.5.1 FAKE_SSH_SIN_ID=1 || rc=$?
+[ "$rc" -ne 0 ] || fail "el envío sin messageId salió 0"
+grep -q "no confirmó messageId" "$SB/salida" || fail "el envío sin messageId no nombró el motivo"
+[ -f "$SB/estado/avisado-v2026.5.1" ] && fail "el envío sin messageId dejó marca"
+[ "$(linas_ssh)" = "4" ] || fail "el envío sin messageId no llamó al ssh (o llamó de más)"
+correr FAKE_NPM_VERSION=2026.5.1 || { cat "$SB/salida"; fail "el reintento con messageId falló"; }
+[ "$(linas_ssh)" = "5" ] || fail "el reintento con messageId no avisó (o avisó de más)"
+[ -f "$SB/estado/avisado-v2026.5.1" ] || fail "el reintento no dejó la marca con messageId confirmado"
+
+# 11. Fetch roto (tag que no existe en origin): != 0 sin aviso, marca ni
+#     reporte, nombrando el motivo (G#345 F1).
+rc=0
+correr FAKE_NPM_VERSION=2026.9.8 || rc=$?
+[ "$rc" -ne 0 ] || fail "con el fetch roto salió 0"
+grep -q "no se pudo traer v2026.9.8" "$SB/salida" || fail "con el fetch roto no nombró el motivo"
+[ "$(linas_ssh)" = "5" ] || fail "con el fetch roto avisó igual"
+[ -f "$SB/estado/avisado-v2026.9.8" ] && fail "con el fetch roto dejó marca"
+ls "$SB/estado"/*-v2026.9.8.txt >/dev/null 2>&1 && fail "con el fetch roto dejó reporte"
+
+# 12. merge-tree roto (rc=2 con doble de git): != 0 sin aviso ni marca (G#345
+#     F1). Si alguien quita el guard de rc de merge-tree, esta prueba queda
+#     roja: la corrida seguiría con la salida basura, contaría "0 choques",
+#     avisaría y dejaría marca.
+git -C "$W" checkout -q upstream-trabajo
+printf 'otra vez\n' > "$W/CHANGELOG.md"
+git -C "$W" add . && git -C "$W" commit -qm "publico7"
+git -C "$W" tag v2026.6.6
+git -C "$W" push -q "$UP" upstream-trabajo:main v2026.6.6
+rc=0
+correr FAKE_NPM_VERSION=2026.6.6 FAKE_MERGETREE_RC=2 || rc=$?
+[ "$rc" -ne 0 ] || fail "con merge-tree roto salió 0"
+grep -q "merge-tree falló (rc=2)" "$SB/salida" || fail "con merge-tree roto no nombró el motivo"
+[ "$(linas_ssh)" = "5" ] || fail "con merge-tree roto avisó igual"
+[ -f "$SB/estado/avisado-v2026.6.6" ] && fail "con merge-tree roto dejó marca"
+
+# 13. Base más nueva que latest (R adelante del canal latest): al día, sin
+#     aviso ni marca ni reporte (G#345 F3 / CR 4308463341). El tag v2026.1.0
+#     existe en origin (para que el fetch no rompa) pero es más viejo que el
+#     v2026.1.1 que ya carga la rama.
+git -C "$W" tag v2026.1.0 main
+git -C "$W" push -q "$UP" v2026.1.0
+correr FAKE_NPM_VERSION=2026.1.0 || { cat "$SB/salida"; fail "la corrida adelantada falló"; }
+grep -q "al día (adelantado)" "$SB/salida" || fail "base mayor que latest no lo dijo al día"
+[ "$(linas_ssh)" = "5" ] || fail "estando adelantado avisó (o llamó al ssh de más)"
+[ -f "$SB/estado/avisado-v2026.1.0" ] && fail "estando adelantado dejó marca"
+ls "$SB/estado"/*-v2026.1.0.txt >/dev/null 2>&1 && fail "estando adelantado dejó reporte"
+
+# 14. merge-tree rc=1 sin archivos listados (renombre de directorio): NO es
+#     "0 choques" (G#345 CR 4308463348). El reporte y el aviso deben decir
+#     conflicto no clasificable, y la corrida avisa y marca normal.
+git -C "$W" checkout -q upstream-trabajo
+printf 'y otra\n' > "$W/CHANGELOG.md"
+git -C "$W" add . && git -C "$W" commit -qm "publico8"
+git -C "$W" tag v2026.7.7
+git -C "$W" push -q "$UP" upstream-trabajo:main v2026.7.7
+correr FAKE_NPM_VERSION=2026.7.7 FAKE_MERGETREE_RC=1 || { cat "$SB/salida"; fail "la corrida de conflicto oscuro falló"; }
+REPORTE14=$(ls "$SB/estado"/*-v2026.7.7.txt 2>/dev/null) || fail "la corrida oscura no dejó reporte"
+grep -q "conflicto no clasificable" "$REPORTE14" || fail "el reporte oscuro no dice conflicto no clasificable"
+grep -q "archivos en conflicto: 0" "$REPORTE14" && fail "el reporte oscuro cuenta 0 choques (implica merge limpio)"
+[ "$(linas_ssh)" = "6" ] || fail "la corrida oscura no avisó (o avisó de más)"
+case "$(tail -1 "$SSH_LOG")" in
+  *"conflicto no clasificable"*) ;;
+  *) fail "el aviso oscuro no dice conflicto no clasificable: [$(tail -1 "$SSH_LOG")]" ;;
+esac
+case "$(tail -1 "$SSH_LOG")" in
+  *"0 archivos de código chocan"*) fail "el aviso oscuro implica merge limpio (0 choques)";;
+esac
+[ -f "$SB/estado/avisado-v2026.7.7" ] || fail "la corrida oscura no dejó marca"
 
 echo "ok: vigía de rebase mide la brecha, avisa una sola vez por versión y deja R intacto"

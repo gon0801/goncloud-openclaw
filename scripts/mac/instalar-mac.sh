@@ -29,13 +29,18 @@ ETIQUETA="ai.goncloud.tmux-activity-watch"
 PL2_FUENTE="$AQUI/ai.goncloud.agent-work-sucesion.plist"
 PL2_NOMBRE="ai.goncloud.agent-work-sucesion.plist"
 ETIQUETA2="ai.goncloud.agent-work-sucesion"
+PL3_FUENTE="$AQUI/ai.goncloud.vigia-rebase-r.plist"
+PL3_NOMBRE="ai.goncloud.vigia-rebase-r.plist"
+ETIQUETA3="ai.goncloud.vigia-rebase-r"
 R_SUCESION="${AGENT_WORK_SUCESION_RUNTIME:-$HOME/dev/wt/r-sua02-c-gate}"
 # El R construido que el banco del canario usa hoy (B1): sin el, sucesion --aplicar
 # quedaria pendiente cada noche, asi que el plist no se instala y se dice.
 LINEA_SOURCE="source ~/bin/agent-tmux-shell.zsh"
 # Manifiesto binario: fuentes relativas a scripts/mac, destino ~/bin (cp -p
-# conserva el +x).
-BINS="progress-events.py agent-tmux.sh agent-tmux-shell.zsh tmux-activity-watch.sh claude-stop-openclaw-event.sh shot.sh tablero-trabajo.sh"
+# conserva el +x). vigia-rebase-r.sh es el script del LaunchAgent del vigía
+# semanal (su plist lo corre con /bin/bash, el +x no le importa, pero viaja
+# con el mismo guard de blobs y verificación que el resto).
+BINS="progress-events.py agent-tmux.sh agent-tmux-shell.zsh tmux-activity-watch.sh claude-stop-openclaw-event.sh shot.sh tablero-trabajo.sh vigia-rebase-r.sh"
 AGENT_WORK_FILES="brief.py contexto.py contracts.py flota.py host.py lineas.py modelos.py native_gateway.py progress_bridge.py resources.py routing.py sesion.py spool.py cutover.py proyeccion.py"
 # El modulo puro que proyeccion.py importa (SUA-07 H0a) viaja como paquete chico de
 # sistema_agentes: solo lo que el host de la Mac usa, no el resto del paquete.
@@ -71,13 +76,18 @@ generar_plist2() { # $1 destino: la sucesion diaria de SUA-04 (4.3), runtime del
   sed -e "s|/Users/dn|$esc|g" -e "s|$HOME/dev/wt/r-sua02-c-gate|$esc_r|g" "$PL2_FUENTE" >"$1" || return 1
 }
 
+generar_plist3() { # $1 destino: el vigía semanal del rebase de R
+  local esc; esc="$(printf '%s' "$HOME" | sed 's/[&|\\]/\\&/g')"
+  sed "s|/Users/dn|$esc|g" "$PL3_FUENTE" >"$1" || return 1
+}
+
 # Fase 1: comprobar blobs contra la rama ANTES de tocar disco. Sale 0 si todo
 # cuadra o solo hay ausentes-declarados; sale 1 si algo difiere (fail closed).
 fase_blobs() {
   local git_ok=0 f rel esperado real
   if "$GIT_BIN" -C "$RAIZ" rev-parse --verify "$REF" >/dev/null 2>&1; then git_ok=1; fi
   [ "$git_ok" = "1" ] || { avisa "sin comprobacion de rama ($REF no resolvible); se instala por bytes"; return 0; }
-  for f in $BINS tmux.conf "$(basename "$PL_FUENTE")" "$(basename "$PL2_FUENTE")"; do
+  for f in $BINS tmux.conf "$(basename "$PL_FUENTE")" "$(basename "$PL2_FUENTE")" "$(basename "$PL3_FUENTE")"; do
     rel="scripts/mac/$f"
     esperado="$("$GIT_BIN" -C "$RAIZ" rev-parse "$REF:$rel" 2>/dev/null)" || { avisa "sin referencia en $REF: $rel (se declara y se sigue)"; continue; }
     real="$("$GIT_BIN" -C "$RAIZ" hash-object "$AQUI/$f" 2>/dev/null)" || falla "no se pudo leer $f"
@@ -125,9 +135,11 @@ modo_dry() {
   for f in $SISTEMA_AGENTES_FILES; do sha="$(blob_de "$RAIZ/sistema_agentes/$f")"; di "  bin/agent-work/sistema_agentes/$f  (blob ${sha})"; done
   di "  bin/agent-work/contexto/  (carpeta entera: manifiesto, perfiles y competencia)"
   di "  Library/LaunchAgents/$PL_NOMBRE y $PL2_NOMBRE  (generadas con HOME=$HOME)"
+  di "  Library/LaunchAgents/$PL3_NOMBRE  (generada con HOME=$HOME)"
   di "  .tmux.conf  (blob $(blob_de "$AQUI/tmux.conf"))"
   di "  .zshrc: agregaria \`$LINEA_SOURCE\` si falta"
   di "  cargaria: $LC_BIN bootstrap gui/$QUIEN_UID $LA_DIR/$PL_NOMBRE"
+  di "  cargaria: $LC_BIN bootstrap gui/$QUIEN_UID $LA_DIR/$PL3_NOMBRE"
 }
 
 modo_verificar() {
@@ -171,6 +183,9 @@ modo_verificar() {
         || { di "DIFIERE cargado: LaunchAgents/$PL2_NOMBRE"; mal=$((mal+1)); }
     fi
   fi
+  generar_plist3 "$tmp" || { rm -f "$tmp"; falla "no se pudo generar el plist del vigia esperado"; }
+  if [ ! -f "$LA_DIR/$PL3_NOMBRE" ]; then di "FALTA: LaunchAgents/$PL3_NOMBRE"; mal=$((mal+1));
+  elif ! cmp -s "$tmp" "$LA_DIR/$PL3_NOMBRE"; then di "DIFIERE: LaunchAgents/$PL3_NOMBRE"; mal=$((mal+1)); fi
   rm -f "$tmp"
   if [ ! -f "$HOME/.tmux.conf" ]; then di "FALTA: .tmux.conf"; mal=$((mal+1));
   elif ! cmp -s "$AQUI/tmux.conf" "$HOME/.tmux.conf"; then di "DIFIERE: .tmux.conf"; mal=$((mal+1)); fi
@@ -180,12 +195,13 @@ modo_verificar() {
 }
 
 modo_instalar() {
-  local f sha reiniciar=0 n=0
+  local f sha reiniciar=0 reiniciar_vigia=0 n=0
   mkdir -p "$BIN_DIR" "$BIN_DIR/agent-work" "$LA_DIR" || falla "no se pudieron crear directorios en $HOME"
   for f in $BINS; do
     copiar_si_difiere "$AQUI/$f" "$BIN_DIR/$f" || falla "no se pudo instalar bin/$f"
     # El LaunchAgent ejecuta este script: si cambio, hay que reiniciarlo.
     [ "$f" = "tmux-activity-watch.sh" ] && [ "$COPIO" = "1" ] && reiniciar=1
+    [ "$f" = "vigia-rebase-r.sh" ] && [ "$COPIO" = "1" ] && reiniciar_vigia=1
   done
   for f in $AGENT_WORK_FILES; do
     copiar_si_difiere "$RAIZ/agent-work/$f" "$BIN_DIR/agent-work/$f" || falla "no se pudo instalar agent-work/$f"
@@ -240,6 +256,27 @@ modo_instalar() {
       "$LC_BIN" bootstrap "gui/$QUIEN_UID" "$LA_DIR/$PL2_NOMBRE" >&2 || falla "launchctl no cargo $ETIQUETA2"
     fi
   fi
+  # El vigía semanal del rebase de R: mismo patrón que el vigilante. Sin
+  # cambios y cargado no se toca (mismo por qué: un bootout+bootstrap
+  # innecesario puede dejarlo descargado); con cambios, bootout y bootstrap
+  # con los mismos reintentos. Su plist escribe el log en
+  # Library/Logs/goncloud: el directorio tiene que existir antes de cargar.
+  pl_tmp="$(mktemp)" || falla "sin tmp para el plist del vigia"
+  generar_plist3 "$pl_tmp" || { rm -f "$pl_tmp"; falla "no se pudo generar el plist del vigia"; }
+  copiar_si_difiere "$pl_tmp" "$LA_DIR/$PL3_NOMBRE" || { rm -f "$pl_tmp"; falla "no se pudo instalar el plist del vigia"; }
+  [ "$COPIO" = "1" ] && reiniciar_vigia=1
+  rm -f "$pl_tmp"
+  mkdir -p "$HOME/Library/Logs/goncloud" || falla "no se pudo crear Library/Logs/goncloud"
+  if [ "$reiniciar_vigia" = "0" ] && "$LC_BIN" print "gui/$QUIEN_UID/$ETIQUETA3" >/dev/null 2>&1; then
+    di "vigia $ETIQUETA3 sin cambios y cargado: no se reinicia"
+  else
+    "$LC_BIN" bootout "gui/$QUIEN_UID/$ETIQUETA3" >/dev/null 2>&1 || true
+    local n3=0
+    until "$LC_BIN" bootstrap "gui/$QUIEN_UID" "$LA_DIR/$PL3_NOMBRE" >&2; do
+      n3=$((n3+1)); [ "$n3" -ge 5 ] && falla "launchctl no cargo $ETIQUETA3 tras 5 intentos"
+      sleep 1
+    done
+  fi
   copiar_si_difiere "$AQUI/tmux.conf" "$HOME/.tmux.conf" || falla "no se pudo instalar .tmux.conf"
   [ -f "$HOME/.zshrc" ] || { touch "$HOME/.zshrc" || falla "no se pudo crear .zshrc"; }
   grep -qF "$LINEA_SOURCE" "$HOME/.zshrc" || printf '%s\n' "$LINEA_SOURCE" >>"$HOME/.zshrc"
@@ -260,6 +297,7 @@ modo_instalar() {
   for f in $AGENT_WORK_FILES; do sha="$(blob_de "$RAIZ/agent-work/$f")"; di "  bin/agent-work/$f  ${sha}"; done
   for f in $SISTEMA_AGENTES_FILES; do sha="$(blob_de "$RAIZ/sistema_agentes/$f")"; di "  bin/agent-work/sistema_agentes/$f  ${sha}"; done
   di "  LaunchAgents/$PL_NOMBRE y $PL2_NOMBRE  (generadas HOME=$HOME)"
+  di "  LaunchAgents/$PL3_NOMBRE  (generada HOME=$HOME)"
   di "  .tmux.conf  $(blob_de "$AQUI/tmux.conf")"
   di "  .zshrc: $LINEA_SOURCE"
 }
