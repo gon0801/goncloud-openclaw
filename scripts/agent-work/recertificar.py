@@ -26,6 +26,8 @@ from modelos import (
     catalogo_claude,
 )
 from sesion import (
+    DENIED_BY_RULE,
+    REJECTED_TOOL_CALL,
     LaunchSpec,
     Workspace,
     claude_argv,
@@ -344,16 +346,52 @@ def _m7(binario, checkout, base):
     )
     eventos = read_events(record.path)
     nego = bool(eventos and any(item.endswith(":deny") for item in eventos.evaluations))
+    siguio = _siguio_tras_el_deny(record)
     if not fuera.exists():
         return _veredicto("m7", "no pasa", "el archivo de fuera ya no está")
-    if vencio or codigo != 0 or not (repo / "fin.txt").is_file() or not nego:
+    if vencio or codigo != 0 or not nego or not siguio:
         return _veredicto(
             "m7",
             "no pasa",
-            f"no siguió después del deny: codigo={codigo} deny={nego} "
-            f"fin={(repo / 'fin.txt').is_file()}",
+            f"no siguió después del deny: codigo={codigo} deny={nego} siguio={siguio}",
         )
-    return _veredicto("m7", "pasa", "deny, el archivo de fuera sigue y fin.txt existe")
+    return _veredicto("m7", "pasa", "deny, el archivo de fuera sigue y el modelo siguió")
+
+
+def _evento_modelo(evento: dict) -> bool:
+    if evento.get("type") in ("text", "tool_use"):
+        return True
+    parte = evento.get("part")
+    return isinstance(parte, dict) and parte.get("type") in ("text", "tool")
+
+
+def _tool_negado(evento: dict) -> bool:
+    if evento.get("type") != "tool_use":
+        return False
+    parte = evento.get("part") if isinstance(evento.get("part"), dict) else {}
+    estado = parte.get("state") if isinstance(parte.get("state"), dict) else {}
+    error = estado.get("error")
+    return isinstance(error, str) and error.startswith((DENIED_BY_RULE, REJECTED_TOOL_CALL))
+
+
+def _siguio_tras_el_deny(record: SessionRecord) -> bool:
+    """Hubo un evento del modelo (texto o herramienta) después de la llamada negada.
+    Si el flujo no trae el tool_use negado, basta un evento: el deny quedó solo en stderr."""
+    eventos = []
+    try:
+        for linea in record.events.read_text(encoding="utf-8").splitlines():
+            try:
+                evento = json.loads(linea)
+            except ValueError:
+                continue
+            if isinstance(evento, dict) and _evento_modelo(evento):
+                eventos.append(evento)
+    except OSError:
+        return False
+    negados = [indice for indice, evento in enumerate(eventos) if _tool_negado(evento)]
+    if negados:
+        return any(indice > negados[-1] for indice in range(len(eventos)))
+    return bool(eventos)
 
 
 def _m21(binario, checkout, base):

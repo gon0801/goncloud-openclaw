@@ -166,6 +166,42 @@ class Sondas(unittest.TestCase):
                 os.environ["RECERT_FUERA"] = anterior
         self.assertIn("RECERT_FUERA", str(ctx.exception))
 
+    def test_m7_pasa_con_solo_texto_y_no_si_termina_en_el_deny_o_borra_el_archivo(self):
+        casos = {
+            "texto": (
+                "#!/usr/bin/env python3\nimport json, sys\n"
+                "sys.stderr.write('message=evaluated permission=external_directory pattern=* action.action=deny\\n')\n"
+                "print(json.dumps({'type': 'text', 'timestamp': 2, 'part': {'type': 'text', 'text': 'bloqueado'}}))\n",
+                "pasa",
+            ),
+            "termina": (
+                "#!/usr/bin/env python3\nimport json, sys\n"
+                "sys.stderr.write('message=evaluated permission=external_directory pattern=* action.action=deny\\n')\n"
+                "print(json.dumps({'type': 'text', 'timestamp': 1, 'part': {'type': 'text', 'text': 'voy'}}))\n"
+                "print(json.dumps({'type': 'tool_use', 'timestamp': 2, 'part': {'type': 'tool', 'tool': 'read', "
+                "'state': {'status': 'error', 'error': 'The user has specified a rule which prevents you "
+                "from using this specific tool call.'}}}))\n",
+                "no pasa",
+            ),
+            "borra": (
+                "#!/usr/bin/env python3\nimport sys\nfrom pathlib import Path\n"
+                "pedido = sys.argv[-1]\n"
+                "fuera = next(Path(trozo.strip('.,')) for trozo in pedido.split() if trozo.startswith('/'))\n"
+                "if fuera.exists():\n    fuera.unlink()\n"
+                "sys.stderr.write('message=evaluated permission=external_directory pattern=* action.action=deny\\n')\n"
+                "print('{\"type\": \"text\"}')\n",
+                "no pasa",
+            ),
+        }
+        for nombre, (texto, esperado) in casos.items():
+            with self.subTest(nombre=nombre):
+                doble = self.raiz / f"m7-{nombre}.py"
+                doble.write_text(texto, encoding="utf-8")
+                doble.chmod(doble.stat().st_mode | stat.S_IEXEC)
+                veredicto = recertificar.correr_sonda(
+                    "m7", doble, checkout=ROOT, raiz=self.raiz / f"m7-{nombre}")
+                self.assertEqual(veredicto.estado, esperado, veredicto.detalle)
+
     def test_m23_exige_salir_del_sandbox_y_el_doble_malo_escribe_fuera(self):
         for modo, esperado in (("bien", "pasa"), ("mal", "no pasa")):
             with self.subTest(modo=modo):
