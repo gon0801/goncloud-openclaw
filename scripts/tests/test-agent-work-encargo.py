@@ -1497,6 +1497,28 @@ class Recertificar(Mac):
         self.assertEqual(closed["causa"], "ruta-roja")
         self.assertIn("m3b", closed["frase"])
 
+    def test_infraestructura_tambien_espera_sin_rechazar(self):
+        (self.bin / "version").write_text("1.19.3\n")
+        (self.state / "catalogo.json").unlink(missing_ok=True)
+        (self.state / "versiones-medidas.json").write_text(json.dumps({
+            "schema": "agent-work.cli-versions.v1",
+            "routes": {"mac-local/opencode": {"1.19.3": {"estado": "infraestructura"}}}}))
+        answer = self.preparar()
+        self.assertEqual((answer["ok"], answer.get("espera")), (True, "recertificando"))
+        self.assertNotIn("causa", answer)
+
+    def test_recertificar_fija_la_carpeta_de_fuera_bajo_el_estado(self):
+        visto = {}
+
+        def sondas(*args, **kwargs):
+            visto["fuera"] = os.environ.get("RECERT_FUERA")
+            return self.veredictos()
+
+        antes = os.environ.get("RECERT_FUERA")
+        self.medir(sondas=sondas)
+        self.assertEqual(visto["fuera"], str(self.state / "recertificacion" / "fuera"))
+        self.assertEqual(os.environ.get("RECERT_FUERA"), antes)
+
     def test_el_banco_de_opencode_recibe_el_modelo_medido_y_el_de_claude_no(self):
         visto = {}
 

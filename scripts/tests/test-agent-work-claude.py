@@ -92,11 +92,19 @@ class ArgvYEnv(unittest.TestCase):
                 "--add-dir",
                 str(spec.run.path),
                 "--settings",
-                '{"sandbox":{"enabled":true,"autoAllowBashIfSandboxed":true}}',
+                '{"sandbox":{"enabled":true,"autoAllowBashIfSandboxed":true,'
+                '"allowUnsandboxedCommands":false}}',
             ),
         )
         # --tools y --allowed-tools llevan la misma lista.
         self.assertEqual(argv[argv.index("--tools") + 1], argv[argv.index("--allowed-tools") + 1])
+
+    def test_el_sandbox_no_deja_desactivar_el_encierro(self):
+        spec = spec_claude(self.tmp, herramientas=("Bash",))
+        argv = sesion.adaptador("claude").argv(spec, Path("/bin/claude"), task_id="t-1")
+        ajustes = json.loads(argv[argv.index("--settings") + 1])
+        self.assertIs(ajustes["sandbox"]["enabled"], True)
+        self.assertIs(ajustes["sandbox"]["allowUnsandboxedCommands"], False)
 
     def test_con_perfil_el_argv_suma_el_agents_md_de_la_corrida(self):
         # B3 de G7-r4: sin el AGENTS.md de la corrida, claude nunca leyó la skill

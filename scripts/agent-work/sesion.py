@@ -459,10 +459,15 @@ def opencode_env(spec: LaunchSpec) -> dict[str, str]:
     return env
 
 
-CLAUDE_SANDBOX_SETTINGS = '{"sandbox":{"enabled":true,"autoAllowBashIfSandboxed":true}}'
+CLAUDE_SANDBOX_SETTINGS = (
+    '{"sandbox":{"enabled":true,"autoAllowBashIfSandboxed":true,'
+    '"allowUnsandboxedCommands":false}}'
+)
 """El encierro de Bash de claude (M-23): con el sandbox, Bash escribe en el cwd y en las
 carpetas de --add-dir, y en cualquier otro lado recibe `operation not permitted` del
-sistema operativo. Es el equivalente de `external_directory: deny` de opencode."""
+sistema operativo. Es el equivalente de `external_directory: deny` de opencode.
+M-23 bis (2.1.302): sin allowUnsandboxedCommands en false, el modelo reintenta con
+dangerouslyDisableSandbox y dontAsk lo deja salir del encierro."""
 
 
 def claude_argv(spec: LaunchSpec, claude_bin: Path, *, task_id: str) -> tuple[str, ...]:

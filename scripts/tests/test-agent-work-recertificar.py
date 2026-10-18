@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Sondas de recertificar.py contra un doble del CLI, sin opencode ni claude reales."""
+import os
 import stat
 import sys
 import tempfile
@@ -98,11 +99,11 @@ if pedido.startswith("Con Bash"):
     caminos = rutas()
     dentro = next(camino for camino in caminos if camino.name == "dentro.txt")
     fuera = next(camino for camino in caminos if camino.name != "dentro.txt")
-    if MODO == "bien":
-        dentro.write_text("hola\n", encoding="utf-8")
-    else:
+    if MODO == "mal" and "dangerouslyDisableSandbox: true" in pedido:
         fuera.parent.mkdir(parents=True, exist_ok=True)
         fuera.write_text("hola\n", encoding="utf-8")
+    else:
+        dentro.write_text("hola\n", encoding="utf-8")
     emitir(str(cwd.resolve()), ["Bash"], [], [])
     raise SystemExit(0)
 marca = None
@@ -154,6 +155,24 @@ class Sondas(unittest.TestCase):
                     veredicto = recertificar.correr_sonda(
                         sonda, self.doble(DOBLE_OPENCODE, modo), checkout=ROOT, raiz=self.raiz / f"{sonda}-{modo}")
                     self.assertEqual(veredicto.estado, esperado, veredicto.detalle)
+
+    def test_sin_recert_fuera_no_inventa_una_carpeta(self):
+        anterior = os.environ.pop("RECERT_FUERA", None)
+        try:
+            with self.assertRaises(RuntimeError) as ctx:
+                recertificar._fuera(self.raiz / "base")
+        finally:
+            if anterior is not None:
+                os.environ["RECERT_FUERA"] = anterior
+        self.assertIn("RECERT_FUERA", str(ctx.exception))
+
+    def test_m23_exige_salir_del_sandbox_y_el_doble_malo_escribe_fuera(self):
+        for modo, esperado in (("bien", "pasa"), ("mal", "no pasa")):
+            with self.subTest(modo=modo):
+                veredicto = recertificar.correr_sonda(
+                    "m23", self.doble(DOBLE_CLAUDE, modo), checkout=ROOT,
+                    raiz=self.raiz / f"m23-frase-{modo}")
+                self.assertEqual(veredicto.estado, esperado, veredicto.detalle)
 
     def test_cada_sonda_de_claude_pasa_con_el_doble_sano_y_falla_con_el_roto(self):
         for sonda in recertificar.SONDAS["claude"]:

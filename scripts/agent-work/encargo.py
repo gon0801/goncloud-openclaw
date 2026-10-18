@@ -299,7 +299,8 @@ def preparar(repo: Path | None, modelo: str | None, *, perfil: str | None = None
             and medida.get("estado") == "rojo"):
         return explicar(ruta_roja(medida, adapter_id, version_cli))
     # Mientras la versión se mide, el pedido se registra igual: no hay rechazo de ruta ni de host.
-    midiendo = closed is not None and isinstance(medida, dict) and medida.get("estado") == "probando"
+    midiendo = (closed is not None and isinstance(medida, dict)
+                and medida.get("estado") in ("probando", "infraestructura"))
     workspace = None
     if repo is not None:
         workspace = Workspace.for_repository(str(repo), allowed_root=allowed_root)
@@ -1172,8 +1173,16 @@ def recertificar(*, state_root: Path, checkout: Path, ruta: str = "mac-local/ope
     salida = ""
     banco_estado = None
     falla = None
+    anterior_fuera = os.environ.get("RECERT_FUERA")
+    os.environ["RECERT_FUERA"] = str(Path(state_root) / "recertificacion" / "fuera")
     try:
-        veredictos = tuple(medir(adapter_id, binario, checkout))
+        try:
+            veredictos = tuple(medir(adapter_id, binario, checkout))
+        finally:
+            if anterior_fuera is None:
+                os.environ.pop("RECERT_FUERA", None)
+            else:
+                os.environ["RECERT_FUERA"] = anterior_fuera
         evidencia_dir.mkdir(parents=True, exist_ok=True)
         (evidencia_dir / "sondas.json").write_text(json.dumps(
             [{"sonda": item.sonda, "estado": item.estado, "detalle": item.detalle} for item in veredictos],
