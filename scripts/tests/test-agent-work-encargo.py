@@ -1465,6 +1465,38 @@ class Recertificar(Mac):
         self.assertEqual((answer["accion"], llamado), ("host-ocupado", []))
         self.assertFalse((self.state / "versiones-medidas.json").exists())
 
+    def test_verde_abre_preparar_sin_relanzar_el_host(self):
+        (self.bin / "version").write_text("1.19.3\n")
+        (self.state / "catalogo.json").unlink(missing_ok=True)
+        self.medir()
+        self.beat(cliVersion="1.19.3")
+        answer = self.preparar()
+        self.assertIs(answer["ok"], True)
+        self.assertNotIn("causa", answer)
+        self.assertNotIn("espera", answer)
+
+    def test_probando_espera_y_rojo_nombra_la_sonda(self):
+        (self.bin / "version").write_text("1.19.3\n")
+        (self.state / "catalogo.json").unlink(missing_ok=True)
+        (self.state / "versiones-medidas.json").write_text(json.dumps({
+            "schema": "agent-work.cli-versions.v1",
+            "routes": {"mac-local/opencode": {"1.19.3": {"estado": "probando"}}}}))
+        answer = self.preparar()
+        self.assertEqual((answer["ok"], answer.get("espera")), (True, "recertificando"))
+        self.assertEqual(
+            answer["frase"],
+            "La ruta de encargos está midiendo opencode 1.19.3; el encargo sale en unos minutos")
+        self.assertEqual(answer["inputRevision"]["kind"], "code")
+        self.assertIn("zai-coding-plan/glm-5.3-flash", answer["briefArgs"])
+        doc = json.loads((self.state / "versiones-medidas.json").read_text())
+        doc["routes"]["mac-local/opencode"]["1.19.3"] = {
+            "estado": "rojo", "causa": "m3b", "sondas": {"m3b": "no pasa"}}
+        (self.state / "versiones-medidas.json").write_text(json.dumps(doc))
+        (self.state / "catalogo.json").unlink(missing_ok=True)
+        closed = self.preparar()
+        self.assertEqual(closed["causa"], "ruta-roja")
+        self.assertIn("m3b", closed["frase"])
+
     def test_una_ruta_sandbox_no_se_mide(self):
         self.sandbox_tested()
         llamado = []

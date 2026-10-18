@@ -321,14 +321,14 @@ class Slot(unittest.TestCase):
         self.r = FakeR()
         self.ahead = 0.0
 
-    def start(self, backend, canary=False):
+    def start(self, backend, canary=False, lanzar_recert=None):
         """A host process over this slot: the first one, or the one that replaces a dead one."""
         self.backend = backend
         self.host = Host("mac-local", self.spool)
         self.manager = ResourceManager(self.host.spool, "mac-local", backend)
         self.run = RunHost(self.r, self.host, self.manager, backend, instance_id="enc-1", checkout=self.checkout,
                            state_root=self.state, opencode_bin=self.bin / "opencode", allowed_root=self.root / "dev",
-                           canary=canary, clock=lambda: time.time() + self.ahead)
+                           canary=canary, clock=lambda: time.time() + self.ahead, lanzar_recert=lanzar_recert)
 
     def one_pass(self):
         """What the pump prints for one pass: its counts, or its error."""
@@ -1811,6 +1811,65 @@ class Decisions(Slot):
         with self.assertRaises(sqlite3.DatabaseError):
             self.run.claim()
         self.assertEqual((self.backend.launches, self.held()), ([], ("registered", "Reserved", "")))
+
+    def test_mientras_mide_no_reclama_ese_adaptador(self):
+        (self.bin / "version").write_text("1.18.36\n")
+        (self.state / "versiones-medidas.json").write_text(json.dumps({
+            "schema": "agent-work.cli-versions.v1",
+            "routes": {"mac-local/opencode": {"1.18.36": {"estado": "probando"}}}}))
+        self.r.offer("task-1", b"haz el saludo\n", self.revision)
+
+        def solo_opencode(adapter_id, instance_id):
+            if adapter_id != "opencode":
+                return None
+            return FakeR.claim_host(self.r, adapter_id, instance_id)
+
+        self.r.claim_host = solo_opencode
+        self.start(ScriptedBackend())
+        self.assertEqual(self.changes(), {})
+        self.assertEqual((self.r.claims, self.incidents()), ([], []))
+
+    def test_una_ruta_roja_se_rechaza_antes_de_lanzar(self):
+        (self.bin / "version").write_text("1.18.36\n")
+        (self.state / "versiones-medidas.json").write_text(json.dumps({
+            "schema": "agent-work.cli-versions.v1",
+            "routes": {"mac-local/opencode": {"1.18.36": {
+                "estado": "rojo", "causa": "m3b", "sondas": {"m3b": "no pasa"}}}}}))
+        self.r.offer("task-1", b"haz el saludo\n", self.revision)
+        self.start(ScriptedBackend())
+        self.refused("ruta-roja", "m3b")
+
+    def test_dos_pasadas_lanzan_una_sola_recertificacion(self):
+        (self.bin / "version").write_text("1.19.3\n")
+        (self.state / "catalogo.json").unlink(missing_ok=True)
+        proc = subprocess.Popen(["sleep", "30"])
+        self.addCleanup(proc.kill)
+        lanzados = []
+
+        def lanzar(argv, log_path):
+            lanzados.append((list(argv), log_path))
+            return proc
+
+        self.start(ScriptedBackend(), lanzar_recert=lanzar)
+        self.run.claim()
+        self.run.claim()
+        self.assertEqual(len(lanzados), 1)
+        argv, log_path = lanzados[0]
+        self.assertIn("recertificar", argv)
+        self.assertIn("--ruta", argv)
+        self.assertIn("mac-local/opencode", argv)
+        self.assertEqual(log_path.name, "agent-work-recertificar.log")
+        # Otro proceso: en el mismo, flock vuelve a conceder el candado.
+        chequeo = subprocess.run([sys.executable, "-c",
+                                  "import fcntl, os, sys\n"
+                                  "fd = os.open(sys.argv[1], os.O_RDWR)\n"
+                                  "try:\n"
+                                  "    fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)\n"
+                                  "except BlockingIOError:\n"
+                                  "    raise SystemExit(0)\n"
+                                  "raise SystemExit(1)\n",
+                                  str(self.state / "recertificar.lock")], capture_output=True, text=True)
+        self.assertEqual(chequeo.returncode, 0, chequeo.stderr)
 
 
 def slot_gid():

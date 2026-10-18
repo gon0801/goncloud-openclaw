@@ -29,12 +29,13 @@ from host import (ACCEPT_DEADLINE_SECONDS, RESULT_DEADLINE_SECONDS, GIT_REPO_VAR
                   PhotoFailed, repo_photo, writes_source)
 from modelos import claude_por_omision
 from modelos import (POLICY_FILE, CatalogStore, CatalogUnavailable, ContextoIncompleto, ExactModel, ModelNotListed,
-                     PerfilRechazado, ProviderNotConfigured, ProviderPolicy, authorize, catalogo_claude, explicar)
+                     PerfilRechazado, ProviderNotConfigured, ProviderPolicy, authorize, catalogo_claude, explicar,
+                     ruta_roja)
 from progress_bridge import transfer_host_projection, transfer_projection
 import proyeccion
 from resources import BoundaryBusy
 from sesion import (ADAPTADORES, GroupBoundaryBackend, LaunchHeader, LaunchSpec, MalformedHeader,
-                    Package, adaptador, cargar_ruta, plan_launch, session_name)
+                    Package, adaptador, cargar_ruta, entrada_medida, plan_launch, session_name)
 from spool import atomic_json, canonical, incident_identity
 
 CHECKOUT = Path(__file__).resolve().parents[2]
@@ -572,7 +573,8 @@ class RunHost:
 
     def __init__(self, client, host, manager, backend, *, instance_id, checkout, state_root, opencode_bin,
                  allowed_root, canary=False, accept_deadline_seconds=ACCEPT_DEADLINE_SECONDS,
-                 result_deadline_seconds=RESULT_DEADLINE_SECONDS, clock=time.time, claude_bin=None):
+                 result_deadline_seconds=RESULT_DEADLINE_SECONDS, clock=time.time, claude_bin=None,
+                 lanzar_recert=None):
         self.client, self.host, self.manager, self.backend = client, host, manager, backend
         self.instance_id = instance_id
         self.checkout = Path(checkout)
@@ -595,6 +597,9 @@ class RunHost:
         self._catalog = None
         self._catalog_at = 0.0
         self._opened = {}
+        self.lanzar_recert = lanzar_recert
+        self._recert_lock = None
+        self._recert_proc = None
 
     def catalog(self, *, fresh=False):
         """What opencode lists. Asked again before each launch plan, and once a minute for the beat."""
@@ -706,6 +711,9 @@ class RunHost:
             return package
         if adapter_id == "claude":
             catalog = self.catalogo_para("claude")
+            freno = self._freno(adapter_id, catalog.cli_version)
+            if freno is not None:
+                return freno
             return plan_launch(assignment, brief, policy=self.policy, catalog=catalog, route=route,
                                cli_version=catalog.cli_version, allowed_root=self.allowed_root, run=run,
                                record=record, operation=operation, canary=self.canary, package=package,
@@ -715,6 +723,9 @@ class RunHost:
             catalog = self.catalog(fresh=True)
         except CatalogUnavailable:
             return route.open_for("sin contestar su versión", canary=False)
+        freno = self._freno(adapter_id, catalog.cli_version)
+        if freno is not None:
+            return freno
 
         def planned(listed):
             return plan_launch(assignment, brief, policy=self.policy, catalog=listed, route=route,
@@ -740,10 +751,90 @@ class RunHost:
                      self.catalogo_para(plan.adapter_id)) != plan.model:
             raise ValueError(f"{plan.model.model} is not what authorize permits now; nothing was launched")
 
+    def _version_adapter(self, adapter_id):
+        try:
+            if adapter_id == "claude":
+                return self.catalogo_para("claude").cli_version
+            return self.catalog().cli_version
+        except (CatalogUnavailable, OSError):
+            return None
+
+    def _entrada(self, adapter_id, version):
+        if version is None:
+            return None
+        return entrada_medida(self.state_root, self.client.host_id, adapter_id, version)
+
+    def _freno(self, adapter_id, version):
+        entry = self._entrada(adapter_id, version)
+        if isinstance(entry, dict) and entry.get("estado") == "rojo":
+            return ruta_roja(entry, adapter_id, version)
+        return None
+
+    def _en_probando(self, adapter_id) -> bool:
+        entry = self._entrada(adapter_id, self._version_adapter(adapter_id))
+        return isinstance(entry, dict) and entry.get("estado") == "probando"
+
+    def _debe_medir(self, adapter_id) -> bool:
+        version = self._version_adapter(adapter_id)
+        if version is None:
+            return False
+        route = cargar_ruta(self.checkout, self.state_root, self.client.host_id, adapter_id)
+        if route.status != "certified" or version in route.certified_cli_versions:
+            return False
+        entry = self._entrada(adapter_id, version)
+        if isinstance(entry, dict) and entry.get("estado") in ("verde", "rojo", "probando"):
+            return False
+        return True
+
+    def _soltar_recert(self):
+        proc = self._recert_proc
+        if proc is not None and proc.poll() is None:
+            return
+        self._recert_proc = None
+        fd = self._recert_lock
+        self._recert_lock = None
+        if fd is not None:
+            fcntl.flock(fd, fcntl.LOCK_UN)
+            os.close(fd)
+
+    def disparar_recertificacion(self):
+        """Lanza una recertificación y sigue. El flock vive hasta que ese proceso termina,
+        así la pasada siguiente no lanza otra."""
+        self._soltar_recert()
+        if self._recert_lock is not None or self.lanzar_recert is None:
+            return
+        pendientes = [adapter_id for adapter_id in ADAPTERS if self._debe_medir(adapter_id)]
+        if not pendientes:
+            return
+        path = self.state_root / "recertificar.lock"
+        fd = os.open(path, os.O_CREAT | os.O_RDWR, 0o644)
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            os.close(fd)
+            return
+        adapter_id = pendientes[0]
+        log_path = Path.home() / "Library" / "Logs" / "goncloud" / "agent-work-recertificar.log"
+        argv = [sys.executable, str(Path(__file__).resolve().parent / "encargo.py"),
+                "--checkout", str(self.checkout), "--state-root", str(self.state_root),
+                "--opencode", str(self.opencode_bin), "--claude", str(self.claude_bin),
+                "recertificar", "--ruta", f"{self.client.host_id}/{adapter_id}"]
+        try:
+            self._recert_proc = self.lanzar_recert(argv, log_path)
+        except Exception:
+            fcntl.flock(fd, fcntl.LOCK_UN)
+            os.close(fd)
+            raise
+        self._recert_lock = fd
+
     def claim(self):
+        if self.lanzar_recert is not None:
+            self.disparar_recertificacion()
         rechazo = None
         intentados = 0
         for adapter_id in ADAPTERS:
+            if self._en_probando(adapter_id):
+                continue
             rechazado = self._claim_rechazado_en.get(adapter_id)
             if rechazado is not None and self.clock() - rechazado < CATALOG_RECHECK_SECONDS:
                 continue
@@ -1182,6 +1273,16 @@ def watch_pump(client, *, host, evidence_root, progress_state_dir, progress_clie
         stop_event.wait(interval)
 
 
+def _lanzar_recert(argv, log_path: Path):
+    """Proceso aparte. El log es el del host, no el de la pasada."""
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    log = open(log_path, "ab")
+    try:
+        return subprocess.Popen(argv, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
+    finally:
+        log.close()
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Transfer native task results to progress events")
     parser.add_argument("--openclaw-bin", required=True)
@@ -1255,7 +1356,8 @@ def main(argv=None):
                       opencode_bin=args.opencode_bin, claude_bin=args.claude_bin,
                       allowed_root=args.workspace_root, canary=args.canary,
                       accept_deadline_seconds=args.accept_deadline_seconds,
-                      result_deadline_seconds=args.result_deadline_seconds)
+                      result_deadline_seconds=args.result_deadline_seconds,
+                      lanzar_recert=_lanzar_recert)
         cli_claim, cli_watch, cli_beat = run.claim, run.watch, run.beat
         cli_release, cli_retry = manager.release_acknowledged, manager.retry_cleanup
         cli_cancel = lambda: manager.release_cancelled(client.host_cancellation)

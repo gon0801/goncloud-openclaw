@@ -49,9 +49,9 @@ from modelos import (MODEL_PATTERN, POLICY_FILE, PROVIDER, Billing, Catalog, Cat
                      OperatorCitation, PerfilRechazado, PermittedModel, PolicyUnreadable, ProviderClosure,
                      ProviderGrant, ProviderId, ProviderNotConfigured, ProviderPolicy, SlotBlocked, UNVERIFIED_REF,
                      WorkspaceRefused, authorize, catalogo_claude, explicar, pedido, policy_document,
-                     succession_actual)
+                     ruta_roja, succession_actual)
 from sesion import (ALLOWED_ROOT, COVERAGE_FILE, EXIT_NO_SCRATCH, EXIT_NO_WORKSPACE, EXIT_OUTSIDE_GROUP, PROFILE_ID,
-                    MEDIDAS_FILE, Route, Workspace, adaptador, cargar_ruta, model_in_use, read_events)
+                    MEDIDAS_FILE, Route, Workspace, adaptador, cargar_ruta, entrada_medida, model_in_use, read_events)
 import recertificar as recert_mod
 
 HOST_ID = "mac-local"
@@ -121,6 +121,8 @@ class Preparado:
     en_fila: bool
     politica: str
     cli: str
+    espera: str | None = None
+    frase: str | None = None
 
 
 @dataclass(frozen=True)
@@ -285,6 +287,11 @@ def preparar(repo: Path | None, modelo: str | None, *, perfil: str | None = None
     if not isinstance(model, PermittedModel):
         return explicar(model)
     adapter_id = adaptador_para(str(model.model.provider))
+    version_cli = _version_claude(claude_bin) if adapter_id == "claude" else catalog.cli_version
+    medida = entrada_medida(state_root, HOST_ID, adapter_id, version_cli)
+    midiendo = isinstance(medida, dict) and medida.get("estado") == "probando"
+    if isinstance(medida, dict) and medida.get("estado") == "rojo":
+        return explicar(ruta_roja(medida, adapter_id, version_cli))
     workspace = None
     if repo is not None:
         workspace = Workspace.for_repository(str(repo), allowed_root=allowed_root)
@@ -292,21 +299,22 @@ def preparar(repo: Path | None, modelo: str | None, *, perfil: str | None = None
             return explicar(workspace)
     beat = latido(state_root, now)
     # Un host canario vivo corre también una ruta todavía sin certificar: su canario es un pedido real.
+    # Mientras la versión se mide, el pedido se registra igual: no hay rechazo de ruta ni de host.
     canary = isinstance(beat, HostBeat) and beat.canary
-    closed = cargar_ruta(checkout, state_root, HOST_ID, adapter_id).open_for(
-        _version_claude(claude_bin) if adapter_id == "claude" else catalog.cli_version,
-        manifiesto["generation"] if manifiesto else None, canary=canary)
-    if closed is not None:
-        return explicar(closed)
-    if isinstance(beat, HostDown):
-        return explicar(beat)
-    for what, theirs, ours in (("checkout", os.path.realpath(beat.checkout), os.path.realpath(checkout)),
-                               ("policy", beat.policy_digest, policy.digest),
-                               ("cli-version", beat.cli_version, catalog.cli_version)):
-        if theirs != ours:
-            return explicar(HostMismatch(what, str(theirs), str(ours)))
-    if beat.slot == "blocked":
-        return explicar(SlotBlocked(beat.blocked_by))
+    if not midiendo:
+        closed = cargar_ruta(checkout, state_root, HOST_ID, adapter_id).open_for(
+            version_cli, manifiesto["generation"] if manifiesto else None, canary=canary)
+        if closed is not None:
+            return explicar(closed)
+        if isinstance(beat, HostDown):
+            return explicar(beat)
+        for what, theirs, ours in (("checkout", os.path.realpath(beat.checkout), os.path.realpath(checkout)),
+                                   ("policy", beat.policy_digest, policy.digest),
+                                   ("cli-version", beat.cli_version, catalog.cli_version)):
+            if theirs != ours:
+                return explicar(HostMismatch(what, str(theirs), str(ours)))
+        if beat.slot == "blocked":
+            return explicar(SlotBlocked(beat.blocked_by))
     revision = None
     if workspace is not None:
         sha = _head(workspace.root)
@@ -316,6 +324,13 @@ def preparar(repo: Path | None, modelo: str | None, *, perfil: str | None = None
     args = ("--host", HOST_ID, "--adapter", adapter_id, "--model", str(model.model))
     if perfil is not None:
         args += ("--perfil", perfil)
+    if midiendo:
+        nombre = "claude" if adapter_id == "claude" else "opencode"
+        return Preparado(str(model.model), model.billing, revision, args,
+                         isinstance(beat, HostBeat) and beat.slot == "running",
+                         model.policy_digest[:12], version_cli, espera="recertificando",
+                         frase=(f"La ruta de encargos está midiendo {nombre} {version_cli}; "
+                                "el encargo sale en unos minutos"))
     return Preparado(str(model.model), model.billing, revision, args,
                      beat.slot == "running", model.policy_digest[:12], beat.cli_version)
 
@@ -1691,9 +1706,13 @@ def _answer(result: "Preparado | Explicacion | HostBeat | EstadoTarea", now: flo
                    "modeloUsadoRazon": result.modelo_usado_razon, "permisos": list(result.permisos),
                    "flota": result.flota}
     if isinstance(result, Preparado):
-        return 0, {"ok": True, "modelo": result.modelo, "cobro": result.cobro, "inputRevision": result.input_revision,
-                   "briefArgs": list(result.brief_args), "enFila": result.en_fila,
-                   "host": {"politica": result.politica, "cli": result.cli}}
+        answer = {"ok": True, "modelo": result.modelo, "cobro": result.cobro, "inputRevision": result.input_revision,
+                  "briefArgs": list(result.brief_args), "enFila": result.en_fila,
+                  "host": {"politica": result.politica, "cli": result.cli}}
+        if result.espera:
+            answer["espera"] = result.espera
+            answer["frase"] = result.frase
+        return 0, answer
     return 0, {"ok": True, "pid": result.pid, "latidoHace": round(now - result.beat_at, 1), "slot": result.slot,
                "bloqueadoPor": list(result.blocked_by), "tarea": result.task_id, "modelo": result.model,
                "checkout": result.checkout, "commit": result.commit,

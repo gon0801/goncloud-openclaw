@@ -234,6 +234,18 @@ def cargar_ruta(checkout: Path, state_root: Path, host_id: str, adapter_id: str 
     return Route.load(coverage, host_id, adapter_id, medidas)
 
 
+def entrada_medida(state_root: Path, host_id: str, adapter_id: str, version: str) -> dict | None:
+    """La entrada de una versión en el registro, o None si no está o el registro no se lee."""
+    try:
+        doc = json.loads((Path(state_root) / MEDIDAS_FILE).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    routes = doc.get("routes") if isinstance(doc, dict) else None
+    bucket = routes.get(f"{host_id}/{adapter_id}") if isinstance(routes, dict) else None
+    entry = bucket.get(version) if isinstance(bucket, dict) else None
+    return entry if isinstance(entry, dict) else None
+
+
 @dataclass(frozen=True)
 class Package:
     """El paquete de poteto del checkout, ya leído y con su manifiesto íntegro (SUA-03, 4.5). Lo lee
