@@ -1871,6 +1871,60 @@ class Decisions(Slot):
                                   str(self.state / "recertificar.lock")], capture_output=True, text=True)
         self.assertEqual(chequeo.returncode, 0, chequeo.stderr)
 
+    def test_una_version_de_coverage_se_lanza_aunque_el_registro_diga_rojo(self):
+        (self.state / "versiones-medidas.json").write_text(json.dumps({
+            "schema": "agent-work.cli-versions.v1",
+            "routes": {"mac-local/opencode": {"1.18.35": {
+                "estado": "rojo", "causa": "m3b", "sondas": {"m3b": "no pasa"}}}}}))
+        self.start(self.backend)
+        self.launched()
+
+    def test_el_canario_lanza_aunque_el_registro_diga_rojo(self):
+        (self.bin / "version").write_text("1.18.36\n")
+        (self.state / "versiones-medidas.json").write_text(json.dumps({
+            "schema": "agent-work.cli-versions.v1",
+            "routes": {"mac-local/opencode": {"1.18.36": {
+                "estado": "rojo", "causa": "m3b", "sondas": {"m3b": "no pasa"}}}}}))
+        self.start(self.backend, canary=True)
+        self.launched()
+
+    def test_una_version_sin_medir_no_se_reclama_mientras_arranca_la_medicion(self):
+        (self.bin / "version").write_text("1.19.3\n")
+        (self.state / "catalogo.json").unlink(missing_ok=True)
+        self.r.offer("task-1", b"haz el saludo\n", self.revision)
+        proc = subprocess.Popen(["sleep", "30"])
+        self.addCleanup(proc.kill)
+        lanzados = []
+
+        def solo_opencode(adapter_id, instance_id):
+            if adapter_id != "opencode":
+                return None
+            return FakeR.claim_host(self.r, adapter_id, instance_id)
+
+        def lanzar(argv, log_path):
+            lanzados.append(list(argv))
+            return proc
+
+        self.r.claim_host = solo_opencode
+        self.start(ScriptedBackend(), lanzar_recert=lanzar)
+        self.run.claim()
+        self.assertEqual(len(lanzados), 1)
+        self.assertEqual((self.r.claims, self.incidents()), ([], []))
+
+    def test_un_probando_sin_proceso_vivo_vuelve_a_lanzar(self):
+        (self.bin / "version").write_text("1.19.3\n")
+        (self.state / "catalogo.json").unlink(missing_ok=True)
+        (self.state / "versiones-medidas.json").write_text(json.dumps({
+            "schema": "agent-work.cli-versions.v1",
+            "routes": {"mac-local/opencode": {"1.19.3": {"estado": "probando"}}}}))
+        proc = subprocess.Popen(["sleep", "30"])
+        self.addCleanup(proc.kill)
+        lanzados = []
+        self.start(ScriptedBackend(), lanzar_recert=lambda argv, log_path: lanzados.append(list(argv)) or proc)
+        self.run.claim()
+        self.assertEqual(len(lanzados), 1)
+        self.assertIn("mac-local/opencode", lanzados[0])
+
 
 def slot_gid():
     try:

@@ -1497,6 +1497,75 @@ class Recertificar(Mac):
         self.assertEqual(closed["causa"], "ruta-roja")
         self.assertIn("m3b", closed["frase"])
 
+    def test_el_banco_de_opencode_recibe_el_modelo_medido_y_el_de_claude_no(self):
+        visto = {}
+
+        def banco(env, cwd):
+            visto.update(env)
+            return 0, "case=ingenieria desenlace=verde causa=ninguna\n"
+
+        self.medir(banco=banco)
+        self.assertEqual(visto.get("AGENT_WORK_BANCO_MODELO"), "zai-coding-plan/glm-5.3-flash")
+        visto.clear()
+        self.medir(banco=banco, ruta="mac-local/claude", version="2.1.302")
+        self.assertNotIn("AGENT_WORK_BANCO_MODELO", visto)
+
+    def test_un_banco_claude_que_no_falla_el_caso_queda_en_infraestructura(self):
+        rc, salida = encargo._traducir_banco_claude(1, "no se pudo construir R\n")
+        self.assertEqual(encargo.clasificar_banco(salida, rc),
+                         ("infraestructura", "el banco no dio desenlace"))
+        rc, salida = encargo._traducir_banco_claude(1, "FAILED (failures=1)\n")
+        self.assertEqual(encargo.clasificar_banco(salida, rc)[0], "rojo")
+
+    def test_una_sonda_inconclusa_no_cierra_y_no_corre_el_banco(self):
+        from recertificar import Veredicto
+        nombres = ("m1", "m2", "m3a", "m3b", "m3c", "pwd", "m7")
+        banco = []
+        answer = self.medir(
+            sondas=lambda *args: tuple(
+                Veredicto(nombre, "inconcluso" if nombre == "m2" else "pasa", nombre) for nombre in nombres),
+            banco=lambda env, cwd: banco.append(1) or (0, "case=ingenieria desenlace=verde causa=ninguna\n"))
+        self.assertEqual((answer["accion"], self.entrada()["estado"]), ("infraestructura", "infraestructura"))
+        self.assertEqual(banco, [])
+
+    def test_una_sonda_que_revienta_queda_en_infraestructura_y_a_la_tercera_en_rojo(self):
+        avisos = []
+
+        def explota(*args, **kwargs):
+            raise RuntimeError("se cayó")
+
+        answer = self.medir(sondas=explota, avisos=avisos)
+        entry = self.entrada()
+        self.assertEqual((answer["accion"], entry["estado"], entry["intentos"]),
+                         ("infraestructura", "infraestructura", 1))
+        self.assertNotIn("se cayó", json.dumps(entry))
+        self.assertNotIn("se cayó", avisos[0])
+        self.assertNotIn("Users", avisos[0])
+        self.medir(sondas=explota, avisos=avisos)
+        answer = self.medir(sondas=explota, avisos=avisos)
+        self.assertEqual((answer["accion"], self.entrada()["estado"]), ("rojo", "rojo"))
+
+    def test_coverage_y_el_canario_abren_aunque_el_registro_diga_rojo(self):
+        (self.state / "versiones-medidas.json").write_text(json.dumps({
+            "schema": "agent-work.cli-versions.v1",
+            "routes": {"mac-local/opencode": {"1.18.35": {
+                "estado": "rojo", "causa": "m3b", "sondas": {"m3b": "no pasa"}}}}}))
+        self.beat()
+        answer = self.preparar()
+        self.assertIs(answer["ok"], True)
+        self.assertNotEqual(answer.get("causa"), "ruta-roja")
+        (self.bin / "version").write_text("1.19.3\n")
+        (self.state / "catalogo.json").unlink(missing_ok=True)
+        doc = json.loads((self.state / "versiones-medidas.json").read_text())
+        doc["routes"]["mac-local/opencode"]["1.19.3"] = {
+            "estado": "rojo", "causa": "m3b", "sondas": {"m3b": "no pasa"}}
+        (self.state / "versiones-medidas.json").write_text(json.dumps(doc))
+        self.beat(cliVersion="1.19.3", canary=True)
+        answer = self.preparar()
+        self.assertIs(answer["ok"], True)
+        self.assertNotIn("espera", answer)
+        self.assertNotEqual(answer.get("causa"), "ruta-roja")
+
     def test_una_ruta_sandbox_no_se_mide(self):
         self.sandbox_tested()
         llamado = []

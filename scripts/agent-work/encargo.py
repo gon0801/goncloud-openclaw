@@ -288,22 +288,23 @@ def preparar(repo: Path | None, modelo: str | None, *, perfil: str | None = None
         return explicar(model)
     adapter_id = adaptador_para(str(model.model.provider))
     version_cli = _version_claude(claude_bin) if adapter_id == "claude" else catalog.cli_version
+    beat = latido(state_root, now)
+    # Un host canario vivo corre también una ruta todavía sin certificar: su canario es un pedido real.
+    # Una versión que la ruta ya abre (coverage o canario) no queda tapada por el registro.
+    canary = isinstance(beat, HostBeat) and beat.canary
+    closed = cargar_ruta(checkout, state_root, HOST_ID, adapter_id).open_for(
+        version_cli, manifiesto["generation"] if manifiesto else None, canary=canary)
     medida = entrada_medida(state_root, HOST_ID, adapter_id, version_cli)
-    midiendo = isinstance(medida, dict) and medida.get("estado") == "probando"
-    if isinstance(medida, dict) and medida.get("estado") == "rojo":
+    if closed is not None and isinstance(medida, dict) and medida.get("estado") == "rojo":
         return explicar(ruta_roja(medida, adapter_id, version_cli))
+    # Mientras la versión se mide, el pedido se registra igual: no hay rechazo de ruta ni de host.
+    midiendo = closed is not None and isinstance(medida, dict) and medida.get("estado") == "probando"
     workspace = None
     if repo is not None:
         workspace = Workspace.for_repository(str(repo), allowed_root=allowed_root)
         if not isinstance(workspace, Workspace):
             return explicar(workspace)
-    beat = latido(state_root, now)
-    # Un host canario vivo corre también una ruta todavía sin certificar: su canario es un pedido real.
-    # Mientras la versión se mide, el pedido se registra igual: no hay rechazo de ruta ni de host.
-    canary = isinstance(beat, HostBeat) and beat.canary
     if not midiendo:
-        closed = cargar_ruta(checkout, state_root, HOST_ID, adapter_id).open_for(
-            version_cli, manifiesto["generation"] if manifiesto else None, canary=canary)
         if closed is not None:
             return explicar(closed)
         if isinstance(beat, HostDown):
@@ -887,7 +888,7 @@ def _traducir_banco_claude(rc: "int | None", salida: str) -> "tuple[int | None, 
     casos = ("case=claude-ingenieria", "case=claude-revision-rota", "case=claude-fuera")
     if rc == 0 and all(caso in salida for caso in casos):
         return rc, salida + "case=ingenieria desenlace=verde causa=ninguna\n"
-    if rc != 0:
+    if rc != 0 and "FAILED" in salida:
         return rc, salida + "case=ingenieria desenlace=rojo causa=banco\n"
     return rc, salida
 
@@ -1163,25 +1164,38 @@ def recertificar(*, state_root: Path, checkout: Path, ruta: str = "mac-local/ope
         _escribir_medidas(state_root, doc)
     binario = claude_bin if adapter_id == "claude" else opencode_bin
     medir = correr_sondas or (lambda adaptador, binario, checkout: recert_mod.correr_sondas(adaptador, binario, checkout=checkout))
-    veredictos = tuple(medir(adapter_id, binario, checkout))
     rel = f"recertificacion/{ruta.replace('/', '-')}/{version}"
     evidencia_dir = Path(state_root) / rel
-    evidencia_dir.mkdir(parents=True, exist_ok=True)
-    (evidencia_dir / "sondas.json").write_text(json.dumps(
-        [{"sonda": item.sonda, "estado": item.estado, "detalle": item.detalle} for item in veredictos],
-        indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-    falla = next((item for item in veredictos if item.estado != "pasa"), None)
+    nombre = "claude" if adapter_id == "claude" else "opencode"
+    veredictos = ()
     salida = ""
     banco_estado = None
-    if falla is None:
-        rc, salida = _banco_de(adapter_id, correr_banco)(
-            {"AGENT_WORK_BANCO_REAL": "1", "AGENT_WORK_BANCO_GUARDAR": str(evidencia_dir)}, Path(checkout))
-        (evidencia_dir / "banco.log").write_text(salida, encoding="utf-8")
-        clase, causa = clasificar_banco(salida, rc)
-        banco_estado = clase
-    else:
-        clase, causa = "rojo", falla.sonda
-    nombre = "claude" if adapter_id == "claude" else "opencode"
+    falla = None
+    try:
+        veredictos = tuple(medir(adapter_id, binario, checkout))
+        evidencia_dir.mkdir(parents=True, exist_ok=True)
+        (evidencia_dir / "sondas.json").write_text(json.dumps(
+            [{"sonda": item.sonda, "estado": item.estado, "detalle": item.detalle} for item in veredictos],
+            indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        no_pasa = next((item for item in veredictos if item.estado == "no pasa"), None)
+        inconcluso = next((item for item in veredictos if item.estado != "pasa"), None)
+        if no_pasa is not None:
+            clase, causa = "rojo", no_pasa.sonda
+            falla = no_pasa
+        elif inconcluso is not None:
+            clase, causa = "infraestructura", inconcluso.sonda
+        else:
+            env_banco = {"AGENT_WORK_BANCO_REAL": "1", "AGENT_WORK_BANCO_GUARDAR": str(evidencia_dir)}
+            if adapter_id != "claude":
+                env_banco["AGENT_WORK_BANCO_MODELO"] = recert_mod.MODELO
+            rc, salida = _banco_de(adapter_id, correr_banco)(env_banco, Path(checkout))
+            (evidencia_dir / "banco.log").write_text(salida, encoding="utf-8")
+            clase, causa = clasificar_banco(salida, rc)
+            banco_estado = clase
+    except Exception as error:
+        clase, causa = "infraestructura", type(error).__name__
+        falla = None
+        evidencia_dir.mkdir(parents=True, exist_ok=True)
     intentos += 1
     if clase == "infraestructura" and intentos >= 3:
         clase = "rojo"
@@ -1201,7 +1215,10 @@ def recertificar(*, state_root: Path, checkout: Path, ruta: str = "mac-local/ope
     if policy.unreadable is not None:
         envio = {"enviado": False, "causa": policy.unreadable}
     else:
-        envio = (enviar_aviso or aviso_mod.avisar)(texto, policy=policy, openclaw_bin=openclaw_bin)
+        try:
+            envio = (enviar_aviso or aviso_mod.avisar)(texto, policy=policy, openclaw_bin=openclaw_bin)
+        except Exception as error:
+            envio = {"enviado": False, "causa": type(error).__name__}
     aviso = {"enviado": bool(envio.get("enviado"))}
     if not aviso["enviado"]:
         aviso["causa"] = envio.get("causa", "no salió")

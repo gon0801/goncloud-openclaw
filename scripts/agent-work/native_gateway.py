@@ -765,6 +765,11 @@ class RunHost:
         return entrada_medida(self.state_root, self.client.host_id, adapter_id, version)
 
     def _freno(self, adapter_id, version):
+        if self.canary:
+            return None
+        route = cargar_ruta(self.checkout, self.state_root, self.client.host_id, adapter_id)
+        if route.status == "certified" and version in route.certified_cli_versions:
+            return None
         entry = self._entrada(adapter_id, version)
         if isinstance(entry, dict) and entry.get("estado") == "rojo":
             return ruta_roja(entry, adapter_id, version)
@@ -782,9 +787,19 @@ class RunHost:
         if route.status != "certified" or version in route.certified_cli_versions:
             return False
         entry = self._entrada(adapter_id, version)
-        if isinstance(entry, dict) and entry.get("estado") in ("verde", "rojo", "probando"):
+        if isinstance(entry, dict) and entry.get("estado") in ("verde", "rojo"):
             return False
         return True
+
+    def _no_reclamar(self, adapter_id) -> bool:
+        if self._en_probando(adapter_id):
+            return True
+        if self.lanzar_recert is None or self.canary:
+            return False
+        entry = self._entrada(adapter_id, self._version_adapter(adapter_id))
+        if isinstance(entry, dict) and entry.get("estado") == "rojo":
+            return False
+        return self._debe_medir(adapter_id)
 
     def _soltar_recert(self):
         proc = self._recert_proc
@@ -833,7 +848,7 @@ class RunHost:
         rechazo = None
         intentados = 0
         for adapter_id in ADAPTERS:
-            if self._en_probando(adapter_id):
+            if self._no_reclamar(adapter_id):
                 continue
             rechazado = self._claim_rechazado_en.get(adapter_id)
             if rechazado is not None and self.clock() - rechazado < CATALOG_RECHECK_SECONDS:
