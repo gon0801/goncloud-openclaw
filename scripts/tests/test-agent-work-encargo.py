@@ -1514,7 +1514,12 @@ class Recertificar(Mac):
         rc, salida = encargo._traducir_banco_claude(1, "no se pudo construir R\n")
         self.assertEqual(encargo.clasificar_banco(salida, rc),
                          ("infraestructura", "el banco no dio desenlace"))
-        rc, salida = encargo._traducir_banco_claude(1, "FAILED (failures=1)\n")
+        rc, salida = encargo._traducir_banco_claude(
+            1, "AssertionError: el host nunca escribió flota.json\nFAILED (failures=1)\n")
+        self.assertEqual(encargo.clasificar_banco(salida, rc),
+                         ("infraestructura", "el banco no dio desenlace"))
+        rc, salida = encargo._traducir_banco_claude(
+            1, "case=claude-ingenieria\ncase=claude-revision-rota\ncase=claude-fuera\nFAILED (failures=1)\n")
         self.assertEqual(encargo.clasificar_banco(salida, rc)[0], "rojo")
 
     def test_una_sonda_inconclusa_no_cierra_y_no_corre_el_banco(self):

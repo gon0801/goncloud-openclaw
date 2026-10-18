@@ -1846,7 +1846,7 @@ class Decisions(Slot):
         self.addCleanup(proc.kill)
         lanzados = []
 
-        def lanzar(argv, log_path):
+        def lanzar(argv, log_path, *_resto):
             lanzados.append((list(argv), log_path))
             return proc
 
@@ -1901,7 +1901,7 @@ class Decisions(Slot):
                 return None
             return FakeR.claim_host(self.r, adapter_id, instance_id)
 
-        def lanzar(argv, log_path):
+        def lanzar(argv, log_path, *_resto):
             lanzados.append(list(argv))
             return proc
 
@@ -1920,10 +1920,61 @@ class Decisions(Slot):
         proc = subprocess.Popen(["sleep", "30"])
         self.addCleanup(proc.kill)
         lanzados = []
-        self.start(ScriptedBackend(), lanzar_recert=lambda argv, log_path: lanzados.append(list(argv)) or proc)
+        self.start(ScriptedBackend(), lanzar_recert=lambda argv, log_path, *_resto: lanzados.append(list(argv)) or proc)
         self.run.claim()
         self.assertEqual(len(lanzados), 1)
         self.assertIn("mac-local/opencode", lanzados[0])
+
+    def test_la_compuerta_ve_la_version_nueva_aunque_el_catalogo_este_cacheado(self):
+        self.run.catalog()
+        (self.bin / "version").write_text("1.19.3\n")
+        (self.state / "catalogo.json").unlink(missing_ok=True)
+        proc = subprocess.Popen(["sleep", "30"])
+        self.addCleanup(proc.kill)
+        lanzados = []
+
+        def lanzar(argv, log_path, *_resto):
+            lanzados.append(list(argv))
+            return proc
+
+        self.run.lanzar_recert = lanzar
+        self.run.claim()
+        self.assertEqual((self.r.claims, self.incidents()), ([], []))
+        self.assertEqual(len(lanzados), 1)
+        self.assertIn("mac-local/opencode", lanzados[0])
+
+    def test_el_hijo_conserva_el_candado_cuando_muere_el_host(self):
+        from native_gateway import _lanzar_recert
+        lock = self.state / "recertificar.lock"
+        log = self.state / "recert.log"
+        host = subprocess.Popen(
+            [sys.executable, "-c",
+             "import os, sys\n"
+             "from pathlib import Path\n"
+             "sys.path.insert(0, sys.argv[1])\n"
+             "import fcntl\n"
+             "from native_gateway import _lanzar_recert\n"
+             "fd = os.open(sys.argv[2], os.O_CREAT | os.O_RDWR, 0o644)\n"
+             "fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)\n"
+             "proc = _lanzar_recert([sys.executable, '-c', 'import time; time.sleep(30)'], Path(sys.argv[3]), fd)\n"
+             "print(proc.pid, flush=True)\n"
+             "os._exit(0)\n",
+             str(ROOT / "scripts" / "agent-work"), str(lock), str(log)],
+            stdout=subprocess.PIPE, text=True)
+        pid = int(host.stdout.readline())
+        self.addCleanup(os.kill, pid, signal.SIGKILL)
+        self.assertEqual(host.wait(timeout=10), 0)
+        chequeo = subprocess.run(
+            [sys.executable, "-c",
+             "import fcntl, os, sys\n"
+             "fd = os.open(sys.argv[1], os.O_RDWR)\n"
+             "try:\n"
+             "    fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)\n"
+             "except BlockingIOError:\n"
+             "    raise SystemExit(0)\n"
+             "raise SystemExit(1)\n",
+             str(lock)], capture_output=True, text=True)
+        self.assertEqual(chequeo.returncode, 0, chequeo.stderr)
 
 
 def slot_gid():

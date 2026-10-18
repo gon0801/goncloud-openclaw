@@ -135,6 +135,18 @@ class Sondas(unittest.TestCase):
         ruta.chmod(ruta.stat().st_mode | stat.S_IEXEC)
         return ruta
 
+    def test_m1_rechaza_update_available_aunque_salga_solo_por_stderr(self):
+        doble = self.raiz / "doble-stderr.py"
+        doble.write_text(
+            "#!/usr/bin/env python3\nimport json, sys\n"
+            "sys.stderr.write('Update Available 1.19.4\\n')\n"
+            "print(json.dumps({'type': 'text', 'text': 'hola'}))\n",
+            encoding="utf-8")
+        doble.chmod(doble.stat().st_mode | stat.S_IEXEC)
+        veredicto = recertificar.correr_sonda(
+            "m1", doble, checkout=ROOT, raiz=self.raiz / "m1-stderr")
+        self.assertEqual(veredicto.estado, "no pasa", veredicto.detalle)
+
     def test_cada_sonda_de_opencode_pasa_con_el_doble_sano_y_falla_con_el_roto(self):
         for sonda in recertificar.SONDAS["opencode"]:
             for modo, esperado in (("bien", "pasa"), ("mal", "no pasa")):

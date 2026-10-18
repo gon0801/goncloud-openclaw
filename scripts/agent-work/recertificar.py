@@ -219,15 +219,16 @@ def _m1(binario, checkout, base):
     codigo, vencio = _lanzar(
         _argv_opencode(binario, MODELO, "di hola", logs=False), entorno, repo, TOPES["m1"], record
     )
-    texto = record.events.read_text(encoding="utf-8")
+    flujo = record.events.read_text(encoding="utf-8")
+    error = record.stderr.read_text(encoding="utf-8")
     if vencio or codigo != 0:
         return _veredicto("m1", "no pasa", f"no terminó sola: codigo={codigo} vencio={vencio}")
-    if "Update Available" in texto:
+    if "Update Available" in flujo or "Update Available" in error:
         return _veredicto("m1", "no pasa", "la salida contiene Update Available")
-    if not texto.strip():
+    if not flujo.strip():
         return _veredicto("m1", "inconcluso", "salió con 0 y eventos.jsonl quedó vacío")
     return _veredicto(
-        "m1", "pasa", f"salió con 0 y el flujo tiene {len(texto.splitlines())} líneas"
+        "m1", "pasa", f"salió con 0 y el flujo tiene {len(flujo.splitlines())} líneas"
     )
 
 

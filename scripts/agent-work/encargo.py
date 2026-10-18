@@ -888,7 +888,7 @@ def _traducir_banco_claude(rc: "int | None", salida: str) -> "tuple[int | None, 
     casos = ("case=claude-ingenieria", "case=claude-revision-rota", "case=claude-fuera")
     if rc == 0 and all(caso in salida for caso in casos):
         return rc, salida + "case=ingenieria desenlace=verde causa=ninguna\n"
-    if rc != 0 and "FAILED" in salida:
+    if rc != 0 and "FAILED" in salida and all(caso in salida for caso in casos):
         return rc, salida + "case=ingenieria desenlace=rojo causa=banco\n"
     return rc, salida
 

@@ -755,7 +755,7 @@ class RunHost:
         try:
             if adapter_id == "claude":
                 return self.catalogo_para("claude").cli_version
-            return self.catalog().cli_version
+            return self.catalog(fresh=True).cli_version
         except (CatalogUnavailable, OSError):
             return None
 
@@ -835,7 +835,7 @@ class RunHost:
                 "--opencode", str(self.opencode_bin), "--claude", str(self.claude_bin),
                 "recertificar", "--ruta", f"{self.client.host_id}/{adapter_id}"]
         try:
-            self._recert_proc = self.lanzar_recert(argv, log_path)
+            self._recert_proc = self.lanzar_recert(argv, log_path, fd)
         except Exception:
             fcntl.flock(fd, fcntl.LOCK_UN)
             os.close(fd)
@@ -1288,12 +1288,14 @@ def watch_pump(client, *, host, evidence_root, progress_state_dir, progress_clie
         stop_event.wait(interval)
 
 
-def _lanzar_recert(argv, log_path: Path):
-    """Proceso aparte. El log es el del host, no el de la pasada."""
+def _lanzar_recert(argv, log_path: Path, lock_fd=None):
+    """Proceso aparte. El log es el del host, no el de la pasada. El hijo hereda el flock."""
     log_path.parent.mkdir(parents=True, exist_ok=True)
     log = open(log_path, "ab")
     try:
-        return subprocess.Popen(argv, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
+        return subprocess.Popen(
+            argv, stdout=log, stderr=subprocess.STDOUT, start_new_session=True,
+            pass_fds=(lock_fd,) if lock_fd is not None else ())
     finally:
         log.close()
 
