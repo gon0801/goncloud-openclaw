@@ -175,7 +175,8 @@ fi
 # messageId del mensaje entregado. Un rc 0 sin messageId (CLI viejo, salida
 # recortada, envío no entregado) no prueba nada: sin marca y != 0, la próxima
 # corrida reintenta. El || true guarda el rc de grep cuando no hay id.
-id_mensaje=$(printf '%s' "$salida_ssh" | { grep -oE '"messageId"[[:space:]]*:[[:space:]]*"[^"]+"' || true; } | head -1 | sed 's/.*:[[:space:]]*"//;s/"$//')
+# Telegram da el id como entero; se acepta también como cadena (G#345 F7).
+id_mensaje=$(printf '%s' "$salida_ssh" | { grep -oE '"messageId"[[:space:]]*:[[:space:]]*("[^"]+"|[0-9]+)' || true; } | head -1 | sed 's/.*:[[:space:]]*//;s/^"//;s/"$//')
 [ -n "$id_mensaje" ] \
   || falla "el envío no confirmó messageId (no hay marca): $(printf '%s' "$salida_ssh" | tail -2 | tr '\n' ' ')"
 : > "$MARCA" || falla "el aviso salió pero no pude escribir la marca $MARCA: se repetiría"

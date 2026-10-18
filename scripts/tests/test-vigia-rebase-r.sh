@@ -54,12 +54,15 @@ cat > "$SB/bin/ssh" <<'E'
 printf '%s\n' "$*" >> "${FAKE_SSH_LOG:?}"
 # El CLI de openclaw soporta --json y contesta el messageId del mensaje
 # entregado (verificado con `openclaw message send --help`, OpenClaw
-# 2026.9.7). FAKE_SSH_SIN_ID=1 contesta JSON sin messageId: envío sin
+# 2026.9.7). Telegram da el id como ENTERO (G#345 F7); FAKE_SSH_ID_TEXTO=1 lo
+# da como cadena. FAKE_SSH_SIN_ID=1 contesta JSON sin messageId: envío sin
 # confirmación.
 if [ -n "${FAKE_SSH_SIN_ID:-}" ]; then
   printf '{"ok":true,"result":{}}\n'
-else
+elif [ -n "${FAKE_SSH_ID_TEXTO:-}" ]; then
   printf '{"ok":true,"result":{"messageId":"tg-falso-1"}}\n'
+else
+  printf '{"ok":true,"result":{"messageId":4242}}\n'
 fi
 exit "${FAKE_SSH_RC:-0}"
 E
