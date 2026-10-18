@@ -20,7 +20,7 @@ No hay tabla de modelos en esta skill. Qué modelos existen, cuáles están perm
    python3 /Users/dn/dev/wt/agent-work-host/scripts/agent-work/encargo.py preparar --repo /Users/dn/dev/<repo> --modelo "<lo que dijo David>" --perfil <id>
    ```
    Contesta una línea JSON. Un rechazo sale con código 3 y aun así trae su línea: léela.
-   - Con `"ok": true`, guarda `modelo`, `cobro`, `inputRevision`, `briefArgs` y `enFila`:
+   - Con `"ok": true`, guarda `modelo`, `cobro`, `inputRevision`, `briefArgs` y `enFila`. Si además trae `"espera": "recertificando"`, la ruta está midiendo esa versión del CLI: dile a David la `frase` tal cual y registra la tarea igual. No es un rechazo.
      ```
      {"ok": true, "modelo": "zai-coding-plan/glm-5.3-highspeed", "cobro": "subscription", "inputRevision": {"kind": "code", "repository": "/Users/dn/dev/<repo>", "sha": "<HEAD>"}, "briefArgs": ["--host", "mac-local", "--adapter", "opencode", "--model", "zai-coding-plan/glm-5.3-highspeed"], "enFila": false, "host": {"politica": "…", "cli": "…"}}
      ```

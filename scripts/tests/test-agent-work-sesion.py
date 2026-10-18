@@ -1976,6 +1976,57 @@ class Decisions(Slot):
              str(lock)], capture_output=True, text=True)
         self.assertEqual(chequeo.returncode, 0, chequeo.stderr)
 
+    def test_un_canario_no_dispara_la_recertificacion(self):
+        (self.bin / "version").write_text("1.19.3\n")
+        (self.state / "catalogo.json").unlink(missing_ok=True)
+        lanzados = []
+        self.start(self.backend, canary=True, lanzar_recert=lambda *args: lanzados.append(args))
+        self.launched()
+        self.assertEqual(lanzados, [])
+
+    def test_un_disparo_que_falla_no_impide_el_claim(self):
+        def lanzar(*args):
+            raise OSError("sin log")
+
+        self.start(self.backend, lanzar_recert=lanzar)
+        self.launched()
+
+    def test_un_probando_de_coverage_no_bloquea_el_claim(self):
+        (self.state / "versiones-medidas.json").write_text(json.dumps({
+            "schema": "agent-work.cli-versions.v1",
+            "routes": {"mac-local/opencode": {"1.18.35": {"estado": "probando"}}}}))
+        self.start(self.backend)
+        self.launched()
+        self.assertIn("opencode", self.backend.launches[0]["argv"][0])
+
+    def test_claude_sin_version_no_dispara_recertificacion(self):
+        claude = self.bin / "claude"
+        claude.write_text("#!/bin/sh\nexit 1\n")
+        claude.chmod(0o755)
+        lanzados = []
+        self.start(self.backend, lanzar_recert=lambda argv, log_path, *_resto: lanzados.append(list(argv)) or None)
+        self.run.claude_bin = claude
+        self.run._version_claude = None
+        self.launched()
+        self.assertFalse(any("mac-local/claude" in argv for argv in lanzados))
+
+    def test_el_hijo_prende_los_avisos_y_hereda_el_binario(self):
+        from native_gateway import _lanzar_recert
+        log = self.state / "avisos.log"
+        codigo = ("import os; print(os.environ.get('AGENT_WORK_AVISOS','')); "
+                  "print(os.environ.get('AGENT_WORK_OPENCLAW_BIN',''))")
+        guardado = {clave: os.environ.pop(clave) for clave in ("AGENT_WORK_AVISOS", "AGENT_WORK_OPENCLAW_BIN")
+                    if clave in os.environ}
+        os.environ["OPENCLAW_BIN"] = "/opt/openclaw-prueba"
+        try:
+            proc = _lanzar_recert([sys.executable, "-c", codigo], log)
+        finally:
+            os.environ.pop("OPENCLAW_BIN", None)
+            os.environ.update(guardado)
+        self.addCleanup(proc.kill)
+        self.assertEqual(proc.wait(timeout=10), 0)
+        self.assertEqual(log.read_text().splitlines()[:2], ["1", "/opt/openclaw-prueba"])
+
 
 def slot_gid():
     try:

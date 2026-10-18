@@ -49,7 +49,7 @@ from modelos import (MODEL_PATTERN, POLICY_FILE, PROVIDER, Billing, Catalog, Cat
                      OperatorCitation, PerfilRechazado, PermittedModel, PolicyUnreadable, ProviderClosure,
                      ProviderGrant, ProviderId, ProviderNotConfigured, ProviderPolicy, SlotBlocked, UNVERIFIED_REF,
                      WorkspaceRefused, authorize, catalogo_claude, explicar, pedido, policy_document,
-                     ruta_roja, succession_actual)
+                     RouteNotCertified, ruta_roja, succession_actual)
 from sesion import (ALLOWED_ROOT, COVERAGE_FILE, EXIT_NO_SCRATCH, EXIT_NO_WORKSPACE, EXIT_OUTSIDE_GROUP, PROFILE_ID,
                     MEDIDAS_FILE, Route, Workspace, adaptador, cargar_ruta, entrada_medida, model_in_use, read_events)
 import recertificar as recert_mod
@@ -295,7 +295,8 @@ def preparar(repo: Path | None, modelo: str | None, *, perfil: str | None = None
     closed = cargar_ruta(checkout, state_root, HOST_ID, adapter_id).open_for(
         version_cli, manifiesto["generation"] if manifiesto else None, canary=canary)
     medida = entrada_medida(state_root, HOST_ID, adapter_id, version_cli)
-    if closed is not None and isinstance(medida, dict) and medida.get("estado") == "rojo":
+    if (isinstance(closed, RouteNotCertified) and isinstance(medida, dict)
+            and medida.get("estado") == "rojo"):
         return explicar(ruta_roja(medida, adapter_id, version_cli))
     # Mientras la versión se mide, el pedido se registra igual: no hay rechazo de ruta ni de host.
     midiendo = closed is not None and isinstance(medida, dict) and medida.get("estado") == "probando"

@@ -754,10 +754,14 @@ class RunHost:
     def _version_adapter(self, adapter_id):
         try:
             if adapter_id == "claude":
-                return self.catalogo_para("claude").cli_version
-            return self.catalog(fresh=True).cli_version
+                version = self.catalogo_para("claude").cli_version
+            else:
+                version = self.catalog(fresh=True).cli_version
         except (CatalogUnavailable, OSError):
             return None
+        if not isinstance(version, str) or re.fullmatch(r"[0-9][0-9A-Za-z.+-]{0,63}", version) is None:
+            return None
+        return version
 
     def _entrada(self, adapter_id, version):
         if version is None:
@@ -776,8 +780,12 @@ class RunHost:
         return None
 
     def _en_probando(self, adapter_id) -> bool:
-        entry = self._entrada(adapter_id, self._version_adapter(adapter_id))
-        return isinstance(entry, dict) and entry.get("estado") == "probando"
+        version = self._version_adapter(adapter_id)
+        entry = self._entrada(adapter_id, version)
+        if not (isinstance(entry, dict) and entry.get("estado") == "probando"):
+            return False
+        route = cargar_ruta(self.checkout, self.state_root, self.client.host_id, adapter_id)
+        return not (route.status == "certified" and version in route.certified_cli_versions)
 
     def _debe_medir(self, adapter_id) -> bool:
         version = self._version_adapter(adapter_id)
@@ -814,7 +822,10 @@ class RunHost:
 
     def disparar_recertificacion(self):
         """Lanza una recertificación y sigue. El flock vive hasta que ese proceso termina,
-        así la pasada siguiente no lanza otra."""
+        así la pasada siguiente no lanza otra. Un host canario no dispara: su banco
+        volvería a medir."""
+        if self.canary:
+            return
         self._soltar_recert()
         if self._recert_lock is not None or self.lanzar_recert is None:
             return
@@ -844,7 +855,10 @@ class RunHost:
 
     def claim(self):
         if self.lanzar_recert is not None:
-            self.disparar_recertificacion()
+            try:
+                self.disparar_recertificacion()
+            except OSError as error:
+                print(f"agent-work: no pude lanzar la recertificación: {error}", file=sys.stderr, flush=True)
         rechazo = None
         intentados = 0
         for adapter_id in ADAPTERS:
@@ -1292,9 +1306,14 @@ def _lanzar_recert(argv, log_path: Path, lock_fd=None):
     """Proceso aparte. El log es el del host, no el de la pasada. El hijo hereda el flock."""
     log_path.parent.mkdir(parents=True, exist_ok=True)
     log = open(log_path, "ab")
+    entorno = os.environ.copy()
+    entorno["AGENT_WORK_AVISOS"] = "1"
+    binario = entorno.get("OPENCLAW_BIN")
+    if binario and not entorno.get("AGENT_WORK_OPENCLAW_BIN"):
+        entorno["AGENT_WORK_OPENCLAW_BIN"] = binario
     try:
         return subprocess.Popen(
-            argv, stdout=log, stderr=subprocess.STDOUT, start_new_session=True,
+            argv, stdout=log, stderr=subprocess.STDOUT, start_new_session=True, env=entorno,
             pass_fds=(lock_fd,) if lock_fd is not None else ())
     finally:
         log.close()

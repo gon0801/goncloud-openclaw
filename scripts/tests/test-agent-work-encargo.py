@@ -1571,6 +1571,19 @@ class Recertificar(Mac):
         self.assertNotIn("espera", answer)
         self.assertNotEqual(answer.get("causa"), "ruta-roja")
 
+    def test_una_generacion_sin_certificar_no_queda_tapada_por_un_rojo(self):
+        path = self.checkout / EVIDENCE / "coverage.json"
+        coverage = json.loads(path.read_text())
+        del coverage["hostAdapterRoute"]["mac-local"]["opencode"]["contextGenerations"]
+        path.write_text(json.dumps(coverage))
+        (self.state / "versiones-medidas.json").write_text(json.dumps({
+            "schema": "agent-work.cli-versions.v1",
+            "routes": {"mac-local/opencode": {"1.18.35": {
+                "estado": "rojo", "causa": "m3b", "sondas": {"m3b": "no pasa"}}}}}))
+        self.beat()
+        answer = self.preparar("--perfil", "ingenieria")
+        self.assertEqual(answer["causa"], "generacion-no-certificada")
+
     def test_una_ruta_sandbox_no_se_mide(self):
         self.sandbox_tested()
         llamado = []
