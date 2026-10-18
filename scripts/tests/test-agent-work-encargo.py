@@ -1429,6 +1429,46 @@ class Recertificar(Mac):
         closed = encargo.cargar_ruta(self.checkout, self.state, "mac-local").open_for("1.19.3", None, canary=False)
         self.assertIsNotNone(closed)
 
+    def _head_del_fixture(self):
+        env = {clave: valor for clave, valor in os.environ.items() if not clave.startswith("GIT_")}
+        if not (self.checkout / ".git").exists():
+            subprocess.run(["git", "-C", str(self.checkout), "init", "-q"], check=True, env=env, capture_output=True)
+            subprocess.run(
+                ["git", "-C", str(self.checkout), "-c", "user.name=t", "-c", "user.email=t@example.invalid",
+                 "commit", "-q", "--allow-empty", "-m", "base"],
+                check=True, env=env, capture_output=True)
+        hecho = subprocess.run(
+            ["git", "-C", str(self.checkout), "rev-parse", "HEAD"],
+            check=True, env=env, capture_output=True, text=True)
+        return hecho.stdout.strip()
+
+    def test_un_rojo_de_otro_commit_se_remide_y_el_mismo_o_un_verde_no(self):
+        head = self._head_del_fixture()
+        llamado = []
+
+        def escribir(estado, commit):
+            (self.state / "versiones-medidas.json").write_text(json.dumps({
+                "schema": "agent-work.cli-versions.v1",
+                "routes": {"mac-local/opencode": {"1.19.3": {
+                    "estado": estado, "commit": commit, "intentos": 3}}}}))
+
+        def sondas(*args, **kwargs):
+            llamado.append(1)
+            return self.veredictos()
+
+        escribir("rojo", "a" * 40)
+        answer = self.medir(sondas=sondas)
+        self.assertEqual((answer["accion"], llamado, self.entrada()["intentos"]), ("verde", [1], 1))
+        llamado.clear()
+        escribir("rojo", head)
+        antes = self.registro()
+        answer = self.medir(sondas=sondas)
+        self.assertEqual((answer["accion"], llamado, self.registro()), ("ya-medida", [], antes))
+        escribir("verde", "b" * 40)
+        antes = self.registro()
+        answer = self.medir(sondas=sondas)
+        self.assertEqual((answer["accion"], llamado, self.registro()), ("ya-medida", [], antes))
+
     def test_una_version_terminal_o_ya_en_coverage_no_se_vuelve_a_medir(self):
         (self.state / "versiones-medidas.json").write_text(json.dumps({
             "schema": "agent-work.cli-versions.v1",

@@ -52,7 +52,7 @@ from modelos import (MODEL_PATTERN, POLICY_FILE, PROVIDER, Billing, Catalog, Cat
                      RouteNotCertified, ruta_roja, succession_actual)
 from sesion import (ALLOWED_ROOT, COVERAGE_FILE, EXIT_NO_SCRATCH, EXIT_NO_WORKSPACE, EXIT_OUTSIDE_GROUP, PROFILE_ID,
                     MEDIDAS_FILE, Route, Workspace, adaptador, cargar_ruta, entrada_medida,
-                    infraestructura_en_espera, model_in_use, read_events)
+                    infraestructura_en_espera, medicion_terminal, model_in_use, read_events)
 import recertificar as recert_mod
 
 HOST_ID = "mac-local"
@@ -1204,8 +1204,9 @@ def recertificar(*, state_root: Path, checkout: Path, ruta: str = "mac-local/ope
         return {"ok": False, "accion": "sin-version", "causa": str(version)}
     if _version_en_coverage(coverage, host_id, adapter_id, version):
         return {"ok": True, "accion": "ya-certificada", "ruta": ruta, "version": version}
+    head = _head(checkout)
     previa = _entrada_medida(_leer_medidas(state_root), ruta, version)
-    if isinstance(previa, dict) and previa.get("estado") in ("verde", "rojo"):
+    if medicion_terminal(previa, head):
         return {"ok": True, "accion": "ya-medida", "ruta": ruta, "version": version, "estado": previa["estado"]}
     if infraestructura_en_espera(previa, now):
         return {"ok": True, "accion": "espera-reintento", "ruta": ruta, "version": version}
@@ -1219,11 +1220,12 @@ def recertificar(*, state_root: Path, checkout: Path, ruta: str = "mac-local/ope
     with _policy_lock(Path(state_root) / MEDIDAS_FILE):
         doc = _leer_medidas(state_root)
         previa = _entrada_medida(doc, ruta, version)
-        if isinstance(previa, dict) and previa.get("estado") in ("verde", "rojo"):
+        if medicion_terminal(previa, head):
             return {"ok": True, "accion": "ya-medida", "ruta": ruta, "version": version, "estado": previa["estado"]}
         if infraestructura_en_espera(previa, now):
             return {"ok": True, "accion": "espera-reintento", "ruta": ruta, "version": version}
-        intentos = int(previa.get("intentos") or 0) if isinstance(previa, dict) else 0
+        intentos = 0 if (isinstance(previa, dict) and previa.get("estado") == "rojo") else (
+            int(previa.get("intentos") or 0) if isinstance(previa, dict) else 0)
         _guardar_entrada(doc, ruta, version, {
             "estado": "probando", "medidoEn": datetime.fromtimestamp(now, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
             "commit": _head(checkout), "intentos": intentos})

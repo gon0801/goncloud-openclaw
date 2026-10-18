@@ -249,6 +249,19 @@ def entrada_medida(state_root: Path, host_id: str, adapter_id: str, version: str
 ESPERA_REINTENTO_S = 600
 
 
+def medicion_terminal(entry, commit) -> bool:
+    """verde, o un rojo medido con este mismo commit, no se vuelve a medir.
+    Un rojo cuyo commit es otro sí. Un rojo sin commit guardado sigue terminal."""
+    if not isinstance(entry, dict):
+        return False
+    if entry.get("estado") == "verde":
+        return True
+    if entry.get("estado") != "rojo":
+        return False
+    guardado = entry.get("commit")
+    return not (isinstance(guardado, str) and guardado != "" and guardado != commit)
+
+
 def infraestructura_en_espera(entry, now: float) -> bool:
     """Un intento de infraestructura no se repite antes de 10 minutos de su medidoEn."""
     if not isinstance(entry, dict) or entry.get("estado") != "infraestructura":

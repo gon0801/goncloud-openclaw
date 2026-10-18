@@ -1837,6 +1837,70 @@ class Decisions(Slot):
         self.assertEqual(self.changes(), {})
         self.assertEqual((self.r.claims, self.incidents()), ([], []))
 
+    def _commit_del_checkout(self):
+        env = {clave: valor for clave, valor in os.environ.items() if not clave.startswith("GIT_")}
+        if not (self.checkout / ".git").exists():
+            subprocess.run(["git", "-C", str(self.checkout), "init", "-q"], check=True, env=env, capture_output=True)
+            subprocess.run(
+                ["git", "-C", str(self.checkout), "-c", "user.name=t", "-c", "user.email=t@example.invalid",
+                 "commit", "-q", "--allow-empty", "-m", "base"],
+                check=True, env=env, capture_output=True)
+        hecho = subprocess.run(
+            ["git", "-C", str(self.checkout), "rev-parse", "HEAD"],
+            check=True, env=env, capture_output=True, text=True)
+        return hecho.stdout.strip()
+
+    def _version_nueva(self):
+        (self.bin / "version").write_text("1.19.3\n")
+        (self.state / "catalogo.json").unlink(missing_ok=True)
+        claude = self.bin / "claude"
+        claude.write_text("#!/bin/sh\nexit 1\n")
+        claude.chmod(0o755)
+        self.run.claude_bin = claude
+        self.run._version_claude = None
+
+    def test_un_rojo_de_otro_commit_se_vuelve_a_medir_y_el_mismo_no(self):
+        head = self._commit_del_checkout()
+        self._version_nueva()
+        (self.state / "versiones-medidas.json").write_text(json.dumps({
+            "schema": "agent-work.cli-versions.v1",
+            "routes": {"mac-local/opencode": {"1.19.3": {
+                "estado": "rojo", "commit": "a" * 40, "intentos": 3, "causa": "m7"}}}}))
+        proc = subprocess.Popen(["sleep", "30"])
+        self.addCleanup(proc.kill)
+        lanzados = []
+
+        def solo_opencode(adapter_id, instance_id):
+            if adapter_id != "opencode":
+                return None
+            return FakeR.claim_host(self.r, adapter_id, instance_id)
+
+        self.r.claim_host = solo_opencode
+        self.run.lanzar_recert = lambda argv, log_path, *_resto: lanzados.append(list(argv)) or proc
+        self.run.claim()
+        self.assertEqual(len(lanzados), 1)
+        self.assertIn("mac-local/opencode", lanzados[0])
+        self.assertEqual(self.r.claims, [])
+        (self.state / "versiones-medidas.json").write_text(json.dumps({
+            "schema": "agent-work.cli-versions.v1",
+            "routes": {"mac-local/opencode": {"1.19.3": {
+                "estado": "rojo", "commit": head, "causa": "m3b", "sondas": {"m3b": "no pasa"}}}}}))
+        self.run._recert_proc = None
+        self.run._soltar_recert()
+        self.refused("ruta-roja", "m3b")
+        self.assertEqual(len(lanzados), 1)
+
+    def test_un_verde_no_se_remide_por_un_commit_nuevo(self):
+        self._version_nueva()
+        (self.state / "versiones-medidas.json").write_text(json.dumps({
+            "schema": "agent-work.cli-versions.v1",
+            "routes": {"mac-local/opencode": {"1.19.3": {
+                "estado": "verde", "commit": "b" * 40}}}}))
+        lanzados = []
+        self.run.lanzar_recert = lambda argv, log_path, *_resto: lanzados.append(list(argv))
+        self.launched()
+        self.assertEqual(lanzados, [])
+
     def test_una_ruta_roja_se_rechaza_antes_de_lanzar(self):
         (self.bin / "version").write_text("1.18.36\n")
         (self.state / "versiones-medidas.json").write_text(json.dumps({

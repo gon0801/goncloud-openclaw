@@ -36,7 +36,7 @@ import proyeccion
 from resources import BoundaryBusy
 from sesion import (ADAPTADORES, GroupBoundaryBackend, LaunchHeader, LaunchSpec, MalformedHeader,
                     Package, adaptador, cargar_ruta, entrada_medida, infraestructura_en_espera,
-                    plan_launch, session_name)
+                    medicion_terminal, plan_launch, session_name)
 from spool import atomic_json, canonical, incident_identity
 
 CHECKOUT = Path(__file__).resolve().parents[2]
@@ -777,9 +777,16 @@ class RunHost:
         if route.status == "certified" and version in route.certified_cli_versions:
             return None
         entry = self._entrada(adapter_id, version)
-        if isinstance(entry, dict) and entry.get("estado") == "rojo":
+        if (isinstance(entry, dict) and entry.get("estado") == "rojo"
+                and medicion_terminal(entry, self._head_checkout())):
             return ruta_roja(entry, adapter_id, version)
         return None
+
+    def _head_checkout(self):
+        if not hasattr(self, "_head_cache"):
+            from encargo import _head
+            self._head_cache = _head(self.checkout)
+        return self._head_cache
 
     def _en_probando(self, adapter_id) -> bool:
         version = self._version_adapter(adapter_id)
@@ -797,7 +804,7 @@ class RunHost:
         if route.status != "certified" or version in route.certified_cli_versions:
             return False
         entry = self._entrada(adapter_id, version)
-        if isinstance(entry, dict) and entry.get("estado") in ("verde", "rojo"):
+        if medicion_terminal(entry, self._head_checkout()):
             return False
         if infraestructura_en_espera(entry, self.clock()):
             return False
@@ -809,7 +816,8 @@ class RunHost:
         if self.lanzar_recert is None or self.canary:
             return False
         entry = self._entrada(adapter_id, self._version_adapter(adapter_id))
-        if isinstance(entry, dict) and entry.get("estado") == "rojo":
+        if (isinstance(entry, dict) and entry.get("estado") == "rojo"
+                and medicion_terminal(entry, self._head_checkout())):
             return False
         if infraestructura_en_espera(entry, self.clock()):
             return True
