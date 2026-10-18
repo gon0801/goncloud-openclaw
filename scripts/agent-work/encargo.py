@@ -1169,7 +1169,8 @@ def _anotar_sin_r(*, state_root: Path, checkout: Path, ruta: str, version: str, 
             _escribir_medidas(state_root, doc)
             return {"ok": True, "accion": "infraestructura", "ruta": ruta, "version": version,
                     "estado": "infraestructura", "causa": "sin-r"}
-        intentos = int(previa.get("intentos") or 0) if isinstance(previa, dict) else 0
+        intentos = 0 if (isinstance(previa, dict) and previa.get("estado") == "rojo") else (
+            int(previa.get("intentos") or 0) if isinstance(previa, dict) else 0)
     texto = f"La ruta de encargos no pudo medir {nombre} {version}: sin-r."
     aviso = _avisar_medicion(texto, checkout, openclaw_bin, enviar_aviso)
     record = {"estado": "infraestructura", "medidoEn": stamp, "commit": _head(checkout),
@@ -1228,11 +1229,12 @@ def recertificar(*, state_root: Path, checkout: Path, ruta: str = "mac-local/ope
             int(previa.get("intentos") or 0) if isinstance(previa, dict) else 0)
         _guardar_entrada(doc, ruta, version, {
             "estado": "probando", "medidoEn": datetime.fromtimestamp(now, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-            "commit": _head(checkout), "intentos": intentos})
+            "commit": head, "intentos": intentos})
         _escribir_medidas(state_root, doc)
     binario = claude_bin if adapter_id == "claude" else opencode_bin
     rel = f"recertificacion/{ruta.replace('/', '-')}/{version}"
     evidencia_dir = Path(state_root) / rel
+    shutil.rmtree(evidencia_dir, ignore_errors=True)
     medir = correr_sondas or (lambda adaptador, binario, checkout: recert_mod.correr_sondas(
         adaptador, binario, checkout=checkout, evidencia=evidencia_dir))
     nombre = "claude" if adapter_id == "claude" else "opencode"
@@ -1291,7 +1293,7 @@ def recertificar(*, state_root: Path, checkout: Path, ruta: str = "mac-local/ope
         causa_entry = causa
     aviso = _avisar_medicion(texto, checkout, openclaw_bin, enviar_aviso)
     record = {"estado": clase, "medidoEn": datetime.fromtimestamp(now, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-              "commit": _head(checkout), "sondas": {item.sonda: item.estado for item in veredictos},
+              "commit": head, "sondas": {item.sonda: item.estado for item in veredictos},
               "banco": banco_estado, "evidencia": rel, "digest": _digest_dir(evidencia_dir),
               "intentos": intentos, "aviso": aviso}
     if causa_entry:

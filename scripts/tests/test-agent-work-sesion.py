@@ -1890,6 +1890,31 @@ class Decisions(Slot):
         self.refused("ruta-roja", "m3b")
         self.assertEqual(len(lanzados), 1)
 
+    def test_un_pull_entre_pasadas_vuelve_a_medir_el_rojo(self):
+        self.start(ScriptedBackend())
+        self._version_nueva()
+        head = self._commit_del_checkout()
+        (self.state / "versiones-medidas.json").write_text(json.dumps({
+            "schema": "agent-work.cli-versions.v1",
+            "routes": {"mac-local/opencode": {"1.19.3": {
+                "estado": "rojo", "commit": head, "causa": "m7"}}}}))
+        self.assertFalse(self.run._debe_medir("opencode"))
+        env = {clave: valor for clave, valor in os.environ.items() if not clave.startswith("GIT_")}
+        subprocess.run(
+            ["git", "-C", str(self.checkout), "-c", "user.name=t", "-c", "user.email=t@example.invalid",
+             "commit", "-q", "--allow-empty", "-m", "pull"],
+            check=True, env=env, capture_output=True)
+        self.assertTrue(self.run._debe_medir("opencode"))
+
+    def test_una_version_certificada_se_reclama_durante_la_espera(self):
+        medido = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        (self.state / "versiones-medidas.json").write_text(json.dumps({
+            "schema": "agent-work.cli-versions.v1",
+            "routes": {"mac-local/opencode": {"1.18.35": {
+                "estado": "infraestructura", "medidoEn": medido, "intentos": 1}}}}))
+        self.start(self.backend)
+        self.launched()
+
     def test_un_verde_no_se_remide_por_un_commit_nuevo(self):
         self._version_nueva()
         (self.state / "versiones-medidas.json").write_text(json.dumps({

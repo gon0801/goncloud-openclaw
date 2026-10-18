@@ -1708,12 +1708,13 @@ class Recertificar(Mac):
                              ("infraestructura", "infraestructura", "sin-r", 0, []))
             self.assertEqual(len(avisos), 1)
             self.assertNotIn("Users", avisos[0])
-            encargo.recertificar(
-                state_root=self.state, checkout=self.checkout, now=1_800_000_100.0, version="1.19.3",
+            segunda = encargo.recertificar(
+                state_root=self.state, checkout=self.checkout, now=1_800_000_600.0, version="1.19.3",
                 opencode_bin=self.bin / "opencode", claude_bin=self.bin / "claude",
                 correr_sondas=sondas, correr_banco=lambda env, cwd: (0, "no corre\n"),
                 enviar_aviso=enviar, runtime_source=None)
-            self.assertEqual((len(avisos), self.entrada()["intentos"], llamado), (1, 0, []))
+            self.assertEqual((segunda["accion"], len(avisos), self.entrada()["intentos"], llamado),
+                             ("infraestructura", 1, 0, []))
             archivo = self.root / "no-es-carpeta"
             archivo.write_text("x", encoding="utf-8")
             answer = self.medir(runtime_source=str(archivo), sondas=sondas, avisos=avisos, version="1.19.4")
@@ -1723,6 +1724,42 @@ class Recertificar(Mac):
                 os.environ.pop("AGENT_WORK_SUCESION_RUNTIME_SOURCE", None)
             else:
                 os.environ["AGENT_WORK_SUCESION_RUNTIME_SOURCE"] = guardado
+
+    def test_sin_r_despues_de_un_rojo_ajeno_empieza_sin_intentos(self):
+        (self.state / "versiones-medidas.json").write_text(json.dumps({
+            "schema": "agent-work.cli-versions.v1",
+            "routes": {"mac-local/opencode": {"1.19.3": {
+                "estado": "rojo", "commit": "a" * 40, "intentos": 3, "causa": "m7"}}}}))
+        guardado = os.environ.pop("AGENT_WORK_SUCESION_RUNTIME_SOURCE", None)
+        try:
+            answer = encargo.recertificar(
+                state_root=self.state, checkout=self.checkout, now=1_800_000_000.0, version="1.19.3",
+                opencode_bin=self.bin / "opencode", claude_bin=self.bin / "claude",
+                correr_sondas=lambda *args, **kwargs: self.veredictos(),
+                correr_banco=lambda env, cwd: (0, "no corre\n"),
+                enviar_aviso=lambda texto, **kwargs: {"enviado": True}, runtime_source=None)
+        finally:
+            if guardado is not None:
+                os.environ["AGENT_WORK_SUCESION_RUNTIME_SOURCE"] = guardado
+        self.assertEqual((answer["accion"], self.entrada()["intentos"], self.entrada()["causa"]),
+                         ("infraestructura", 0, "sin-r"))
+
+    def test_el_registro_guarda_el_commit_del_inicio(self):
+        secuencia = iter(["a" * 40, "b" * 40, "c" * 40])
+        with mock.patch.object(encargo, "_head", side_effect=lambda _checkout: next(secuencia)):
+            self.medir()
+        self.assertEqual(self.entrada()["commit"], "a" * 40)
+
+    def test_una_medicion_nueva_no_hereda_el_banco_viejo(self):
+        from recertificar import Veredicto
+        viejo = self.state / "recertificacion" / "mac-local-opencode" / "1.19.3"
+        viejo.mkdir(parents=True)
+        (viejo / "banco.log").write_text("banco viejo\n", encoding="utf-8")
+        nombres = ("m1", "m2", "m3a", "m3b", "m3c", "pwd", "m7")
+        answer = self.medir(sondas=lambda *args: tuple(
+            Veredicto(nombre, "no pasa" if nombre == "m7" else "pasa", nombre) for nombre in nombres))
+        self.assertEqual(answer["accion"], "rojo")
+        self.assertFalse((viejo / "banco.log").exists())
 
     def test_guarda_el_flujo_de_cada_sonda_y_el_digest_lo_cubre(self):
         doble = self.bin / "sonda-doble"

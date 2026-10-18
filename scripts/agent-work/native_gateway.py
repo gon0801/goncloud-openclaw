@@ -783,10 +783,9 @@ class RunHost:
         return None
 
     def _head_checkout(self):
-        if not hasattr(self, "_head_cache"):
-            from encargo import _head
-            self._head_cache = _head(self.checkout)
-        return self._head_cache
+        # Cada pasada: un git pull del checkout tiene que verse sin reiniciar el host.
+        from encargo import _head
+        return _head(self.checkout)
 
     def _en_probando(self, adapter_id) -> bool:
         version = self._version_adapter(adapter_id)
@@ -820,7 +819,10 @@ class RunHost:
                 and medicion_terminal(entry, self._head_checkout())):
             return False
         if infraestructura_en_espera(entry, self.clock()):
-            return True
+            version = self._version_adapter(adapter_id)
+            route = cargar_ruta(self.checkout, self.state_root, self.client.host_id, adapter_id)
+            if not (route.status == "certified" and version in route.certified_cli_versions):
+                return True
         return self._debe_medir(adapter_id)
 
     def _soltar_recert(self):
