@@ -29,6 +29,8 @@ T_MERGE="${VIGIA_TIMEOUT_MERGE:-300}"
 T_SSH="${VIGIA_TIMEOUT_SSH:-60}"
 DESTINO="${VIGIA_SSH_DESTINO:-gon@100.73.187.5}"
 TARGET="${VIGIA_TELEGRAM_TARGET:-6470689715}"
+# La Mini solo acepta id_gateway; bajo launchd el agente puede venir vacío.
+LLAVE="${VIGIA_SSH_LLAVE:-$HOME/.ssh/id_gateway}"
 
 log() { printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*"; }
 falla() { printf '[%s] FALLA: %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*" >&2; exit 1; }
@@ -135,7 +137,7 @@ else
   recomendacion="Ya se juntó bastante: hay que actualizar ya."
 fi
 texto="🔄 OpenClaw $ver ya salió. claw va en $base: $nuevos cambios públicos, $k archivos de código chocan con lo nuestro. $recomendacion"
-if ! salida_ssh=$(con_timeout "$T_SSH" ssh -o ConnectTimeout=10 "$DESTINO" "~/.openclaw/bin/openclaw message send --channel telegram --target $TARGET --message '$texto'" 2>&1); then
+if ! salida_ssh=$(con_timeout "$T_SSH" ssh -o ConnectTimeout=10 -o IdentitiesOnly=yes -i "$LLAVE" "$DESTINO" "~/.openclaw/bin/openclaw message send --channel telegram --target $TARGET --message '$texto'" 2>&1); then
   # Sin marca a propósito: la próxima corrida reintenta el aviso de esta versión.
   falla "el aviso por Telegram no salió: $(printf '%s' "$salida_ssh" | tail -2 | tr '\n' ' ')"
 fi

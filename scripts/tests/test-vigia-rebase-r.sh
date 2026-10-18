@@ -205,6 +205,7 @@ printf '%s\n' "$codigo" | grep -E 'fetch origin --no-tags' | grep -q '"tag"' \
 grep -q 'npm view openclaw dist-tags.latest' "$S" || fail "la versión pública no sale del canal latest"
 grep -q 'set -euo pipefail' "$S" || fail "el script no corre con set -euo pipefail"
 printf '%s\n' "$codigo" | grep -q 'ConnectTimeout=10' || fail "el ssh no trae ConnectTimeout=10"
+printf '%s\n' "$codigo" | grep -qF 'IdentitiesOnly=yes -i "$LLAVE"' || fail "el ssh no fija la llave id_gateway"
 grep -qE 'beta' <<<"$codigo" && fail "el vigía mira canales beta"
 python3 - "$P" <<'E' || fail "plist inválido o no corre lunes 09:00"
 import plistlib,sys
