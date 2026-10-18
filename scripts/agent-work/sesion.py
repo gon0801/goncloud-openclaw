@@ -246,6 +246,23 @@ def entrada_medida(state_root: Path, host_id: str, adapter_id: str, version: str
     return entry if isinstance(entry, dict) else None
 
 
+ESPERA_REINTENTO_S = 600
+
+
+def infraestructura_en_espera(entry, now: float) -> bool:
+    """Un intento de infraestructura no se repite antes de 10 minutos de su medidoEn."""
+    if not isinstance(entry, dict) or entry.get("estado") != "infraestructura":
+        return False
+    texto = entry.get("medidoEn")
+    if not isinstance(texto, str):
+        return False
+    try:
+        instante = datetime.strptime(texto, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc).timestamp()
+    except ValueError:
+        return False
+    return now - instante < ESPERA_REINTENTO_S
+
+
 @dataclass(frozen=True)
 class Package:
     """El paquete de poteto del checkout, ya leído y con su manifiesto íntegro (SUA-03, 4.5). Lo lee

@@ -2051,6 +2051,39 @@ class Decisions(Slot):
         self.assertEqual(len(lanzados), 2)
         self.assertIn("mac-local/opencode", lanzados[0])
 
+    def test_el_host_no_repite_una_infraestructura_antes_de_diez_minutos(self):
+        from datetime import datetime, timezone
+        (self.bin / "version").write_text("1.19.3\n")
+        (self.state / "catalogo.json").unlink(missing_ok=True)
+        claude = self.bin / "claude"
+        claude.write_text("#!/bin/sh\nexit 1\n")
+        claude.chmod(0o755)
+        medido = datetime.fromtimestamp(time.time() + self.ahead, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        (self.state / "versiones-medidas.json").write_text(json.dumps({
+            "schema": "agent-work.cli-versions.v1",
+            "routes": {"mac-local/opencode": {"1.19.3": {
+                "estado": "infraestructura", "medidoEn": medido, "intentos": 1}}}}))
+        proc = subprocess.Popen(["sleep", "30"])
+        self.addCleanup(proc.kill)
+        lanzados = []
+
+        def solo_opencode(adapter_id, instance_id):
+            if adapter_id != "opencode":
+                return None
+            return FakeR.claim_host(self.r, adapter_id, instance_id)
+
+        self.r.claim_host = solo_opencode
+        self.start(ScriptedBackend(), lanzar_recert=lambda argv, log_path, *_resto: lanzados.append(list(argv)) or proc)
+        self.run.claude_bin = claude
+        self.run._version_claude = None
+        self.run.claim()
+        self.assertEqual((lanzados, self.r.claims), ([], []))
+        self.ahead += 601
+        self.run.claim()
+        self.assertEqual(len(lanzados), 1)
+        self.assertIn("mac-local/opencode", lanzados[0])
+        self.assertEqual(self.r.claims, [])
+
     def test_el_disparo_pasa_el_r_de_sucesion_al_hijo(self):
         runtime = self.state / "runtime-r"
         runtime.mkdir()

@@ -1460,6 +1460,25 @@ class Recertificar(Mac):
         self.assertEqual(len(avisos), 3)
         self.assertIn(entry["evidencia"], avisos[0])
 
+    def test_infraestructura_no_se_repite_antes_de_diez_minutos(self):
+        ahora = 1_800_000_000.0
+        medido = datetime.fromtimestamp(ahora, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        (self.state / "versiones-medidas.json").write_text(json.dumps({
+            "schema": "agent-work.cli-versions.v1",
+            "routes": {"mac-local/opencode": {"1.19.3": {
+                "estado": "infraestructura", "medidoEn": medido, "intentos": 1}}}}))
+        antes = self.registro()
+        llamado = []
+        answer = self.medir(
+            now=ahora + 599,
+            sondas=lambda *args, **kwargs: llamado.append(1) or self.veredictos())
+        self.assertEqual((answer["accion"], llamado, self.registro()), ("espera-reintento", [], antes))
+        answer = self.medir(
+            now=ahora + 600,
+            sondas=lambda *args, **kwargs: llamado.append(1) or self.veredictos())
+        self.assertEqual((llamado, answer["accion"]), ([1], "verde"))
+        self.assertEqual(self.entrada()["intentos"], 2)
+
     def test_el_host_ocupado_pospone_sin_escribir(self):
         self.beat(slot="running", taskId="t-1", model="zai-coding-plan/glm-5.3", since=time.time())
         llamado = []

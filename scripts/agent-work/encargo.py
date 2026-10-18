@@ -51,7 +51,8 @@ from modelos import (MODEL_PATTERN, POLICY_FILE, PROVIDER, Billing, Catalog, Cat
                      WorkspaceRefused, authorize, catalogo_claude, explicar, pedido, policy_document,
                      RouteNotCertified, ruta_roja, succession_actual)
 from sesion import (ALLOWED_ROOT, COVERAGE_FILE, EXIT_NO_SCRATCH, EXIT_NO_WORKSPACE, EXIT_OUTSIDE_GROUP, PROFILE_ID,
-                    MEDIDAS_FILE, Route, Workspace, adaptador, cargar_ruta, entrada_medida, model_in_use, read_events)
+                    MEDIDAS_FILE, Route, Workspace, adaptador, cargar_ruta, entrada_medida,
+                    infraestructura_en_espera, model_in_use, read_events)
 import recertificar as recert_mod
 
 HOST_ID = "mac-local"
@@ -1206,6 +1207,8 @@ def recertificar(*, state_root: Path, checkout: Path, ruta: str = "mac-local/ope
     previa = _entrada_medida(_leer_medidas(state_root), ruta, version)
     if isinstance(previa, dict) and previa.get("estado") in ("verde", "rojo"):
         return {"ok": True, "accion": "ya-medida", "ruta": ruta, "version": version, "estado": previa["estado"]}
+    if infraestructura_en_espera(previa, now):
+        return {"ok": True, "accion": "espera-reintento", "ruta": ruta, "version": version}
     runtime = _r_de_recert(runtime_source)
     if runtime is None:
         nombre = "claude" if adapter_id == "claude" else "opencode"
@@ -1218,6 +1221,8 @@ def recertificar(*, state_root: Path, checkout: Path, ruta: str = "mac-local/ope
         previa = _entrada_medida(doc, ruta, version)
         if isinstance(previa, dict) and previa.get("estado") in ("verde", "rojo"):
             return {"ok": True, "accion": "ya-medida", "ruta": ruta, "version": version, "estado": previa["estado"]}
+        if infraestructura_en_espera(previa, now):
+            return {"ok": True, "accion": "espera-reintento", "ruta": ruta, "version": version}
         intentos = int(previa.get("intentos") or 0) if isinstance(previa, dict) else 0
         _guardar_entrada(doc, ruta, version, {
             "estado": "probando", "medidoEn": datetime.fromtimestamp(now, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),

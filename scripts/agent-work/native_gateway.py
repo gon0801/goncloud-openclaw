@@ -35,7 +35,8 @@ from progress_bridge import transfer_host_projection, transfer_projection
 import proyeccion
 from resources import BoundaryBusy
 from sesion import (ADAPTADORES, GroupBoundaryBackend, LaunchHeader, LaunchSpec, MalformedHeader,
-                    Package, adaptador, cargar_ruta, entrada_medida, plan_launch, session_name)
+                    Package, adaptador, cargar_ruta, entrada_medida, infraestructura_en_espera,
+                    plan_launch, session_name)
 from spool import atomic_json, canonical, incident_identity
 
 CHECKOUT = Path(__file__).resolve().parents[2]
@@ -798,6 +799,8 @@ class RunHost:
         entry = self._entrada(adapter_id, version)
         if isinstance(entry, dict) and entry.get("estado") in ("verde", "rojo"):
             return False
+        if infraestructura_en_espera(entry, self.clock()):
+            return False
         return True
 
     def _no_reclamar(self, adapter_id) -> bool:
@@ -808,6 +811,8 @@ class RunHost:
         entry = self._entrada(adapter_id, self._version_adapter(adapter_id))
         if isinstance(entry, dict) and entry.get("estado") == "rojo":
             return False
+        if infraestructura_en_espera(entry, self.clock()):
+            return True
         return self._debe_medir(adapter_id)
 
     def _soltar_recert(self):
