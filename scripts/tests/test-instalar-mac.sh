@@ -63,11 +63,13 @@ export INSTALAR_REF=HEAD
 out="$(bash "$INST" --dry-run 2>&1)" || fail "dry-run fallo: $out"
 [ -z "$(ls -A "$HOME")" ] || fail "dry-run escribio en HOME: $(ls -A "$HOME")"
 printf '%s' "$out" | grep -q "tmux-activity-watch.sh" || fail "dry-run no anuncia tmux-activity-watch.sh"
+printf '%s' "$out" | grep -q "vigia-rebase-r.sh" || fail "dry-run no anuncia el vigia del rebase (G#345 F6)"
+printf '%s' "$out" | grep -q "vigia-rebase-r.plist" || fail "dry-run no anuncia el plist del vigia (G#345 F6)"
 printf '%s' "$out" | grep -q "gui/59999" || fail "dry-run no usa el uid inyectado (falta gui/59999)"
 
 # (2) instala el conjunto completo.
 out="$(bash "$INST" 2>&1)" || fail "instalar fallo: $out"
-for f in agent-tmux.sh agent-tmux-shell.zsh tmux-activity-watch.sh claude-stop-openclaw-event.sh shot.sh tablero-trabajo.sh; do
+for f in agent-tmux.sh agent-tmux-shell.zsh tmux-activity-watch.sh claude-stop-openclaw-event.sh shot.sh tablero-trabajo.sh vigia-rebase-r.sh; do
   [ -f "$HOME/bin/$f" ] || fail "falta \$HOME/bin/$f"
 done
 [ -x "$HOME/bin/tablero-trabajo.sh" ] || fail "tablero-trabajo.sh quedo sin +x (claw lo corre directo)"
@@ -96,6 +98,18 @@ done
 [ -x "$HOME/bin/agent-work/cutover.py" ] || fail "cutover.py instalado sin +x"
 PL="$HOME/Library/LaunchAgents/ai.goncloud.tmux-activity-watch.plist"
 [ -f "$PL" ] || fail "falta el plist generado"
+# El vigia semanal del rebase (G#345 F6): mismo patron que el vigilante, con
+# el plist generado contra el HOME de mentira y cargado con el uid inyectado.
+[ -f "$HOME/bin/vigia-rebase-r.sh" ] && cmp -s scripts/mac/vigia-rebase-r.sh "$HOME/bin/vigia-rebase-r.sh" \
+  || fail "bin/vigia-rebase-r.sh falta o difiere"
+PL3="$HOME/Library/LaunchAgents/ai.goncloud.vigia-rebase-r.plist"
+[ -f "$PL3" ] || fail "falta el plist del vigia generado"
+grep -qF "$HOME/bin/vigia-rebase-r.sh" "$PL3" || fail "el plist del vigia no apunta al HOME instalado"
+grep -qF "$HOME/Library/Logs/goncloud/vigia-rebase-r.log" "$PL3" || fail "el plist del vigia no escribe su log en el HOME"
+grep -qF "/Users/dn" "$PL3" && fail "el plist del vigia trae /Users/dn a fuego"
+grep -q "bootstrap gui/59999.*ai.goncloud.vigia-rebase-r" "$LAUNCHLOG" \
+  || fail "no cargo el vigia con gui/59999 (G#345 F6)"
+[ -d "$HOME/Library/Logs/goncloud" ] || fail "falta Library/Logs/goncloud para el log del vigia"
 [ -f "$HOME/.tmux.conf" ] || fail "falta \$HOME/.tmux.conf"
 grep -qF "source ~/bin/agent-tmux-shell.zsh" "$HOME/.zshrc" 2>/dev/null \
   || fail "falta la linea de source en .zshrc"
@@ -219,6 +233,14 @@ printf '%s' "$out" | grep -q "agent-tmux.sh" || fail "verificar no nombra el arc
 rm "$HOME/bin/claude-stop-openclaw-event.sh"
 out="$(bash "$INST" --verificar 2>&1)" && fail "verificar paso con archivo ausente"
 printf '%s' "$out" | grep -q "claude-stop-openclaw-event.sh" || fail "verificar no nombra el archivo ausente: $out"
+# El vigia tambien lo mira --verificar (G#345 F6): script y plist ausentes,
+# rojo nombrandolos.
+rm "$HOME/bin/vigia-rebase-r.sh"
+out="$(bash "$INST" --verificar 2>&1)" && fail "verificar paso con vigia-rebase-r.sh ausente"
+printf '%s' "$out" | grep -q "vigia-rebase-r.sh" || fail "verificar no nombra vigia-rebase-r.sh ausente: $out"
+rm "$PL3"
+out="$(bash "$INST" --verificar 2>&1)" && fail "verificar paso con el plist del vigia ausente"
+printf '%s' "$out" | grep -q "ai.goncloud.vigia-rebase-r.plist" || fail "verificar no nombra el plist del vigia ausente: $out"
 
 # (7) blob contra la rama: fuente adulterada no se instala (mutacion: sin comprobar blob).
 export HOME="$T/casa2"; mkdir -p "$HOME"
