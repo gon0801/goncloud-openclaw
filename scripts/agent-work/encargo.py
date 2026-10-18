@@ -882,14 +882,15 @@ def _correr_banco_real(env_extra: dict, state_root: Path) -> "tuple[int | None, 
 
 
 def _traducir_banco_claude(rc: "int | None", salida: str) -> "tuple[int | None, str]":
-    """Los tres casos de claude imprimen case=claude-*, y clasificar_banco solo lee
-    case=ingenieria. Traducir aquí deja a sucesion con su lector intacto."""
+    """Los tres casos de claude imprimen case=claude-* cuando pasan, y clasificar_banco
+    solo lee case=ingenieria. Un FAIL o ERROR de unittest sobre test_claude es rojo.
+    Traducir aquí deja a sucesion con su lector intacto."""
     if rc is None:
         return rc, salida
     casos = ("case=claude-ingenieria", "case=claude-revision-rota", "case=claude-fuera")
     if rc == 0 and all(caso in salida for caso in casos):
         return rc, salida + "case=ingenieria desenlace=verde causa=ninguna\n"
-    if rc != 0 and "FAILED" in salida and all(caso in salida for caso in casos):
+    if rc != 0 and ("FAIL: test_claude" in salida or "ERROR: test_claude" in salida):
         return rc, salida + "case=ingenieria desenlace=rojo causa=banco\n"
     return rc, salida
 
@@ -898,8 +899,7 @@ def _correr_banco_claude(env_extra: dict, state_root: Path) -> "tuple[int | None
     env = {**os.environ, **env_extra, "LANG": "en_US.UTF-8", "AGENT_WORK_BANCO_ADAPTER": "claude"}
     try:
         hecho = subprocess.run(
-            [sys.executable, "scripts/tests/test_agent_work_banco_e2e.py", "-v", "-k",
-             "test_claude_ingenieria or test_claude_revision or test_claude_no_escribe"],
+            [sys.executable, "scripts/tests/test_agent_work_banco_e2e.py", "-v", "-k", "test_claude"],
             cwd=Path(__file__).resolve().parents[2], env=env, capture_output=True, text=True, timeout=1800)
     except subprocess.TimeoutExpired as error:
         crudo = error.stdout or ""

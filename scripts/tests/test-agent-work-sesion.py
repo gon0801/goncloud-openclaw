@@ -1933,10 +1933,16 @@ class Decisions(Slot):
         self.addCleanup(proc.kill)
         lanzados = []
 
+        def solo_opencode(adapter_id, instance_id):
+            if adapter_id != "opencode":
+                return None
+            return FakeR.claim_host(self.r, adapter_id, instance_id)
+
         def lanzar(argv, log_path, *_resto):
             lanzados.append(list(argv))
             return proc
 
+        self.r.claim_host = solo_opencode
         self.run.lanzar_recert = lanzar
         self.run.claim()
         self.assertEqual((self.r.claims, self.incidents()), ([], []))
@@ -2009,6 +2015,32 @@ class Decisions(Slot):
         self.run._version_claude = None
         self.launched()
         self.assertFalse(any("mac-local/claude" in argv for argv in lanzados))
+
+    def test_un_hijo_que_sale_en_seguida_no_se_relanza_en_la_misma_ventana(self):
+        (self.bin / "version").write_text("1.19.3\n")
+        (self.state / "catalogo.json").unlink(missing_ok=True)
+        lanzados = []
+
+        def solo_opencode(adapter_id, instance_id):
+            if adapter_id != "opencode":
+                return None
+            return FakeR.claim_host(self.r, adapter_id, instance_id)
+
+        def lanzar(argv, log_path, *_resto):
+            lanzados.append(list(argv))
+            proc = subprocess.Popen([sys.executable, "-c", "raise SystemExit(0)"])
+            proc.wait(timeout=10)
+            return proc
+
+        self.r.claim_host = solo_opencode
+        self.run.lanzar_recert = lanzar
+        self.run.claim()
+        self.run.claim()
+        self.assertEqual(len(lanzados), 1)
+        self.ahead += 60
+        self.run.claim()
+        self.assertEqual(len(lanzados), 2)
+        self.assertIn("mac-local/opencode", lanzados[0])
 
     def test_el_hijo_prende_los_avisos_y_hereda_el_binario(self):
         from native_gateway import _lanzar_recert

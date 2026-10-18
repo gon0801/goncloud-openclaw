@@ -600,6 +600,7 @@ class RunHost:
         self.lanzar_recert = lanzar_recert
         self._recert_lock = None
         self._recert_proc = None
+        self._recert_intento = None
 
     def catalog(self, *, fresh=False):
         """What opencode lists. Asked again before each launch plan, and once a minute for the beat."""
@@ -832,6 +833,9 @@ class RunHost:
         pendientes = [adapter_id for adapter_id in ADAPTERS if self._debe_medir(adapter_id)]
         if not pendientes:
             return
+        if (self._recert_intento is not None
+                and self.clock() - self._recert_intento < CATALOG_RECHECK_SECONDS):
+            return
         path = self.state_root / "recertificar.lock"
         fd = os.open(path, os.O_CREAT | os.O_RDWR, 0o644)
         try:
@@ -847,6 +851,7 @@ class RunHost:
                 "recertificar", "--ruta", f"{self.client.host_id}/{adapter_id}"]
         try:
             self._recert_proc = self.lanzar_recert(argv, log_path, fd)
+            self._recert_intento = self.clock()
         except Exception:
             fcntl.flock(fd, fcntl.LOCK_UN)
             os.close(fd)

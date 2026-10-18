@@ -1519,8 +1519,20 @@ class Recertificar(Mac):
         self.assertEqual(encargo.clasificar_banco(salida, rc),
                          ("infraestructura", "el banco no dio desenlace"))
         rc, salida = encargo._traducir_banco_claude(
-            1, "case=claude-ingenieria\ncase=claude-revision-rota\ncase=claude-fuera\nFAILED (failures=1)\n")
+            1, "FAIL: test_claude_ingenieria_arregla_y_su_flota_es_cli\n"
+               "AssertionError: claude no arregló el defecto\nFAILED (failures=1)\n")
         self.assertEqual(encargo.clasificar_banco(salida, rc)[0], "rojo")
+
+    def test_el_banco_de_claude_selecciona_los_tres_casos(self):
+        real = os.environ.pop("AGENT_WORK_BANCO_REAL", None)
+        try:
+            rc, salida = encargo._correr_banco_claude({}, self.state)
+        finally:
+            if real is not None:
+                os.environ["AGENT_WORK_BANCO_REAL"] = real
+        self.assertEqual(rc, 0, salida)
+        self.assertIn("Ran 3 tests", salida)
+        self.assertNotIn("NO TESTS RAN", salida)
 
     def test_una_sonda_inconclusa_no_cierra_y_no_corre_el_banco(self):
         from recertificar import Veredicto
