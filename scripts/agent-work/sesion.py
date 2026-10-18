@@ -159,7 +159,7 @@ class Route:
     certified_context_generations: frozenset[str] = frozenset()
 
     @staticmethod
-    def load(coverage: object, host_id: str, adapter_id: str = "opencode") -> "Route":
+    def load(coverage: object, host_id: str, adapter_id: str = "opencode", medidas: object = None) -> "Route":
         """De coverage.json, sin lanzar con ninguna forma de archivo. La ruta existe solo si
         hostAdapterRoute declara para ese host una entrada de ese adaptador de forma `run-per-task`:
         recién entonces vale el estado de hostAdapterCoverage. Lo que falta o está mal escrito es
@@ -176,7 +176,12 @@ class Route:
         versions = (key for key in measured if isinstance(key, str)) if isinstance(measured, dict) else ()
         contexts = entry.get("contextGenerations")
         generations = (key for key in contexts if isinstance(key, str)) if isinstance(contexts, dict) else ()
-        return Route(host_id, adapter_id, ROUTE_FORM, status, frozenset(versions), frozenset(generations))
+        certified = frozenset(versions)
+        # Solo una ruta certified suma verdes del registro. Una sandbox con un verde escrito a mano
+        # sigue cerrada: el candado de coverage no se abre desde el registro.
+        if status == "certified":
+            certified = certified | _versiones_verdes(medidas, host_id, adapter_id)
+        return Route(host_id, adapter_id, ROUTE_FORM, status, certified, frozenset(generations))
 
     def open_for(self, cli_version: str, generation: int | None = None, *, canary: bool
                  ) -> "None | RouteNotCertified | GenerationNotCertified":
@@ -194,6 +199,51 @@ class Route:
             certified = tuple(sorted(int(key) for key in self.certified_context_generations if key.isdigit()))
             return GenerationNotCertified(generation, certified)
         return None
+
+
+def _versiones_verdes(medidas: object, host_id: str, adapter_id: str) -> frozenset[str]:
+    """Versiones con estado verde de una ruta en el registro. Otra forma, u otro estado, no suma."""
+    if not isinstance(medidas, dict):
+        return frozenset()
+    routes = medidas.get("routes")
+    if not isinstance(routes, dict):
+        return frozenset()
+    entry = routes.get(f"{host_id}/{adapter_id}")
+    if not isinstance(entry, dict):
+        return frozenset()
+    return frozenset(version for version, record in entry.items()
+                     if isinstance(version, str) and isinstance(record, dict) and record.get("estado") == "verde")
+
+
+MEDIDAS_FILE = Path("versiones-medidas.json")
+
+
+def cargar_ruta(checkout: Path, state_root: Path, host_id: str, adapter_id: str = "opencode") -> Route:
+    """Lee coverage.json y el registro de versiones medidas. Un registro ilegible es un registro vacío."""
+    try:
+        coverage = json.loads((Path(checkout) / COVERAGE_FILE).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        coverage = {}
+    medidas = None
+    try:
+        parsed = json.loads((Path(state_root) / MEDIDAS_FILE).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        parsed = None
+    if isinstance(parsed, dict):
+        medidas = parsed
+    return Route.load(coverage, host_id, adapter_id, medidas)
+
+
+def entrada_medida(state_root: Path, host_id: str, adapter_id: str, version: str) -> dict | None:
+    """La entrada de una versión en el registro, o None si no está o el registro no se lee."""
+    try:
+        doc = json.loads((Path(state_root) / MEDIDAS_FILE).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    routes = doc.get("routes") if isinstance(doc, dict) else None
+    bucket = routes.get(f"{host_id}/{adapter_id}") if isinstance(routes, dict) else None
+    entry = bucket.get(version) if isinstance(bucket, dict) else None
+    return entry if isinstance(entry, dict) else None
 
 
 @dataclass(frozen=True)
@@ -409,10 +459,15 @@ def opencode_env(spec: LaunchSpec) -> dict[str, str]:
     return env
 
 
-CLAUDE_SANDBOX_SETTINGS = '{"sandbox":{"enabled":true,"autoAllowBashIfSandboxed":true}}'
+CLAUDE_SANDBOX_SETTINGS = (
+    '{"sandbox":{"enabled":true,"autoAllowBashIfSandboxed":true,'
+    '"allowUnsandboxedCommands":false}}'
+)
 """El encierro de Bash de claude (M-23): con el sandbox, Bash escribe en el cwd y en las
 carpetas de --add-dir, y en cualquier otro lado recibe `operation not permitted` del
-sistema operativo. Es el equivalente de `external_directory: deny` de opencode."""
+sistema operativo. Es el equivalente de `external_directory: deny` de opencode.
+M-23 bis (2.1.302): sin allowUnsandboxedCommands en false, el modelo reintenta con
+dangerouslyDisableSandbox y dontAsk lo deja salir del encierro."""
 
 
 def claude_argv(spec: LaunchSpec, claude_bin: Path, *, task_id: str) -> tuple[str, ...]:

@@ -29,12 +29,13 @@ from host import (ACCEPT_DEADLINE_SECONDS, RESULT_DEADLINE_SECONDS, GIT_REPO_VAR
                   PhotoFailed, repo_photo, writes_source)
 from modelos import claude_por_omision
 from modelos import (POLICY_FILE, CatalogStore, CatalogUnavailable, ContextoIncompleto, ExactModel, ModelNotListed,
-                     PerfilRechazado, ProviderNotConfigured, ProviderPolicy, authorize, catalogo_claude, explicar)
+                     PerfilRechazado, ProviderNotConfigured, ProviderPolicy, authorize, catalogo_claude, explicar,
+                     ruta_roja)
 from progress_bridge import transfer_host_projection, transfer_projection
 import proyeccion
 from resources import BoundaryBusy
-from sesion import (ADAPTADORES, COVERAGE_FILE, GroupBoundaryBackend, LaunchHeader, LaunchSpec, MalformedHeader,
-                    Package, Route, adaptador, plan_launch, session_name)
+from sesion import (ADAPTADORES, GroupBoundaryBackend, LaunchHeader, LaunchSpec, MalformedHeader,
+                    Package, adaptador, cargar_ruta, entrada_medida, plan_launch, session_name)
 from spool import atomic_json, canonical, incident_identity
 
 CHECKOUT = Path(__file__).resolve().parents[2]
@@ -572,7 +573,8 @@ class RunHost:
 
     def __init__(self, client, host, manager, backend, *, instance_id, checkout, state_root, opencode_bin,
                  allowed_root, canary=False, accept_deadline_seconds=ACCEPT_DEADLINE_SECONDS,
-                 result_deadline_seconds=RESULT_DEADLINE_SECONDS, clock=time.time, claude_bin=None):
+                 result_deadline_seconds=RESULT_DEADLINE_SECONDS, clock=time.time, claude_bin=None,
+                 lanzar_recert=None):
         self.client, self.host, self.manager, self.backend = client, host, manager, backend
         self.instance_id = instance_id
         self.checkout = Path(checkout)
@@ -595,6 +597,10 @@ class RunHost:
         self._catalog = None
         self._catalog_at = 0.0
         self._opened = {}
+        self.lanzar_recert = lanzar_recert
+        self._recert_lock = None
+        self._recert_proc = None
+        self._recert_intento = None
 
     def catalog(self, *, fresh=False):
         """What opencode lists. Asked again before each launch plan, and once a minute for the beat."""
@@ -700,16 +706,15 @@ class RunHost:
         """The launch of one claim, or why not. A CLI that does not answer its version has no
         certified route. A provider or a model the catalog lacks is looked up once more: the operator may
         just have run `opencode auth login`."""
-        try:
-            coverage = json.loads((self.checkout / COVERAGE_FILE).read_text(encoding="utf-8"))
-        except (OSError, ValueError):
-            coverage = {}
-        route = Route.load(coverage, self.client.host_id, adapter_id)
+        route = cargar_ruta(self.checkout, self.state_root, self.client.host_id, adapter_id)
         package = self.package(brief)
         if not isinstance(package, (Package, type(None))):
             return package
         if adapter_id == "claude":
             catalog = self.catalogo_para("claude")
+            freno = self._freno(adapter_id, catalog.cli_version)
+            if freno is not None:
+                return freno
             return plan_launch(assignment, brief, policy=self.policy, catalog=catalog, route=route,
                                cli_version=catalog.cli_version, allowed_root=self.allowed_root, run=run,
                                record=record, operation=operation, canary=self.canary, package=package,
@@ -719,6 +724,9 @@ class RunHost:
             catalog = self.catalog(fresh=True)
         except CatalogUnavailable:
             return route.open_for("sin contestar su versión", canary=False)
+        freno = self._freno(adapter_id, catalog.cli_version)
+        if freno is not None:
+            return freno
 
         def planned(listed):
             return plan_launch(assignment, brief, policy=self.policy, catalog=listed, route=route,
@@ -744,10 +752,123 @@ class RunHost:
                      self.catalogo_para(plan.adapter_id)) != plan.model:
             raise ValueError(f"{plan.model.model} is not what authorize permits now; nothing was launched")
 
+    def _version_adapter(self, adapter_id):
+        try:
+            if adapter_id == "claude":
+                version = self.catalogo_para("claude").cli_version
+            else:
+                version = self.catalog(fresh=True).cli_version
+        except (CatalogUnavailable, OSError):
+            return None
+        if not isinstance(version, str) or re.fullmatch(r"[0-9][0-9A-Za-z.+-]{0,63}", version) is None:
+            return None
+        return version
+
+    def _entrada(self, adapter_id, version):
+        if version is None:
+            return None
+        return entrada_medida(self.state_root, self.client.host_id, adapter_id, version)
+
+    def _freno(self, adapter_id, version):
+        if self.canary:
+            return None
+        route = cargar_ruta(self.checkout, self.state_root, self.client.host_id, adapter_id)
+        if route.status == "certified" and version in route.certified_cli_versions:
+            return None
+        entry = self._entrada(adapter_id, version)
+        if isinstance(entry, dict) and entry.get("estado") == "rojo":
+            return ruta_roja(entry, adapter_id, version)
+        return None
+
+    def _en_probando(self, adapter_id) -> bool:
+        version = self._version_adapter(adapter_id)
+        entry = self._entrada(adapter_id, version)
+        if not (isinstance(entry, dict) and entry.get("estado") == "probando"):
+            return False
+        route = cargar_ruta(self.checkout, self.state_root, self.client.host_id, adapter_id)
+        return not (route.status == "certified" and version in route.certified_cli_versions)
+
+    def _debe_medir(self, adapter_id) -> bool:
+        version = self._version_adapter(adapter_id)
+        if version is None:
+            return False
+        route = cargar_ruta(self.checkout, self.state_root, self.client.host_id, adapter_id)
+        if route.status != "certified" or version in route.certified_cli_versions:
+            return False
+        entry = self._entrada(adapter_id, version)
+        if isinstance(entry, dict) and entry.get("estado") in ("verde", "rojo"):
+            return False
+        return True
+
+    def _no_reclamar(self, adapter_id) -> bool:
+        if self._en_probando(adapter_id):
+            return True
+        if self.lanzar_recert is None or self.canary:
+            return False
+        entry = self._entrada(adapter_id, self._version_adapter(adapter_id))
+        if isinstance(entry, dict) and entry.get("estado") == "rojo":
+            return False
+        return self._debe_medir(adapter_id)
+
+    def _soltar_recert(self):
+        proc = self._recert_proc
+        if proc is not None and proc.poll() is None:
+            return
+        self._recert_proc = None
+        fd = self._recert_lock
+        self._recert_lock = None
+        if fd is not None:
+            fcntl.flock(fd, fcntl.LOCK_UN)
+            os.close(fd)
+
+    def disparar_recertificacion(self):
+        """Lanza una recertificación y sigue. El flock vive hasta que ese proceso termina,
+        así la pasada siguiente no lanza otra. Un host canario no dispara: su banco
+        volvería a medir."""
+        if self.canary:
+            return
+        self._soltar_recert()
+        if self._recert_lock is not None or self.lanzar_recert is None:
+            return
+        pendientes = [adapter_id for adapter_id in ADAPTERS if self._debe_medir(adapter_id)]
+        if not pendientes:
+            return
+        if (self._recert_intento is not None
+                and self.clock() - self._recert_intento < CATALOG_RECHECK_SECONDS):
+            return
+        path = self.state_root / "recertificar.lock"
+        fd = os.open(path, os.O_CREAT | os.O_RDWR, 0o644)
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            os.close(fd)
+            return
+        adapter_id = pendientes[0]
+        log_path = Path.home() / "Library" / "Logs" / "goncloud" / "agent-work-recertificar.log"
+        argv = [sys.executable, str(Path(__file__).resolve().parent / "encargo.py"),
+                "--checkout", str(self.checkout), "--state-root", str(self.state_root),
+                "--opencode", str(self.opencode_bin), "--claude", str(self.claude_bin),
+                "recertificar", "--ruta", f"{self.client.host_id}/{adapter_id}"]
+        try:
+            self._recert_proc = self.lanzar_recert(argv, log_path, fd)
+            self._recert_intento = self.clock()
+        except Exception:
+            fcntl.flock(fd, fcntl.LOCK_UN)
+            os.close(fd)
+            raise
+        self._recert_lock = fd
+
     def claim(self):
+        if self.lanzar_recert is not None:
+            try:
+                self.disparar_recertificacion()
+            except OSError as error:
+                print(f"agent-work: no pude lanzar la recertificación: {error}", file=sys.stderr, flush=True)
         rechazo = None
         intentados = 0
         for adapter_id in ADAPTERS:
+            if self._no_reclamar(adapter_id):
+                continue
             rechazado = self._claim_rechazado_en.get(adapter_id)
             if rechazado is not None and self.clock() - rechazado < CATALOG_RECHECK_SECONDS:
                 continue
@@ -1186,6 +1307,23 @@ def watch_pump(client, *, host, evidence_root, progress_state_dir, progress_clie
         stop_event.wait(interval)
 
 
+def _lanzar_recert(argv, log_path: Path, lock_fd=None):
+    """Proceso aparte. El log es el del host, no el de la pasada. El hijo hereda el flock."""
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    log = open(log_path, "ab")
+    entorno = os.environ.copy()
+    entorno["AGENT_WORK_AVISOS"] = "1"
+    binario = entorno.get("OPENCLAW_BIN")
+    if binario and not entorno.get("AGENT_WORK_OPENCLAW_BIN"):
+        entorno["AGENT_WORK_OPENCLAW_BIN"] = binario
+    try:
+        return subprocess.Popen(
+            argv, stdout=log, stderr=subprocess.STDOUT, start_new_session=True, env=entorno,
+            pass_fds=(lock_fd,) if lock_fd is not None else ())
+    finally:
+        log.close()
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Transfer native task results to progress events")
     parser.add_argument("--openclaw-bin", required=True)
@@ -1259,7 +1397,8 @@ def main(argv=None):
                       opencode_bin=args.opencode_bin, claude_bin=args.claude_bin,
                       allowed_root=args.workspace_root, canary=args.canary,
                       accept_deadline_seconds=args.accept_deadline_seconds,
-                      result_deadline_seconds=args.result_deadline_seconds)
+                      result_deadline_seconds=args.result_deadline_seconds,
+                      lanzar_recert=_lanzar_recert)
         cli_claim, cli_watch, cli_beat = run.claim, run.watch, run.beat
         cli_release, cli_retry = manager.release_acknowledged, manager.retry_cleanup
         cli_cancel = lambda: manager.release_cancelled(client.host_cancellation)

@@ -1369,6 +1369,263 @@ class Sucesion(Mac):
         self.assertEqual((entry["actual"], entry["estado"]), ("zai-coding-plan/glm-5.4-flash", "promovido"))
 
 
+class Recertificar(Mac):
+    """El ejecutor mide una versión que coverage no trae y la anota en el registro."""
+
+    def veredictos(self, *malas):
+        from recertificar import Veredicto
+        nombres = ("m1", "m2", "m3a", "m3b", "m3c", "pwd", "m7")
+        return tuple(Veredicto(nombre, "no pasa" if nombre in malas else "pasa", nombre) for nombre in nombres)
+
+    def medir(self, *, sondas=None, banco=None, avisos=None, version="1.19.3", ruta="mac-local/opencode", now=1_800_000_000.0):
+        textos = [] if avisos is None else avisos
+
+        def enviar(texto, **kwargs):
+            textos.append(texto)
+            return {"enviado": True}
+
+        return encargo.recertificar(
+            state_root=self.state, checkout=self.checkout, ruta=ruta, now=now, version=version,
+            opencode_bin=self.bin / "opencode", claude_bin=self.bin / "claude",
+            correr_sondas=self.veredictos if sondas is None else sondas,
+            correr_banco=(lambda env, cwd: (0, "case=ingenieria desenlace=verde causa=ninguna\n")) if banco is None else banco,
+            enviar_aviso=enviar)
+
+    def registro(self):
+        return json.loads((self.state / "versiones-medidas.json").read_text())
+
+    def entrada(self, version="1.19.3", ruta="mac-local/opencode"):
+        return self.registro()["routes"][ruta][version]
+
+    def test_sondas_y_banco_verdes_anotan_la_version_y_la_ruta_la_abre(self):
+        avisos = []
+        answer = self.medir(avisos=avisos)
+        entry = self.entrada()
+        self.assertEqual((answer["accion"], entry["estado"], entry["banco"]), ("verde", "verde", "verde"))
+        self.assertEqual(entry["sondas"]["m1"], "pasa")
+        self.assertTrue(entry["evidencia"].startswith("recertificacion/mac-local-opencode/1.19.3"))
+        self.assertNotIn("Users", entry["evidencia"])
+        self.assertEqual(len(entry["digest"]), 64)
+        self.assertEqual(entry["aviso"]["enviado"], True)
+        self.assertIn("ya trabaja con opencode 1.19.3", avisos[0])
+        self.assertIsNone(encargo.cargar_ruta(self.checkout, self.state, "mac-local").open_for("1.19.3", None, canary=False))
+
+    def test_una_sonda_roja_cierra_deja_rojo_con_esa_sonda_y_avisa(self):
+        avisos = []
+        banco = []
+        answer = self.medir(
+            sondas=lambda adaptador, binario, checkout: self.veredictos("m3b"),
+            banco=lambda env, cwd: banco.append(1) or (0, "case=ingenieria desenlace=verde causa=ninguna\n"),
+            avisos=avisos)
+        entry = self.entrada()
+        self.assertEqual((answer["accion"], entry["estado"], entry["sondas"]["m3b"]), ("rojo", "rojo", "no pasa"))
+        self.assertEqual(banco, [])
+        self.assertIn("m3b", avisos[0])
+        self.assertIn(entry["evidencia"], avisos[0])
+        closed = encargo.cargar_ruta(self.checkout, self.state, "mac-local").open_for("1.19.3", None, canary=False)
+        self.assertIsNotNone(closed)
+
+    def test_una_version_terminal_o_ya_en_coverage_no_se_vuelve_a_medir(self):
+        (self.state / "versiones-medidas.json").write_text(json.dumps({
+            "schema": "agent-work.cli-versions.v1",
+            "routes": {"mac-local/opencode": {"1.19.3": {"estado": "verde", "sondas": {"m1": "pasa"}}}}}))
+        antes = self.registro()
+        llamado = []
+        answer = self.medir(sondas=lambda *args, **kwargs: llamado.append(1) or self.veredictos())
+        self.assertEqual((answer["accion"], llamado, self.registro()), ("ya-medida", [], antes))
+        antes["routes"]["mac-local/opencode"]["1.19.3"]["estado"] = "rojo"
+        (self.state / "versiones-medidas.json").write_text(json.dumps(antes))
+        answer = self.medir(sondas=lambda *args, **kwargs: llamado.append(1) or self.veredictos())
+        self.assertEqual((answer["accion"], llamado), ("ya-medida", []))
+        answer = self.medir(version="1.18.35", sondas=lambda *args, **kwargs: llamado.append(1) or self.veredictos())
+        self.assertEqual(answer["accion"], "ya-certificada")
+        self.assertNotIn("1.18.35", self.registro()["routes"]["mac-local/opencode"])
+        self.assertEqual(llamado, [])
+
+    def test_infraestructura_avisa_desde_el_primero_y_a_la_tercera_queda_rojo(self):
+        avisos = []
+        banco = lambda env, cwd: (0, "el banco no imprimió desenlace\n")
+        for intento in (1, 2):
+            answer = self.medir(banco=banco, avisos=avisos)
+            entry = self.entrada()
+            self.assertEqual((answer["accion"], entry["estado"], entry["intentos"]),
+                             ("infraestructura", "infraestructura", intento))
+        answer = self.medir(banco=banco, avisos=avisos)
+        entry = self.entrada()
+        self.assertEqual((answer["accion"], entry["estado"], entry["intentos"]), ("rojo", "rojo", 3))
+        self.assertEqual(len(avisos), 3)
+        self.assertIn(entry["evidencia"], avisos[0])
+
+    def test_el_host_ocupado_pospone_sin_escribir(self):
+        self.beat(slot="running", taskId="t-1", model="zai-coding-plan/glm-5.3", since=time.time())
+        llamado = []
+        answer = self.medir(
+            now=time.time(),
+            sondas=lambda *args, **kwargs: llamado.append(1) or self.veredictos())
+        self.assertEqual((answer["accion"], llamado), ("host-ocupado", []))
+        self.assertFalse((self.state / "versiones-medidas.json").exists())
+
+    def test_verde_abre_preparar_sin_relanzar_el_host(self):
+        (self.bin / "version").write_text("1.19.3\n")
+        (self.state / "catalogo.json").unlink(missing_ok=True)
+        self.medir()
+        self.beat(cliVersion="1.19.3")
+        answer = self.preparar()
+        self.assertIs(answer["ok"], True)
+        self.assertNotIn("causa", answer)
+        self.assertNotIn("espera", answer)
+
+    def test_probando_espera_y_rojo_nombra_la_sonda(self):
+        (self.bin / "version").write_text("1.19.3\n")
+        (self.state / "catalogo.json").unlink(missing_ok=True)
+        (self.state / "versiones-medidas.json").write_text(json.dumps({
+            "schema": "agent-work.cli-versions.v1",
+            "routes": {"mac-local/opencode": {"1.19.3": {"estado": "probando"}}}}))
+        answer = self.preparar()
+        self.assertEqual((answer["ok"], answer.get("espera")), (True, "recertificando"))
+        self.assertEqual(
+            answer["frase"],
+            "La ruta de encargos está midiendo opencode 1.19.3; el encargo sale en unos minutos")
+        self.assertEqual(answer["inputRevision"]["kind"], "code")
+        self.assertIn("zai-coding-plan/glm-5.3-flash", answer["briefArgs"])
+        doc = json.loads((self.state / "versiones-medidas.json").read_text())
+        doc["routes"]["mac-local/opencode"]["1.19.3"] = {
+            "estado": "rojo", "causa": "m3b", "sondas": {"m3b": "no pasa"}}
+        (self.state / "versiones-medidas.json").write_text(json.dumps(doc))
+        (self.state / "catalogo.json").unlink(missing_ok=True)
+        closed = self.preparar()
+        self.assertEqual(closed["causa"], "ruta-roja")
+        self.assertIn("m3b", closed["frase"])
+
+    def test_infraestructura_tambien_espera_sin_rechazar(self):
+        (self.bin / "version").write_text("1.19.3\n")
+        (self.state / "catalogo.json").unlink(missing_ok=True)
+        (self.state / "versiones-medidas.json").write_text(json.dumps({
+            "schema": "agent-work.cli-versions.v1",
+            "routes": {"mac-local/opencode": {"1.19.3": {"estado": "infraestructura"}}}}))
+        answer = self.preparar()
+        self.assertEqual((answer["ok"], answer.get("espera")), (True, "recertificando"))
+        self.assertNotIn("causa", answer)
+
+    def test_recertificar_fija_la_carpeta_de_fuera_bajo_el_estado(self):
+        visto = {}
+
+        def sondas(*args, **kwargs):
+            visto["fuera"] = os.environ.get("RECERT_FUERA")
+            return self.veredictos()
+
+        antes = os.environ.get("RECERT_FUERA")
+        self.medir(sondas=sondas)
+        self.assertEqual(visto["fuera"], str(self.state / "recertificacion" / "fuera"))
+        self.assertEqual(os.environ.get("RECERT_FUERA"), antes)
+
+    def test_el_banco_de_opencode_recibe_el_modelo_medido_y_el_de_claude_no(self):
+        visto = {}
+
+        def banco(env, cwd):
+            visto.update(env)
+            return 0, "case=ingenieria desenlace=verde causa=ninguna\n"
+
+        self.medir(banco=banco)
+        self.assertEqual(visto.get("AGENT_WORK_BANCO_MODELO"), "zai-coding-plan/glm-5.3-flash")
+        visto.clear()
+        self.medir(banco=banco, ruta="mac-local/claude", version="2.1.302")
+        self.assertNotIn("AGENT_WORK_BANCO_MODELO", visto)
+
+    def test_un_banco_claude_que_no_falla_el_caso_queda_en_infraestructura(self):
+        rc, salida = encargo._traducir_banco_claude(1, "no se pudo construir R\n")
+        self.assertEqual(encargo.clasificar_banco(salida, rc),
+                         ("infraestructura", "el banco no dio desenlace"))
+        rc, salida = encargo._traducir_banco_claude(
+            1, "AssertionError: el host nunca escribió flota.json\nFAILED (failures=1)\n")
+        self.assertEqual(encargo.clasificar_banco(salida, rc),
+                         ("infraestructura", "el banco no dio desenlace"))
+        rc, salida = encargo._traducir_banco_claude(
+            1, "FAIL: test_claude_ingenieria_arregla_y_su_flota_es_cli\n"
+               "AssertionError: claude no arregló el defecto\nFAILED (failures=1)\n")
+        self.assertEqual(encargo.clasificar_banco(salida, rc)[0], "rojo")
+
+    def test_el_banco_de_claude_selecciona_los_tres_casos(self):
+        real = os.environ.pop("AGENT_WORK_BANCO_REAL", None)
+        try:
+            rc, salida = encargo._correr_banco_claude({}, self.state)
+        finally:
+            if real is not None:
+                os.environ["AGENT_WORK_BANCO_REAL"] = real
+        self.assertEqual(rc, 0, salida)
+        self.assertIn("Ran 3 tests", salida)
+        self.assertNotIn("NO TESTS RAN", salida)
+
+    def test_una_sonda_inconclusa_no_cierra_y_no_corre_el_banco(self):
+        from recertificar import Veredicto
+        nombres = ("m1", "m2", "m3a", "m3b", "m3c", "pwd", "m7")
+        banco = []
+        answer = self.medir(
+            sondas=lambda *args: tuple(
+                Veredicto(nombre, "inconcluso" if nombre == "m2" else "pasa", nombre) for nombre in nombres),
+            banco=lambda env, cwd: banco.append(1) or (0, "case=ingenieria desenlace=verde causa=ninguna\n"))
+        self.assertEqual((answer["accion"], self.entrada()["estado"]), ("infraestructura", "infraestructura"))
+        self.assertEqual(banco, [])
+
+    def test_una_sonda_que_revienta_queda_en_infraestructura_y_a_la_tercera_en_rojo(self):
+        avisos = []
+
+        def explota(*args, **kwargs):
+            raise RuntimeError("se cayó")
+
+        answer = self.medir(sondas=explota, avisos=avisos)
+        entry = self.entrada()
+        self.assertEqual((answer["accion"], entry["estado"], entry["intentos"]),
+                         ("infraestructura", "infraestructura", 1))
+        self.assertNotIn("se cayó", json.dumps(entry))
+        self.assertNotIn("se cayó", avisos[0])
+        self.assertNotIn("Users", avisos[0])
+        self.medir(sondas=explota, avisos=avisos)
+        answer = self.medir(sondas=explota, avisos=avisos)
+        self.assertEqual((answer["accion"], self.entrada()["estado"]), ("rojo", "rojo"))
+
+    def test_coverage_y_el_canario_abren_aunque_el_registro_diga_rojo(self):
+        (self.state / "versiones-medidas.json").write_text(json.dumps({
+            "schema": "agent-work.cli-versions.v1",
+            "routes": {"mac-local/opencode": {"1.18.35": {
+                "estado": "rojo", "causa": "m3b", "sondas": {"m3b": "no pasa"}}}}}))
+        self.beat()
+        answer = self.preparar()
+        self.assertIs(answer["ok"], True)
+        self.assertNotEqual(answer.get("causa"), "ruta-roja")
+        (self.bin / "version").write_text("1.19.3\n")
+        (self.state / "catalogo.json").unlink(missing_ok=True)
+        doc = json.loads((self.state / "versiones-medidas.json").read_text())
+        doc["routes"]["mac-local/opencode"]["1.19.3"] = {
+            "estado": "rojo", "causa": "m3b", "sondas": {"m3b": "no pasa"}}
+        (self.state / "versiones-medidas.json").write_text(json.dumps(doc))
+        self.beat(cliVersion="1.19.3", canary=True)
+        answer = self.preparar()
+        self.assertIs(answer["ok"], True)
+        self.assertNotIn("espera", answer)
+        self.assertNotEqual(answer.get("causa"), "ruta-roja")
+
+    def test_una_generacion_sin_certificar_no_queda_tapada_por_un_rojo(self):
+        path = self.checkout / EVIDENCE / "coverage.json"
+        coverage = json.loads(path.read_text())
+        del coverage["hostAdapterRoute"]["mac-local"]["opencode"]["contextGenerations"]
+        path.write_text(json.dumps(coverage))
+        (self.state / "versiones-medidas.json").write_text(json.dumps({
+            "schema": "agent-work.cli-versions.v1",
+            "routes": {"mac-local/opencode": {"1.18.35": {
+                "estado": "rojo", "causa": "m3b", "sondas": {"m3b": "no pasa"}}}}}))
+        self.beat()
+        answer = self.preparar("--perfil", "ingenieria")
+        self.assertEqual(answer["causa"], "generacion-no-certificada")
+
+    def test_una_ruta_sandbox_no_se_mide(self):
+        self.sandbox_tested()
+        llamado = []
+        answer = self.medir(sondas=lambda *args, **kwargs: llamado.append(1) or self.veredictos())
+        self.assertEqual((answer["accion"], llamado), ("ruta-sin-certificar", []))
+        self.assertFalse((self.state / "versiones-medidas.json").exists())
+
+
 class Diario(Mac):
     """SUA-04 (4.9): `encargo.py diario`, la pasada que corre el mismo launchd de 4.3: sucesion
     --aplicar y después fuentes --aviso, cada uno aislado, en una sola línea JSON."""

@@ -20,3 +20,4 @@ python3 scripts/tests/test-agent-work-publicar.py
 python3 scripts/tests/test-agent-work-merge.py
 python3 scripts/tests/test_agent_work_banco_e2e.py
 python3 scripts/tests/test-agent-work-claude.py
+python3 scripts/tests/test-agent-work-recertificar.py

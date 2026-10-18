@@ -321,14 +321,14 @@ class Slot(unittest.TestCase):
         self.r = FakeR()
         self.ahead = 0.0
 
-    def start(self, backend, canary=False):
+    def start(self, backend, canary=False, lanzar_recert=None):
         """A host process over this slot: the first one, or the one that replaces a dead one."""
         self.backend = backend
         self.host = Host("mac-local", self.spool)
         self.manager = ResourceManager(self.host.spool, "mac-local", backend)
         self.run = RunHost(self.r, self.host, self.manager, backend, instance_id="enc-1", checkout=self.checkout,
                            state_root=self.state, opencode_bin=self.bin / "opencode", allowed_root=self.root / "dev",
-                           canary=canary, clock=lambda: time.time() + self.ahead)
+                           canary=canary, clock=lambda: time.time() + self.ahead, lanzar_recert=lanzar_recert)
 
     def one_pass(self):
         """What the pump prints for one pass: its counts, or its error."""
@@ -1811,6 +1811,253 @@ class Decisions(Slot):
         with self.assertRaises(sqlite3.DatabaseError):
             self.run.claim()
         self.assertEqual((self.backend.launches, self.held()), ([], ("registered", "Reserved", "")))
+
+    def test_mientras_mide_no_reclama_ese_adaptador(self):
+        (self.bin / "version").write_text("1.18.36\n")
+        (self.state / "versiones-medidas.json").write_text(json.dumps({
+            "schema": "agent-work.cli-versions.v1",
+            "routes": {"mac-local/opencode": {"1.18.36": {"estado": "probando"}}}}))
+        self.r.offer("task-1", b"haz el saludo\n", self.revision)
+
+        def solo_opencode(adapter_id, instance_id):
+            if adapter_id != "opencode":
+                return None
+            return FakeR.claim_host(self.r, adapter_id, instance_id)
+
+        self.r.claim_host = solo_opencode
+        self.start(ScriptedBackend())
+        self.assertEqual(self.changes(), {})
+        self.assertEqual((self.r.claims, self.incidents()), ([], []))
+
+    def test_una_ruta_roja_se_rechaza_antes_de_lanzar(self):
+        (self.bin / "version").write_text("1.18.36\n")
+        (self.state / "versiones-medidas.json").write_text(json.dumps({
+            "schema": "agent-work.cli-versions.v1",
+            "routes": {"mac-local/opencode": {"1.18.36": {
+                "estado": "rojo", "causa": "m3b", "sondas": {"m3b": "no pasa"}}}}}))
+        self.r.offer("task-1", b"haz el saludo\n", self.revision)
+        self.start(ScriptedBackend())
+        self.refused("ruta-roja", "m3b")
+
+    def test_dos_pasadas_lanzan_una_sola_recertificacion(self):
+        (self.bin / "version").write_text("1.19.3\n")
+        (self.state / "catalogo.json").unlink(missing_ok=True)
+        proc = subprocess.Popen(["sleep", "30"])
+        self.addCleanup(proc.kill)
+        lanzados = []
+
+        def lanzar(argv, log_path, *_resto):
+            lanzados.append((list(argv), log_path))
+            return proc
+
+        self.start(ScriptedBackend(), lanzar_recert=lanzar)
+        self.run.claim()
+        self.run.claim()
+        self.assertEqual(len(lanzados), 1)
+        argv, log_path = lanzados[0]
+        self.assertIn("recertificar", argv)
+        self.assertIn("--ruta", argv)
+        self.assertIn("mac-local/opencode", argv)
+        self.assertEqual(log_path.name, "agent-work-recertificar.log")
+        # Otro proceso: en el mismo, flock vuelve a conceder el candado.
+        chequeo = subprocess.run([sys.executable, "-c",
+                                  "import fcntl, os, sys\n"
+                                  "fd = os.open(sys.argv[1], os.O_RDWR)\n"
+                                  "try:\n"
+                                  "    fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)\n"
+                                  "except BlockingIOError:\n"
+                                  "    raise SystemExit(0)\n"
+                                  "raise SystemExit(1)\n",
+                                  str(self.state / "recertificar.lock")], capture_output=True, text=True)
+        self.assertEqual(chequeo.returncode, 0, chequeo.stderr)
+
+    def test_una_version_de_coverage_se_lanza_aunque_el_registro_diga_rojo(self):
+        (self.state / "versiones-medidas.json").write_text(json.dumps({
+            "schema": "agent-work.cli-versions.v1",
+            "routes": {"mac-local/opencode": {"1.18.35": {
+                "estado": "rojo", "causa": "m3b", "sondas": {"m3b": "no pasa"}}}}}))
+        self.start(self.backend)
+        self.launched()
+
+    def test_el_canario_lanza_aunque_el_registro_diga_rojo(self):
+        (self.bin / "version").write_text("1.18.36\n")
+        (self.state / "versiones-medidas.json").write_text(json.dumps({
+            "schema": "agent-work.cli-versions.v1",
+            "routes": {"mac-local/opencode": {"1.18.36": {
+                "estado": "rojo", "causa": "m3b", "sondas": {"m3b": "no pasa"}}}}}))
+        self.start(self.backend, canary=True)
+        self.launched()
+
+    def test_una_version_sin_medir_no_se_reclama_mientras_arranca_la_medicion(self):
+        (self.bin / "version").write_text("1.19.3\n")
+        (self.state / "catalogo.json").unlink(missing_ok=True)
+        self.r.offer("task-1", b"haz el saludo\n", self.revision)
+        proc = subprocess.Popen(["sleep", "30"])
+        self.addCleanup(proc.kill)
+        lanzados = []
+
+        def solo_opencode(adapter_id, instance_id):
+            if adapter_id != "opencode":
+                return None
+            return FakeR.claim_host(self.r, adapter_id, instance_id)
+
+        def lanzar(argv, log_path, *_resto):
+            lanzados.append(list(argv))
+            return proc
+
+        self.r.claim_host = solo_opencode
+        self.start(ScriptedBackend(), lanzar_recert=lanzar)
+        self.run.claim()
+        self.assertEqual(len(lanzados), 1)
+        self.assertEqual((self.r.claims, self.incidents()), ([], []))
+
+    def test_un_probando_sin_proceso_vivo_vuelve_a_lanzar(self):
+        (self.bin / "version").write_text("1.19.3\n")
+        (self.state / "catalogo.json").unlink(missing_ok=True)
+        (self.state / "versiones-medidas.json").write_text(json.dumps({
+            "schema": "agent-work.cli-versions.v1",
+            "routes": {"mac-local/opencode": {"1.19.3": {"estado": "probando"}}}}))
+        proc = subprocess.Popen(["sleep", "30"])
+        self.addCleanup(proc.kill)
+        lanzados = []
+        self.start(ScriptedBackend(), lanzar_recert=lambda argv, log_path, *_resto: lanzados.append(list(argv)) or proc)
+        self.run.claim()
+        self.assertEqual(len(lanzados), 1)
+        self.assertIn("mac-local/opencode", lanzados[0])
+
+    def test_la_compuerta_ve_la_version_nueva_aunque_el_catalogo_este_cacheado(self):
+        self.run.catalog()
+        (self.bin / "version").write_text("1.19.3\n")
+        (self.state / "catalogo.json").unlink(missing_ok=True)
+        proc = subprocess.Popen(["sleep", "30"])
+        self.addCleanup(proc.kill)
+        lanzados = []
+
+        def solo_opencode(adapter_id, instance_id):
+            if adapter_id != "opencode":
+                return None
+            return FakeR.claim_host(self.r, adapter_id, instance_id)
+
+        def lanzar(argv, log_path, *_resto):
+            lanzados.append(list(argv))
+            return proc
+
+        self.r.claim_host = solo_opencode
+        self.run.lanzar_recert = lanzar
+        self.run.claim()
+        self.assertEqual((self.r.claims, self.incidents()), ([], []))
+        self.assertEqual(len(lanzados), 1)
+        self.assertIn("mac-local/opencode", lanzados[0])
+
+    def test_el_hijo_conserva_el_candado_cuando_muere_el_host(self):
+        from native_gateway import _lanzar_recert
+        lock = self.state / "recertificar.lock"
+        log = self.state / "recert.log"
+        host = subprocess.Popen(
+            [sys.executable, "-c",
+             "import os, sys\n"
+             "from pathlib import Path\n"
+             "sys.path.insert(0, sys.argv[1])\n"
+             "import fcntl\n"
+             "from native_gateway import _lanzar_recert\n"
+             "fd = os.open(sys.argv[2], os.O_CREAT | os.O_RDWR, 0o644)\n"
+             "fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)\n"
+             "proc = _lanzar_recert([sys.executable, '-c', 'import time; time.sleep(30)'], Path(sys.argv[3]), fd)\n"
+             "print(proc.pid, flush=True)\n"
+             "os._exit(0)\n",
+             str(ROOT / "scripts" / "agent-work"), str(lock), str(log)],
+            stdout=subprocess.PIPE, text=True)
+        pid = int(host.stdout.readline())
+        self.addCleanup(os.kill, pid, signal.SIGKILL)
+        self.assertEqual(host.wait(timeout=10), 0)
+        chequeo = subprocess.run(
+            [sys.executable, "-c",
+             "import fcntl, os, sys\n"
+             "fd = os.open(sys.argv[1], os.O_RDWR)\n"
+             "try:\n"
+             "    fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)\n"
+             "except BlockingIOError:\n"
+             "    raise SystemExit(0)\n"
+             "raise SystemExit(1)\n",
+             str(lock)], capture_output=True, text=True)
+        self.assertEqual(chequeo.returncode, 0, chequeo.stderr)
+
+    def test_un_canario_no_dispara_la_recertificacion(self):
+        (self.bin / "version").write_text("1.19.3\n")
+        (self.state / "catalogo.json").unlink(missing_ok=True)
+        lanzados = []
+        self.start(self.backend, canary=True, lanzar_recert=lambda *args: lanzados.append(args))
+        self.launched()
+        self.assertEqual(lanzados, [])
+
+    def test_un_disparo_que_falla_no_impide_el_claim(self):
+        def lanzar(*args):
+            raise OSError("sin log")
+
+        self.start(self.backend, lanzar_recert=lanzar)
+        self.launched()
+
+    def test_un_probando_de_coverage_no_bloquea_el_claim(self):
+        (self.state / "versiones-medidas.json").write_text(json.dumps({
+            "schema": "agent-work.cli-versions.v1",
+            "routes": {"mac-local/opencode": {"1.18.35": {"estado": "probando"}}}}))
+        self.start(self.backend)
+        self.launched()
+        self.assertIn("opencode", self.backend.launches[0]["argv"][0])
+
+    def test_claude_sin_version_no_dispara_recertificacion(self):
+        claude = self.bin / "claude"
+        claude.write_text("#!/bin/sh\nexit 1\n")
+        claude.chmod(0o755)
+        lanzados = []
+        self.start(self.backend, lanzar_recert=lambda argv, log_path, *_resto: lanzados.append(list(argv)) or None)
+        self.run.claude_bin = claude
+        self.run._version_claude = None
+        self.launched()
+        self.assertFalse(any("mac-local/claude" in argv for argv in lanzados))
+
+    def test_un_hijo_que_sale_en_seguida_no_se_relanza_en_la_misma_ventana(self):
+        (self.bin / "version").write_text("1.19.3\n")
+        (self.state / "catalogo.json").unlink(missing_ok=True)
+        lanzados = []
+
+        def solo_opencode(adapter_id, instance_id):
+            if adapter_id != "opencode":
+                return None
+            return FakeR.claim_host(self.r, adapter_id, instance_id)
+
+        def lanzar(argv, log_path, *_resto):
+            lanzados.append(list(argv))
+            proc = subprocess.Popen([sys.executable, "-c", "raise SystemExit(0)"])
+            proc.wait(timeout=10)
+            return proc
+
+        self.r.claim_host = solo_opencode
+        self.run.lanzar_recert = lanzar
+        self.run.claim()
+        self.run.claim()
+        self.assertEqual(len(lanzados), 1)
+        self.ahead += 60
+        self.run.claim()
+        self.assertEqual(len(lanzados), 2)
+        self.assertIn("mac-local/opencode", lanzados[0])
+
+    def test_el_hijo_prende_los_avisos_y_hereda_el_binario(self):
+        from native_gateway import _lanzar_recert
+        log = self.state / "avisos.log"
+        codigo = ("import os; print(os.environ.get('AGENT_WORK_AVISOS','')); "
+                  "print(os.environ.get('AGENT_WORK_OPENCLAW_BIN',''))")
+        guardado = {clave: os.environ.pop(clave) for clave in ("AGENT_WORK_AVISOS", "AGENT_WORK_OPENCLAW_BIN")
+                    if clave in os.environ}
+        os.environ["OPENCLAW_BIN"] = "/opt/openclaw-prueba"
+        try:
+            proc = _lanzar_recert([sys.executable, "-c", codigo], log)
+        finally:
+            os.environ.pop("OPENCLAW_BIN", None)
+            os.environ.update(guardado)
+        self.addCleanup(proc.kill)
+        self.assertEqual(proc.wait(timeout=10), 0)
+        self.assertEqual(log.read_text().splitlines()[:2], ["1", "/opt/openclaw-prueba"])
 
 
 def slot_gid():

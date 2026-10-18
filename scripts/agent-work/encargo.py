@@ -49,9 +49,10 @@ from modelos import (MODEL_PATTERN, POLICY_FILE, PROVIDER, Billing, Catalog, Cat
                      OperatorCitation, PerfilRechazado, PermittedModel, PolicyUnreadable, ProviderClosure,
                      ProviderGrant, ProviderId, ProviderNotConfigured, ProviderPolicy, SlotBlocked, UNVERIFIED_REF,
                      WorkspaceRefused, authorize, catalogo_claude, explicar, pedido, policy_document,
-                     succession_actual)
+                     RouteNotCertified, ruta_roja, succession_actual)
 from sesion import (ALLOWED_ROOT, COVERAGE_FILE, EXIT_NO_SCRATCH, EXIT_NO_WORKSPACE, EXIT_OUTSIDE_GROUP, PROFILE_ID,
-                    Route, Workspace, adaptador, model_in_use, read_events)
+                    MEDIDAS_FILE, Route, Workspace, adaptador, cargar_ruta, entrada_medida, model_in_use, read_events)
+import recertificar as recert_mod
 
 HOST_ID = "mac-local"
 ADAPTER_ID = "opencode"
@@ -120,6 +121,8 @@ class Preparado:
     en_fila: bool
     politica: str
     cli: str
+    espera: str | None = None
+    frase: str | None = None
 
 
 @dataclass(frozen=True)
@@ -284,31 +287,37 @@ def preparar(repo: Path | None, modelo: str | None, *, perfil: str | None = None
     if not isinstance(model, PermittedModel):
         return explicar(model)
     adapter_id = adaptador_para(str(model.model.provider))
+    version_cli = _version_claude(claude_bin) if adapter_id == "claude" else catalog.cli_version
+    beat = latido(state_root, now)
+    # Un host canario vivo corre también una ruta todavía sin certificar: su canario es un pedido real.
+    # Una versión que la ruta ya abre (coverage o canario) no queda tapada por el registro.
+    canary = isinstance(beat, HostBeat) and beat.canary
+    closed = cargar_ruta(checkout, state_root, HOST_ID, adapter_id).open_for(
+        version_cli, manifiesto["generation"] if manifiesto else None, canary=canary)
+    medida = entrada_medida(state_root, HOST_ID, adapter_id, version_cli)
+    if (isinstance(closed, RouteNotCertified) and isinstance(medida, dict)
+            and medida.get("estado") == "rojo"):
+        return explicar(ruta_roja(medida, adapter_id, version_cli))
+    # Mientras la versión se mide, el pedido se registra igual: no hay rechazo de ruta ni de host.
+    midiendo = (closed is not None and isinstance(medida, dict)
+                and medida.get("estado") in ("probando", "infraestructura"))
     workspace = None
     if repo is not None:
         workspace = Workspace.for_repository(str(repo), allowed_root=allowed_root)
         if not isinstance(workspace, Workspace):
             return explicar(workspace)
-    beat = latido(state_root, now)
-    # Un host canario vivo corre también una ruta todavía sin certificar: su canario es un pedido real.
-    canary = isinstance(beat, HostBeat) and beat.canary
-    if adapter_id == "claude":
-        closed = Route.load(coverage, HOST_ID, "claude").open_for(
-            _version_claude(claude_bin), manifiesto["generation"] if manifiesto else None, canary=canary)
-    else:
-        closed = Route.load(coverage, HOST_ID).open_for(catalog.cli_version,
-                                                        manifiesto["generation"] if manifiesto else None, canary=canary)
-    if closed is not None:
-        return explicar(closed)
-    if isinstance(beat, HostDown):
-        return explicar(beat)
-    for what, theirs, ours in (("checkout", os.path.realpath(beat.checkout), os.path.realpath(checkout)),
-                               ("policy", beat.policy_digest, policy.digest),
-                               ("cli-version", beat.cli_version, catalog.cli_version)):
-        if theirs != ours:
-            return explicar(HostMismatch(what, str(theirs), str(ours)))
-    if beat.slot == "blocked":
-        return explicar(SlotBlocked(beat.blocked_by))
+    if not midiendo:
+        if closed is not None:
+            return explicar(closed)
+        if isinstance(beat, HostDown):
+            return explicar(beat)
+        for what, theirs, ours in (("checkout", os.path.realpath(beat.checkout), os.path.realpath(checkout)),
+                                   ("policy", beat.policy_digest, policy.digest),
+                                   ("cli-version", beat.cli_version, catalog.cli_version)):
+            if theirs != ours:
+                return explicar(HostMismatch(what, str(theirs), str(ours)))
+        if beat.slot == "blocked":
+            return explicar(SlotBlocked(beat.blocked_by))
     revision = None
     if workspace is not None:
         sha = _head(workspace.root)
@@ -318,6 +327,13 @@ def preparar(repo: Path | None, modelo: str | None, *, perfil: str | None = None
     args = ("--host", HOST_ID, "--adapter", adapter_id, "--model", str(model.model))
     if perfil is not None:
         args += ("--perfil", perfil)
+    if midiendo:
+        nombre = "claude" if adapter_id == "claude" else "opencode"
+        return Preparado(str(model.model), model.billing, revision, args,
+                         isinstance(beat, HostBeat) and beat.slot == "running",
+                         model.policy_digest[:12], version_cli, espera="recertificando",
+                         frase=(f"La ruta de encargos está midiendo {nombre} {version_cli}; "
+                                "el encargo sale en unos minutos"))
     return Preparado(str(model.model), model.billing, revision, args,
                      beat.slot == "running", model.policy_digest[:12], beat.cli_version)
 
@@ -866,6 +882,33 @@ def _correr_banco_real(env_extra: dict, state_root: Path) -> "tuple[int | None, 
     return hecho.returncode, hecho.stdout + hecho.stderr
 
 
+def _traducir_banco_claude(rc: "int | None", salida: str) -> "tuple[int | None, str]":
+    """Los tres casos de claude imprimen case=claude-* cuando pasan, y clasificar_banco
+    solo lee case=ingenieria. Un FAIL o ERROR de unittest sobre test_claude es rojo.
+    Traducir aquí deja a sucesion con su lector intacto."""
+    if rc is None:
+        return rc, salida
+    casos = ("case=claude-ingenieria", "case=claude-revision-rota", "case=claude-fuera")
+    if rc == 0 and all(caso in salida for caso in casos):
+        return rc, salida + "case=ingenieria desenlace=verde causa=ninguna\n"
+    if rc != 0 and ("FAIL: test_claude" in salida or "ERROR: test_claude" in salida):
+        return rc, salida + "case=ingenieria desenlace=rojo causa=banco\n"
+    return rc, salida
+
+
+def _correr_banco_claude(env_extra: dict, state_root: Path) -> "tuple[int | None, str]":
+    env = {**os.environ, **env_extra, "LANG": "en_US.UTF-8", "AGENT_WORK_BANCO_ADAPTER": "claude"}
+    try:
+        hecho = subprocess.run(
+            [sys.executable, "scripts/tests/test_agent_work_banco_e2e.py", "-v", "-k", "test_claude"],
+            cwd=Path(__file__).resolve().parents[2], env=env, capture_output=True, text=True, timeout=1800)
+    except subprocess.TimeoutExpired as error:
+        crudo = error.stdout or ""
+        salida = crudo.decode() if isinstance(crudo, bytes) else crudo
+        return _traducir_banco_claude(None, salida)
+    return _traducir_banco_claude(hecho.returncode, hecho.stdout + hecho.stderr)
+
+
 def _correr_banco_inyectado(env_extra: dict, state_root: Path) -> "tuple[int | None, str]":
     """El banco que AGENT_WORK_SUCESION_BANCO inyecta (F8): mismo ambiente mezclado, misma
     captura y mismo tope que el real, pero sin imponerle el comando del banco e2e del repo."""
@@ -1002,6 +1045,205 @@ def sucesion(*, state_root: Path, checkout: Path, aplicar: bool = False, reverti
         _escribir_sucesion(state_root, doc)
         return {"ok": True, "accion": "pendiente", "linea": line, "causa": causa,
                 "evidencia": entry["evidencia"]}
+
+
+MEDIDAS_SCHEMA = "agent-work.cli-versions.v1"
+RECERT_RUTAS = {"mac-local/opencode": ("mac-local", "opencode"), "mac-local/claude": ("mac-local", "claude")}
+_VERSION_MEDIBLE = re.compile(r"[0-9][0-9A-Za-z.+-]{0,63}")
+
+
+def _leer_medidas(state_root: Path) -> dict:
+    path = Path(state_root) / MEDIDAS_FILE
+    try:
+        doc = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {"schema": MEDIDAS_SCHEMA, "routes": {}}
+    if not isinstance(doc, dict) or not isinstance(doc.get("routes"), dict):
+        return {"schema": MEDIDAS_SCHEMA, "routes": {}}
+    return doc
+
+
+def _escribir_medidas(state_root: Path, doc: dict) -> None:
+    """Igual que sucesion: quien llama ya tiene el candado. El archivo entra por os.replace."""
+    path = Path(state_root) / MEDIDAS_FILE
+    doc = {"schema": MEDIDAS_SCHEMA, "routes": doc.get("routes", {})}
+    fd, pending = tempfile.mkstemp(prefix=".medidas-", dir=path.parent)
+    try:
+        with os.fdopen(fd, "wb") as stream:
+            stream.write((json.dumps(doc, indent=2, ensure_ascii=False) + "\n").encode())
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(pending, path)
+    except BaseException:
+        Path(pending).unlink(missing_ok=True)
+        raise
+
+
+def _entrada_medida(doc: dict, ruta: str, version: str) -> dict | None:
+    bucket = doc["routes"].get(ruta)
+    if not isinstance(bucket, dict):
+        return None
+    entry = bucket.get(version)
+    return entry if isinstance(entry, dict) else None
+
+
+def _guardar_entrada(doc: dict, ruta: str, version: str, entry: dict) -> None:
+    bucket = doc["routes"].get(ruta)
+    if not isinstance(bucket, dict):
+        bucket = {}
+        doc["routes"][ruta] = bucket
+    bucket[version] = entry
+
+
+def _version_en_coverage(coverage: object, host_id: str, adapter_id: str, version: str) -> bool:
+    value = coverage
+    for key in ("hostAdapterRoute", host_id, adapter_id, "certifiedCliVersions"):
+        value = value.get(key) if isinstance(value, dict) else None
+    return isinstance(value, dict) and version in value
+
+
+def _digest_dir(path: Path) -> str:
+    digest = hashlib.sha256()
+    for file in sorted(item for item in path.rglob("*") if item.is_file()):
+        digest.update(file.relative_to(path).as_posix().encode())
+        digest.update(b"\0")
+        digest.update(file.read_bytes())
+        digest.update(b"\0")
+    return digest.hexdigest()
+
+
+def _coverage(checkout: Path) -> dict:
+    try:
+        parsed = json.loads((Path(checkout) / COVERAGE_FILE).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
+
+
+def _banco_de(adapter_id: str, correr_banco):
+    if correr_banco is not None:
+        return correr_banco
+    if os.environ.get("AGENT_WORK_SUCESION_BANCO"):
+        return _correr_banco_inyectado
+    return _correr_banco_claude if adapter_id == "claude" else _correr_banco_real
+
+
+def recertificar(*, state_root: Path, checkout: Path, ruta: str = "mac-local/opencode", now: float,
+                 opencode_bin: Path = OPENCODE_BIN, claude_bin: Path = CLAUDE_BIN, version: str | None = None,
+                 correr_sondas=None, correr_banco=None, enviar_aviso=None,
+                 openclaw_bin: Path = OPENCLAW_BIN) -> dict:
+    """`encargo.py recertificar --ruta mac-local/opencode|mac-local/claude`.
+
+    Misma forma que sucesion: decide y marca probando con el candado, corre sondas y banco
+    sin él, y vuelve a tomarlo para anotar el desenlace. Una versión ya terminal, o ya
+    presente en coverage, no se vuelve a medir."""
+    if ruta not in RECERT_RUTAS:
+        return {"ok": False, "causa": f"ruta desconocida: {ruta}"}
+    host_id, adapter_id = RECERT_RUTAS[ruta]
+    coverage = _coverage(checkout)
+    if Route.load(coverage, host_id, adapter_id).status != "certified":
+        return {"ok": True, "accion": "ruta-sin-certificar", "ruta": ruta}
+    if version is None:
+        version = _version_claude(claude_bin) if adapter_id == "claude" else CatalogStore(opencode_bin, state_root).current().cli_version
+    if not isinstance(version, str) or _VERSION_MEDIBLE.fullmatch(version) is None:
+        return {"ok": False, "accion": "sin-version", "causa": str(version)}
+    if _version_en_coverage(coverage, host_id, adapter_id, version):
+        return {"ok": True, "accion": "ya-certificada", "ruta": ruta, "version": version}
+    previa = _entrada_medida(_leer_medidas(state_root), ruta, version)
+    if isinstance(previa, dict) and previa.get("estado") in ("verde", "rojo"):
+        return {"ok": True, "accion": "ya-medida", "ruta": ruta, "version": version, "estado": previa["estado"]}
+    if _host_ocupado(state_root, now):
+        return {"ok": True, "accion": "host-ocupado", "ruta": ruta, "version": version}
+    with _policy_lock(Path(state_root) / MEDIDAS_FILE):
+        doc = _leer_medidas(state_root)
+        previa = _entrada_medida(doc, ruta, version)
+        if isinstance(previa, dict) and previa.get("estado") in ("verde", "rojo"):
+            return {"ok": True, "accion": "ya-medida", "ruta": ruta, "version": version, "estado": previa["estado"]}
+        intentos = int(previa.get("intentos") or 0) if isinstance(previa, dict) else 0
+        _guardar_entrada(doc, ruta, version, {
+            "estado": "probando", "medidoEn": datetime.fromtimestamp(now, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "commit": _head(checkout), "intentos": intentos})
+        _escribir_medidas(state_root, doc)
+    binario = claude_bin if adapter_id == "claude" else opencode_bin
+    medir = correr_sondas or (lambda adaptador, binario, checkout: recert_mod.correr_sondas(adaptador, binario, checkout=checkout))
+    rel = f"recertificacion/{ruta.replace('/', '-')}/{version}"
+    evidencia_dir = Path(state_root) / rel
+    nombre = "claude" if adapter_id == "claude" else "opencode"
+    veredictos = ()
+    salida = ""
+    banco_estado = None
+    falla = None
+    anterior_fuera = os.environ.get("RECERT_FUERA")
+    os.environ["RECERT_FUERA"] = str(Path(state_root) / "recertificacion" / "fuera")
+    try:
+        try:
+            veredictos = tuple(medir(adapter_id, binario, checkout))
+        finally:
+            if anterior_fuera is None:
+                os.environ.pop("RECERT_FUERA", None)
+            else:
+                os.environ["RECERT_FUERA"] = anterior_fuera
+        evidencia_dir.mkdir(parents=True, exist_ok=True)
+        (evidencia_dir / "sondas.json").write_text(json.dumps(
+            [{"sonda": item.sonda, "estado": item.estado, "detalle": item.detalle} for item in veredictos],
+            indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        no_pasa = next((item for item in veredictos if item.estado == "no pasa"), None)
+        inconcluso = next((item for item in veredictos if item.estado != "pasa"), None)
+        if no_pasa is not None:
+            clase, causa = "rojo", no_pasa.sonda
+            falla = no_pasa
+        elif inconcluso is not None:
+            clase, causa = "infraestructura", inconcluso.sonda
+        else:
+            env_banco = {"AGENT_WORK_BANCO_REAL": "1", "AGENT_WORK_BANCO_GUARDAR": str(evidencia_dir)}
+            if adapter_id != "claude":
+                env_banco["AGENT_WORK_BANCO_MODELO"] = recert_mod.MODELO
+            rc, salida = _banco_de(adapter_id, correr_banco)(env_banco, Path(checkout))
+            (evidencia_dir / "banco.log").write_text(salida, encoding="utf-8")
+            clase, causa = clasificar_banco(salida, rc)
+            banco_estado = clase
+    except Exception as error:
+        clase, causa = "infraestructura", type(error).__name__
+        falla = None
+        evidencia_dir.mkdir(parents=True, exist_ok=True)
+    intentos += 1
+    if clase == "infraestructura" and intentos >= 3:
+        clase = "rojo"
+    if clase == "verde":
+        texto = f"La ruta de encargos ya trabaja con {nombre} {version}"
+        causa_entry = None
+    elif falla is not None:
+        texto = f"La ruta de encargos quedó cerrada: {nombre} {version} falló {falla.sonda}. Evidencia: {rel}"
+        causa_entry = falla.sonda
+    elif clase == "rojo":
+        texto = f"La ruta de encargos quedó cerrada: {nombre} {version} no se pudo medir ({causa}). Evidencia: {rel}"
+        causa_entry = causa
+    else:
+        texto = f"La ruta de encargos no pudo medir {nombre} {version}: {causa}. Evidencia: {rel}"
+        causa_entry = causa
+    policy = ProviderPolicy.load(Path(checkout) / POLICY_FILE)
+    if policy.unreadable is not None:
+        envio = {"enviado": False, "causa": policy.unreadable}
+    else:
+        try:
+            envio = (enviar_aviso or aviso_mod.avisar)(texto, policy=policy, openclaw_bin=openclaw_bin)
+        except Exception as error:
+            envio = {"enviado": False, "causa": type(error).__name__}
+    aviso = {"enviado": bool(envio.get("enviado"))}
+    if not aviso["enviado"]:
+        aviso["causa"] = envio.get("causa", "no salió")
+    record = {"estado": clase, "medidoEn": datetime.fromtimestamp(now, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+              "commit": _head(checkout), "sondas": {item.sonda: item.estado for item in veredictos},
+              "banco": banco_estado, "evidencia": rel, "digest": _digest_dir(evidencia_dir),
+              "intentos": intentos, "aviso": aviso}
+    if causa_entry:
+        record["causa"] = causa_entry
+    with _policy_lock(Path(state_root) / MEDIDAS_FILE):
+        doc = _leer_medidas(state_root)
+        _guardar_entrada(doc, ruta, version, record)
+        _escribir_medidas(state_root, doc)
+    return {"ok": True, "accion": clase, "ruta": ruta, "version": version, "estado": clase,
+            "evidencia": rel, "aviso": texto}
 
 
 def diario(*, state_root: Path, checkout: Path, now: float,
@@ -1491,9 +1733,13 @@ def _answer(result: "Preparado | Explicacion | HostBeat | EstadoTarea", now: flo
                    "modeloUsadoRazon": result.modelo_usado_razon, "permisos": list(result.permisos),
                    "flota": result.flota}
     if isinstance(result, Preparado):
-        return 0, {"ok": True, "modelo": result.modelo, "cobro": result.cobro, "inputRevision": result.input_revision,
-                   "briefArgs": list(result.brief_args), "enFila": result.en_fila,
-                   "host": {"politica": result.politica, "cli": result.cli}}
+        answer = {"ok": True, "modelo": result.modelo, "cobro": result.cobro, "inputRevision": result.input_revision,
+                  "briefArgs": list(result.brief_args), "enFila": result.en_fila,
+                  "host": {"politica": result.politica, "cli": result.cli}}
+        if result.espera:
+            answer["espera"] = result.espera
+            answer["frase"] = result.frase
+        return 0, answer
     return 0, {"ok": True, "pid": result.pid, "latidoHace": round(now - result.beat_at, 1), "slot": result.slot,
                "bloqueadoPor": list(result.blocked_by), "tarea": result.task_id, "modelo": result.model,
                "checkout": result.checkout, "commit": result.commit,
@@ -1533,6 +1779,9 @@ def _parser() -> argparse.ArgumentParser:
     sucesion_cmd.add_argument("--runtime-source", help="AGENT_WORK_RUNTIME_SOURCE para el banco del canario")
     commands.add_parser(
         "diario", help="la pasada del launchd: sucesion en aplicar y el aviso de fuentes")
+    recert_cmd = commands.add_parser(
+        "recertificar", help="mide una versión nueva del CLI y la anota si las sondas y el banco pasan")
+    recert_cmd.add_argument("--ruta", default="mac-local/opencode", choices=tuple(RECERT_RUTAS))
     listing = commands.add_parser("proveedores", help="qué proveedores pueden correr, cómo cobran y qué falta")
     listing.add_argument("--refrescar", action="store_true", help="pide a opencode que vuelva a bajar su lista")
     allow = commands.add_parser("permitir", help="escribe un permiso, un filtro o el id de un permiso que existe")
@@ -1649,9 +1898,15 @@ def _run_diario(args: argparse.Namespace, where: dict, now: float) -> int:
     return 0 if respuesta["ok"] else 3
 
 
+def _run_recertificar(args: argparse.Namespace, where: dict, now: float) -> int:
+    respuesta = recertificar(ruta=args.ruta, now=now, claude_bin=args.claude, **where)
+    print(json.dumps(respuesta, ensure_ascii=False))
+    return 0 if respuesta.get("ok") else 3
+
+
 _COMMANDS = {"preparar": _run_preparar, "estado": _run_estado, "perfiles": _run_perfiles,
              "fuentes": _run_fuentes, "proveedores": _run_proveedores, "sucesion": _run_sucesion,
-             "diario": _run_diario, "solicitar": _run_solicitar,
+             "diario": _run_diario, "recertificar": _run_recertificar, "solicitar": _run_solicitar,
              "permitir": _run_politica, "cerrar": _run_politica}
 
 

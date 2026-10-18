@@ -623,6 +623,22 @@ class RouteNotCertified:
 
 
 @dataclass(frozen=True)
+class RutaRoja:
+    """La versión se midió y no pasó. La ruta sigue cerrada y la frase nombra la sonda."""
+    cli_version: str
+    sonda: str
+    cli: str = "opencode"
+
+
+def ruta_roja(entry: dict, cli: str, version: str) -> RutaRoja:
+    causa = entry.get("causa")
+    if not isinstance(causa, str) or not causa:
+        sondas = entry.get("sondas") if isinstance(entry.get("sondas"), dict) else {}
+        causa = next((nombre for nombre, estado in sondas.items() if estado != "pasa"), "sonda")
+    return RutaRoja(version, causa, cli)
+
+
+@dataclass(frozen=True)
 class GenerationNotCertified:
     """La ruta está abierta para opencode, pero no para el paquete de poteto de esa generación (SUA-03,
     4.5): coverage.json no la certifica todavía."""
@@ -883,6 +899,10 @@ def _frase_ambiguo(caso: NameIsAmbiguous) -> tuple[str, tuple[str, ...]]:
     return " ".join(partes), _ids(caso.candidates)
 
 
+def _frase_ruta_roja(caso: RutaRoja) -> tuple[str, tuple[str, ...]]:
+    return (f"La ruta de encargos quedó cerrada: {caso.cli} {caso.cli_version} falló {caso.sonda}.", ())
+
+
 def _frase_ruta(caso: RouteNotCertified) -> tuple[str, tuple[str, ...]]:
     if caso.certified_versions:
         return (f"Ruta certificada para {_lista(caso.certified_versions)}, la Mac tiene {caso.cli} {caso.cli_version}.",
@@ -920,6 +940,7 @@ _RECHAZOS: "dict[type, tuple[str, Callable[..., tuple[str, tuple[str, ...]]]]]" 
         f"La cabecera de lanzamiento del brief está mal formada: {caso.why}.", ())),
     WorkspaceRefused: ("carpeta-no-permitida", lambda caso: (f"{caso.path} {_CARPETA[caso.why]}.", ())),
     RouteNotCertified: ("ruta-no-certificada", _frase_ruta),
+    RutaRoja: ("ruta-roja", _frase_ruta_roja),
     GenerationNotCertified: ("generacion-no-certificada", _frase_generacion),
     ContextoIncompleto: ("contexto-incompleto", lambda caso: (
         f"El paquete de poteto no coincide con su manifiesto: {caso.why}. No se lanza nada.", ())),
