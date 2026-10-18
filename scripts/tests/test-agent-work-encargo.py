@@ -1489,12 +1489,13 @@ class Recertificar(Mac):
     def test_infraestructura_avisa_desde_el_primero_y_a_la_tercera_queda_rojo(self):
         avisos = []
         banco = lambda env, cwd: (0, "el banco no imprimió desenlace\n")
+        base = 1_800_000_000.0
         for intento in (1, 2):
-            answer = self.medir(banco=banco, avisos=avisos)
+            answer = self.medir(banco=banco, avisos=avisos, now=base + (intento - 1) * 600)
             entry = self.entrada()
             self.assertEqual((answer["accion"], entry["estado"], entry["intentos"]),
                              ("infraestructura", "infraestructura", intento))
-        answer = self.medir(banco=banco, avisos=avisos)
+        answer = self.medir(banco=banco, avisos=avisos, now=base + 1200)
         entry = self.entrada()
         self.assertEqual((answer["accion"], entry["estado"], entry["intentos"]), ("rojo", "rojo", 3))
         self.assertEqual(len(avisos), 3)
@@ -1637,15 +1638,16 @@ class Recertificar(Mac):
         def explota(*args, **kwargs):
             raise RuntimeError("se cayó")
 
-        answer = self.medir(sondas=explota, avisos=avisos)
+        base = 1_800_000_000.0
+        answer = self.medir(sondas=explota, avisos=avisos, now=base)
         entry = self.entrada()
         self.assertEqual((answer["accion"], entry["estado"], entry["intentos"]),
                          ("infraestructura", "infraestructura", 1))
         self.assertNotIn("se cayó", json.dumps(entry))
         self.assertNotIn("se cayó", avisos[0])
         self.assertNotIn("Users", avisos[0])
-        self.medir(sondas=explota, avisos=avisos)
-        answer = self.medir(sondas=explota, avisos=avisos)
+        self.medir(sondas=explota, avisos=avisos, now=base + 600)
+        answer = self.medir(sondas=explota, avisos=avisos, now=base + 1200)
         self.assertEqual((answer["accion"], self.entrada()["estado"]), ("rojo", "rojo"))
 
     def test_coverage_y_el_canario_abren_aunque_el_registro_diga_rojo(self):
