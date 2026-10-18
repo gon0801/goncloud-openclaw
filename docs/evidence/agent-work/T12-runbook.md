@@ -228,6 +228,12 @@ Antes de lanzarlo:
 Para lanzarlo, desde el checkout del host (`~/dev/wt/agent-work-host`):
 
 ```
+bash scripts/agent-work/lanzar-encargos.sh --runtime-source <directorio-de-R>
+```
+
+`<directorio-de-R>` es el checkout de R que ya usa la sucesión. Si no pasas el flag, el lanzador lee `AGENT_WORK_SUCESION_RUNTIME_SOURCE` de su ambiente (la misma variable del plist `ai.goncloud.agent-work-sucesion`) y se la entrega al host. El host se la pasa a `recertificar` con `--runtime-source`, y ese proceso la pone en `AGENT_WORK_RUNTIME_SOURCE` del banco. Sin flag y sin variable, o si el valor no es una carpeta, no hay ruta por omisión: `recertificar` anota `infraestructura` con `causa: sin-r`, avisa una vez por versión y no mide.
+
+```
 bash scripts/agent-work/lanzar-encargos.sh
 ```
 

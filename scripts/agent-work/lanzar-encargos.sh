@@ -1,9 +1,12 @@
 #!/bin/bash
 # Starts, or reuses, the one host of "por CLI" tasks: it launches one opencode process per task, inside
 # the slot's group, with the model the task's brief asks for.
-# Usage: lanzar-encargos.sh [--canario]
+# Usage: lanzar-encargos.sh [--canario] [--runtime-source RUTA]
 #   --canario   the host also launches on a sandbox-tested-uncertified route or a new opencode version,
 #               so the route's own canary can certify it
+#   --runtime-source RUTA
+#               checkout de R para el banco de recertificar. Sin flag, se lee
+#               AGENT_WORK_SUCESION_RUNTIME_SOURCE. Sin ninguno de los dos, el host arranca sin R.
 # The host runs on tmux -L agent-work, session host-encargos, with the spool
 # ~/.local/state/agent-work-host/enc-1, in a loop that starts it again 5 s after it dies. Running this
 # again with the same arguments changes nothing. To stop it for good:
@@ -29,8 +32,18 @@ host_session=host-encargos
 falla() { echo "lanzar-encargos: $*" >&2; exit "${codigo:-1}"; }
 
 canary=()
-if [ "${1:-}" = "--canario" ]; then canary=(--canary); shift; fi
-[ $# -eq 0 ] || codigo=2 falla "uso: lanzar-encargos.sh [--canario]"
+runtime_source=${AGENT_WORK_SUCESION_RUNTIME_SOURCE-}
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --canario) canary=(--canary); shift ;;
+    --runtime-source)
+      [ $# -ge 2 ] || codigo=2 falla "uso: lanzar-encargos.sh [--canario] [--runtime-source RUTA]"
+      runtime_source=$2
+      shift 2
+      ;;
+    *) codigo=2 falla "uso: lanzar-encargos.sh [--canario] [--runtime-source RUTA]" ;;
+  esac
+done
 user=$(id -un)
 id -Gn | tr ' ' '\n' | grep -qxF -- "$group" || codigo=2 falla "el grupo $group no existe o $user no pertenece a él. \
 Lo crea un administrador, una vez: sudo dseditgroup -o create $group && sudo dseditgroup -o edit -a $user -t user $group"
@@ -51,6 +64,9 @@ command=(env "OPENCLAW_BIN=$openclaw_bin" LANG=en_US.UTF-8 "$python_bin" scripts
   --cli-instance-id "$instance" --cli-tmux-socket "$socket" --tmux-bin "$tmux_bin"
   --workspace-root "$workspace_root" --opencode-bin "$opencode_bin" --slot-group "$group"
   ${canary[@]+"${canary[@]}"})
+if [ -n "$runtime_source" ]; then
+  command=(env "AGENT_WORK_SUCESION_RUNTIME_SOURCE=$runtime_source" "${command[@]}")
+fi
 # The host exits when it dies and when it is asked to stop (SIGTERM); either way the loop brings it back.
 line="while :; do $(printf '%q ' "${command[@]}")2>&1 | tee -a $(printf '%q' "$spool/host.log"); sleep $restart_seconds; done"
 

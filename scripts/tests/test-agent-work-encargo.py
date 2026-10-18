@@ -1377,8 +1377,11 @@ class Recertificar(Mac):
         nombres = ("m1", "m2", "m3a", "m3b", "m3c", "pwd", "m7")
         return tuple(Veredicto(nombre, "no pasa" if nombre in malas else "pasa", nombre) for nombre in nombres)
 
-    def medir(self, *, sondas=None, banco=None, avisos=None, version="1.19.3", ruta="mac-local/opencode", now=1_800_000_000.0):
+    def medir(self, *, sondas=None, banco=None, avisos=None, version="1.19.3", ruta="mac-local/opencode",
+              now=1_800_000_000.0, runtime_source=None):
         textos = [] if avisos is None else avisos
+        runtime = self.root / "runtime-r"
+        runtime.mkdir(exist_ok=True)
 
         def enviar(texto, **kwargs):
             textos.append(texto)
@@ -1389,7 +1392,8 @@ class Recertificar(Mac):
             opencode_bin=self.bin / "opencode", claude_bin=self.bin / "claude",
             correr_sondas=self.veredictos if sondas is None else sondas,
             correr_banco=(lambda env, cwd: (0, "case=ingenieria desenlace=verde causa=ninguna\n")) if banco is None else banco,
-            enviar_aviso=enviar)
+            enviar_aviso=enviar,
+            runtime_source=str(runtime) if runtime_source is None else runtime_source)
 
     def registro(self):
         return json.loads((self.state / "versiones-medidas.json").read_text())
@@ -1528,6 +1532,7 @@ class Recertificar(Mac):
 
         self.medir(banco=banco)
         self.assertEqual(visto.get("AGENT_WORK_BANCO_MODELO"), "zai-coding-plan/glm-5.3-flash")
+        self.assertEqual(visto.get("AGENT_WORK_RUNTIME_SOURCE"), str(self.root / "runtime-r"))
         visto.clear()
         self.medir(banco=banco, ruta="mac-local/claude", version="2.1.302")
         self.assertNotIn("AGENT_WORK_BANCO_MODELO", visto)
@@ -1617,6 +1622,54 @@ class Recertificar(Mac):
         self.beat()
         answer = self.preparar("--perfil", "ingenieria")
         self.assertEqual(answer["causa"], "generacion-no-certificada")
+
+    def test_sin_r_no_gasta_intento_y_avisa_una_vez(self):
+        avisos = []
+        llamado = []
+        guardado = os.environ.pop("AGENT_WORK_SUCESION_RUNTIME_SOURCE", None)
+
+        def enviar(texto, **kwargs):
+            avisos.append(texto)
+            return {"enviado": True}
+
+        def sondas(*args, **kwargs):
+            llamado.append(1)
+            return self.veredictos()
+
+        try:
+            answer = encargo.recertificar(
+                state_root=self.state, checkout=self.checkout, now=1_800_000_000.0, version="1.19.3",
+                opencode_bin=self.bin / "opencode", claude_bin=self.bin / "claude",
+                correr_sondas=sondas, correr_banco=lambda env, cwd: (0, "no corre\n"),
+                enviar_aviso=enviar, runtime_source=None)
+            entry = self.entrada()
+            self.assertEqual((answer["accion"], entry["estado"], entry["causa"], entry["intentos"], llamado),
+                             ("infraestructura", "infraestructura", "sin-r", 0, []))
+            self.assertEqual(len(avisos), 1)
+            self.assertNotIn("Users", avisos[0])
+            encargo.recertificar(
+                state_root=self.state, checkout=self.checkout, now=1_800_000_100.0, version="1.19.3",
+                opencode_bin=self.bin / "opencode", claude_bin=self.bin / "claude",
+                correr_sondas=sondas, correr_banco=lambda env, cwd: (0, "no corre\n"),
+                enviar_aviso=enviar, runtime_source=None)
+            self.assertEqual((len(avisos), self.entrada()["intentos"], llamado), (1, 0, []))
+            archivo = self.root / "no-es-carpeta"
+            archivo.write_text("x", encoding="utf-8")
+            answer = self.medir(runtime_source=str(archivo), sondas=sondas, avisos=avisos, version="1.19.4")
+            self.assertEqual((answer["causa"], self.entrada("1.19.4")["causa"], llamado), ("sin-r", "sin-r", []))
+        finally:
+            if guardado is None:
+                os.environ.pop("AGENT_WORK_SUCESION_RUNTIME_SOURCE", None)
+            else:
+                os.environ["AGENT_WORK_SUCESION_RUNTIME_SOURCE"] = guardado
+
+    def test_el_cli_entrega_el_runtime_source_al_banco(self):
+        runtime = self.root / "runtime-cli"
+        runtime.mkdir()
+        with mock.patch.object(encargo, "recertificar", return_value={"ok": True, "accion": "verde"}) as medir:
+            code, out, err = self.cli("recertificar", "--runtime-source", str(runtime))
+        self.assertEqual((code, err), (0, ""))
+        self.assertEqual(medir.call_args.kwargs["runtime_source"], str(runtime))
 
     def test_una_ruta_sandbox_no_se_mide(self):
         self.sandbox_tested()

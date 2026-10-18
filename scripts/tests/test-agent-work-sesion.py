@@ -320,6 +320,14 @@ class Slot(unittest.TestCase):
         self.revision = {"kind": "code", "repository": str(self.repo), "sha": "a" * 40}
         self.r = FakeR()
         self.ahead = 0.0
+        self._runtime_previo = os.environ.pop("AGENT_WORK_SUCESION_RUNTIME_SOURCE", None)
+        self.addCleanup(self._restaurar_runtime)
+
+    def _restaurar_runtime(self):
+        if self._runtime_previo is None:
+            os.environ.pop("AGENT_WORK_SUCESION_RUNTIME_SOURCE", None)
+        else:
+            os.environ["AGENT_WORK_SUCESION_RUNTIME_SOURCE"] = self._runtime_previo
 
     def start(self, backend, canary=False, lanzar_recert=None):
         """A host process over this slot: the first one, or the one that replaces a dead one."""
@@ -1858,6 +1866,7 @@ class Decisions(Slot):
         self.assertIn("recertificar", argv)
         self.assertIn("--ruta", argv)
         self.assertIn("mac-local/opencode", argv)
+        self.assertNotIn("--runtime-source", argv)
         self.assertEqual(log_path.name, "agent-work-recertificar.log")
         # Otro proceso: en el mismo, flock vuelve a conceder el candado.
         chequeo = subprocess.run([sys.executable, "-c",
@@ -2041,6 +2050,32 @@ class Decisions(Slot):
         self.run.claim()
         self.assertEqual(len(lanzados), 2)
         self.assertIn("mac-local/opencode", lanzados[0])
+
+    def test_el_disparo_pasa_el_r_de_sucesion_al_hijo(self):
+        runtime = self.state / "runtime-r"
+        runtime.mkdir()
+        (self.bin / "version").write_text("1.19.3\n")
+        (self.state / "catalogo.json").unlink(missing_ok=True)
+        proc = subprocess.Popen(["sleep", "30"])
+        self.addCleanup(proc.kill)
+        lanzados = []
+        os.environ["AGENT_WORK_SUCESION_RUNTIME_SOURCE"] = str(runtime)
+        self.start(ScriptedBackend(), lanzar_recert=lambda argv, log_path, *_resto: lanzados.append(list(argv)) or proc)
+        self.run.claim()
+        self.assertEqual(len(lanzados), 1)
+        self.assertEqual(lanzados[0][lanzados[0].index("--runtime-source") + 1], str(runtime))
+
+    def test_el_hijo_recibe_la_variable_del_r(self):
+        from native_gateway import _lanzar_recert
+        runtime = self.state / "runtime-r"
+        runtime.mkdir()
+        log = self.state / "runtime.log"
+        os.environ["AGENT_WORK_SUCESION_RUNTIME_SOURCE"] = str(runtime)
+        proc = _lanzar_recert(
+            [sys.executable, "-c", "import os; print(os.environ.get('AGENT_WORK_SUCESION_RUNTIME_SOURCE',''))"], log)
+        self.addCleanup(proc.kill)
+        self.assertEqual(proc.wait(timeout=10), 0)
+        self.assertEqual(log.read_text().splitlines()[0], str(runtime))
 
     def test_el_hijo_prende_los_avisos_y_hereda_el_binario(self):
         from native_gateway import _lanzar_recert

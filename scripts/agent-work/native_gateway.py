@@ -849,6 +849,9 @@ class RunHost:
                 "--checkout", str(self.checkout), "--state-root", str(self.state_root),
                 "--opencode", str(self.opencode_bin), "--claude", str(self.claude_bin),
                 "recertificar", "--ruta", f"{self.client.host_id}/{adapter_id}"]
+        runtime = os.environ.get("AGENT_WORK_SUCESION_RUNTIME_SOURCE")
+        if runtime:
+            argv.extend(["--runtime-source", runtime])
         try:
             self._recert_proc = self.lanzar_recert(argv, log_path, fd)
             self._recert_intento = self.clock()
