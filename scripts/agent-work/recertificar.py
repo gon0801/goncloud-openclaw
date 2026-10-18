@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
@@ -73,17 +74,45 @@ def correr_sondas(
     *,
     checkout: Path,
     raiz: Path | None = None,
+    evidencia: Path | None = None,
 ) -> tuple[Veredicto, ...]:
     """Corre las sondas de un adaptador. Sin `raiz`, cada sonda usa su propio mktemp."""
     if adaptador not in SONDAS:
         raise ValueError(f"adaptador sin sondas: {adaptador}")
     return tuple(
-        correr_sonda(sonda, binario, checkout=checkout, raiz=raiz) for sonda in SONDAS[adaptador]
+        correr_sonda(sonda, binario, checkout=checkout, raiz=raiz, evidencia=evidencia)
+        for sonda in SONDAS[adaptador]
     )
 
 
+def _archivar_flujo(base: Path, sonda: str, evidencia: Path) -> None:
+    sesiones = base / "sessions"
+    if not sesiones.is_dir():
+        return
+    dirs = sorted(path for path in sesiones.iterdir() if path.is_dir())
+    if not dirs:
+        return
+    principal = next((path for path in dirs if path.name == sonda), dirs[-1])
+    destino = evidencia / "sondas" / sonda
+    destino.mkdir(parents=True, exist_ok=True)
+    for nombre in ("events.jsonl", "stderr.log"):
+        origen = principal / nombre
+        if origen.is_file():
+            shutil.copyfile(origen, destino / nombre)
+    for extra in dirs:
+        if extra == principal:
+            continue
+        extra_dest = destino / extra.name
+        extra_dest.mkdir(parents=True, exist_ok=True)
+        for nombre in ("events.jsonl", "stderr.log"):
+            origen = extra / nombre
+            if origen.is_file():
+                shutil.copyfile(origen, extra_dest / nombre)
+
+
 def correr_sonda(
-    sonda: str, binario: Path, *, checkout: Path, raiz: Path | None = None
+    sonda: str, binario: Path, *, checkout: Path, raiz: Path | None = None,
+    evidencia: Path | None = None,
 ) -> Veredicto:
     dueño = next((nombre for nombre, sondas in SONDAS.items() if sonda in sondas), None)
     if dueño is None:
@@ -102,13 +131,13 @@ def correr_sonda(
     try:
         return _sondas[sonda](Path(binario), Path(checkout), base)
     finally:
+        if evidencia is not None:
+            _archivar_flujo(base, sonda, Path(evidencia))
         if anterior is None:
             os.environ.pop("RECERT_FUERA", None)
         else:
             os.environ["RECERT_FUERA"] = anterior
         if propia:
-            import shutil
-
             shutil.rmtree(base, ignore_errors=True)
 
 

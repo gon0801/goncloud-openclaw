@@ -1722,6 +1722,26 @@ class Recertificar(Mac):
             else:
                 os.environ["AGENT_WORK_SUCESION_RUNTIME_SOURCE"] = guardado
 
+    def test_guarda_el_flujo_de_cada_sonda_y_el_digest_lo_cubre(self):
+        doble = self.bin / "sonda-doble"
+        doble.write_text(
+            "#!/usr/bin/env python3\nimport json\nprint(json.dumps({'type': 'text', 'timestamp': 1}))\n",
+            encoding="utf-8")
+        doble.chmod(0o755)
+        runtime = self.root / "runtime-r"
+        runtime.mkdir(exist_ok=True)
+        encargo.recertificar(
+            state_root=self.state, checkout=self.checkout, now=1_800_000_000.0, version="1.19.3",
+            opencode_bin=doble, claude_bin=self.bin / "claude",
+            correr_banco=lambda env, cwd: (0, "case=ingenieria desenlace=verde causa=ninguna\n"),
+            enviar_aviso=lambda texto, **kwargs: {"enviado": True},
+            runtime_source=str(runtime))
+        base = self.state / "recertificacion" / "mac-local-opencode" / "1.19.3"
+        for sonda in ("m1", "m2", "m3a", "m3b", "m3c", "pwd", "m7"):
+            self.assertTrue((base / "sondas" / sonda / "events.jsonl").is_file(), sonda)
+            self.assertTrue((base / "sondas" / sonda / "stderr.log").is_file(), sonda)
+        self.assertEqual(self.entrada()["digest"], encargo._digest_dir(base))
+
     def test_el_cli_entrega_el_runtime_source_al_banco(self):
         runtime = self.root / "runtime-cli"
         runtime.mkdir()

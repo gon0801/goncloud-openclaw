@@ -1231,9 +1231,10 @@ def recertificar(*, state_root: Path, checkout: Path, ruta: str = "mac-local/ope
             "commit": _head(checkout), "intentos": intentos})
         _escribir_medidas(state_root, doc)
     binario = claude_bin if adapter_id == "claude" else opencode_bin
-    medir = correr_sondas or (lambda adaptador, binario, checkout: recert_mod.correr_sondas(adaptador, binario, checkout=checkout))
     rel = f"recertificacion/{ruta.replace('/', '-')}/{version}"
     evidencia_dir = Path(state_root) / rel
+    medir = correr_sondas or (lambda adaptador, binario, checkout: recert_mod.correr_sondas(
+        adaptador, binario, checkout=checkout, evidencia=evidencia_dir))
     nombre = "claude" if adapter_id == "claude" else "opencode"
     veredictos = ()
     salida = ""
