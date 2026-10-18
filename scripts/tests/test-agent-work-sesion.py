@@ -320,6 +320,14 @@ class Slot(unittest.TestCase):
         self.revision = {"kind": "code", "repository": str(self.repo), "sha": "a" * 40}
         self.r = FakeR()
         self.ahead = 0.0
+        self._runtime_previo = os.environ.pop("AGENT_WORK_SUCESION_RUNTIME_SOURCE", None)
+        self.addCleanup(self._restaurar_runtime)
+
+    def _restaurar_runtime(self):
+        if self._runtime_previo is None:
+            os.environ.pop("AGENT_WORK_SUCESION_RUNTIME_SOURCE", None)
+        else:
+            os.environ["AGENT_WORK_SUCESION_RUNTIME_SOURCE"] = self._runtime_previo
 
     def start(self, backend, canary=False, lanzar_recert=None):
         """A host process over this slot: the first one, or the one that replaces a dead one."""
@@ -1829,6 +1837,95 @@ class Decisions(Slot):
         self.assertEqual(self.changes(), {})
         self.assertEqual((self.r.claims, self.incidents()), ([], []))
 
+    def _commit_del_checkout(self):
+        env = {clave: valor for clave, valor in os.environ.items() if not clave.startswith("GIT_")}
+        if not (self.checkout / ".git").exists():
+            subprocess.run(["git", "-C", str(self.checkout), "init", "-q"], check=True, env=env, capture_output=True)
+            subprocess.run(
+                ["git", "-C", str(self.checkout), "-c", "user.name=t", "-c", "user.email=t@example.invalid",
+                 "commit", "-q", "--allow-empty", "-m", "base"],
+                check=True, env=env, capture_output=True)
+        hecho = subprocess.run(
+            ["git", "-C", str(self.checkout), "rev-parse", "HEAD"],
+            check=True, env=env, capture_output=True, text=True)
+        return hecho.stdout.strip()
+
+    def _version_nueva(self):
+        (self.bin / "version").write_text("1.19.3\n")
+        (self.state / "catalogo.json").unlink(missing_ok=True)
+        claude = self.bin / "claude"
+        claude.write_text("#!/bin/sh\nexit 1\n")
+        claude.chmod(0o755)
+        self.run.claude_bin = claude
+        self.run._version_claude = None
+
+    def test_un_rojo_de_otro_commit_se_vuelve_a_medir_y_el_mismo_no(self):
+        head = self._commit_del_checkout()
+        self._version_nueva()
+        (self.state / "versiones-medidas.json").write_text(json.dumps({
+            "schema": "agent-work.cli-versions.v1",
+            "routes": {"mac-local/opencode": {"1.19.3": {
+                "estado": "rojo", "commit": "a" * 40, "intentos": 3, "causa": "m7"}}}}))
+        proc = subprocess.Popen(["sleep", "30"])
+        self.addCleanup(proc.kill)
+        lanzados = []
+
+        def solo_opencode(adapter_id, instance_id):
+            if adapter_id != "opencode":
+                return None
+            return FakeR.claim_host(self.r, adapter_id, instance_id)
+
+        self.r.claim_host = solo_opencode
+        self.run.lanzar_recert = lambda argv, log_path, *_resto: lanzados.append(list(argv)) or proc
+        self.run.claim()
+        self.assertEqual(len(lanzados), 1)
+        self.assertIn("mac-local/opencode", lanzados[0])
+        self.assertEqual(self.r.claims, [])
+        (self.state / "versiones-medidas.json").write_text(json.dumps({
+            "schema": "agent-work.cli-versions.v1",
+            "routes": {"mac-local/opencode": {"1.19.3": {
+                "estado": "rojo", "commit": head, "causa": "m3b", "sondas": {"m3b": "no pasa"}}}}}))
+        self.run._recert_proc = None
+        self.run._soltar_recert()
+        self.refused("ruta-roja", "m3b")
+        self.assertEqual(len(lanzados), 1)
+
+    def test_un_pull_entre_pasadas_vuelve_a_medir_el_rojo(self):
+        self.start(ScriptedBackend())
+        self._version_nueva()
+        head = self._commit_del_checkout()
+        (self.state / "versiones-medidas.json").write_text(json.dumps({
+            "schema": "agent-work.cli-versions.v1",
+            "routes": {"mac-local/opencode": {"1.19.3": {
+                "estado": "rojo", "commit": head, "causa": "m7"}}}}))
+        self.assertFalse(self.run._debe_medir("opencode"))
+        env = {clave: valor for clave, valor in os.environ.items() if not clave.startswith("GIT_")}
+        subprocess.run(
+            ["git", "-C", str(self.checkout), "-c", "user.name=t", "-c", "user.email=t@example.invalid",
+             "commit", "-q", "--allow-empty", "-m", "pull"],
+            check=True, env=env, capture_output=True)
+        self.assertTrue(self.run._debe_medir("opencode"))
+
+    def test_una_version_certificada_se_reclama_durante_la_espera(self):
+        medido = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        (self.state / "versiones-medidas.json").write_text(json.dumps({
+            "schema": "agent-work.cli-versions.v1",
+            "routes": {"mac-local/opencode": {"1.18.35": {
+                "estado": "infraestructura", "medidoEn": medido, "intentos": 1}}}}))
+        self.start(self.backend)
+        self.launched()
+
+    def test_un_verde_no_se_remide_por_un_commit_nuevo(self):
+        self._version_nueva()
+        (self.state / "versiones-medidas.json").write_text(json.dumps({
+            "schema": "agent-work.cli-versions.v1",
+            "routes": {"mac-local/opencode": {"1.19.3": {
+                "estado": "verde", "commit": "b" * 40}}}}))
+        lanzados = []
+        self.run.lanzar_recert = lambda argv, log_path, *_resto: lanzados.append(list(argv))
+        self.launched()
+        self.assertEqual(lanzados, [])
+
     def test_una_ruta_roja_se_rechaza_antes_de_lanzar(self):
         (self.bin / "version").write_text("1.18.36\n")
         (self.state / "versiones-medidas.json").write_text(json.dumps({
@@ -1858,6 +1955,7 @@ class Decisions(Slot):
         self.assertIn("recertificar", argv)
         self.assertIn("--ruta", argv)
         self.assertIn("mac-local/opencode", argv)
+        self.assertNotIn("--runtime-source", argv)
         self.assertEqual(log_path.name, "agent-work-recertificar.log")
         # Otro proceso: en el mismo, flock vuelve a conceder el candado.
         chequeo = subprocess.run([sys.executable, "-c",
@@ -2041,6 +2139,65 @@ class Decisions(Slot):
         self.run.claim()
         self.assertEqual(len(lanzados), 2)
         self.assertIn("mac-local/opencode", lanzados[0])
+
+    def test_el_host_no_repite_una_infraestructura_antes_de_diez_minutos(self):
+        from datetime import datetime, timezone
+        (self.bin / "version").write_text("1.19.3\n")
+        (self.state / "catalogo.json").unlink(missing_ok=True)
+        claude = self.bin / "claude"
+        claude.write_text("#!/bin/sh\nexit 1\n")
+        claude.chmod(0o755)
+        medido = datetime.fromtimestamp(time.time() + self.ahead, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        (self.state / "versiones-medidas.json").write_text(json.dumps({
+            "schema": "agent-work.cli-versions.v1",
+            "routes": {"mac-local/opencode": {"1.19.3": {
+                "estado": "infraestructura", "medidoEn": medido, "intentos": 1}}}}))
+        proc = subprocess.Popen(["sleep", "30"])
+        self.addCleanup(proc.kill)
+        lanzados = []
+
+        def solo_opencode(adapter_id, instance_id):
+            if adapter_id != "opencode":
+                return None
+            return FakeR.claim_host(self.r, adapter_id, instance_id)
+
+        self.r.claim_host = solo_opencode
+        self.start(ScriptedBackend(), lanzar_recert=lambda argv, log_path, *_resto: lanzados.append(list(argv)) or proc)
+        self.run.claude_bin = claude
+        self.run._version_claude = None
+        self.run.claim()
+        self.assertEqual((lanzados, self.r.claims), ([], []))
+        self.ahead += 601
+        self.run.claim()
+        self.assertEqual(len(lanzados), 1)
+        self.assertIn("mac-local/opencode", lanzados[0])
+        self.assertEqual(self.r.claims, [])
+
+    def test_el_disparo_pasa_el_r_de_sucesion_al_hijo(self):
+        runtime = self.state / "runtime-r"
+        runtime.mkdir()
+        (self.bin / "version").write_text("1.19.3\n")
+        (self.state / "catalogo.json").unlink(missing_ok=True)
+        proc = subprocess.Popen(["sleep", "30"])
+        self.addCleanup(proc.kill)
+        lanzados = []
+        os.environ["AGENT_WORK_SUCESION_RUNTIME_SOURCE"] = str(runtime)
+        self.start(ScriptedBackend(), lanzar_recert=lambda argv, log_path, *_resto: lanzados.append(list(argv)) or proc)
+        self.run.claim()
+        self.assertEqual(len(lanzados), 1)
+        self.assertEqual(lanzados[0][lanzados[0].index("--runtime-source") + 1], str(runtime))
+
+    def test_el_hijo_recibe_la_variable_del_r(self):
+        from native_gateway import _lanzar_recert
+        runtime = self.state / "runtime-r"
+        runtime.mkdir()
+        log = self.state / "runtime.log"
+        os.environ["AGENT_WORK_SUCESION_RUNTIME_SOURCE"] = str(runtime)
+        proc = _lanzar_recert(
+            [sys.executable, "-c", "import os; print(os.environ.get('AGENT_WORK_SUCESION_RUNTIME_SOURCE',''))"], log)
+        self.addCleanup(proc.kill)
+        self.assertEqual(proc.wait(timeout=10), 0)
+        self.assertEqual(log.read_text().splitlines()[0], str(runtime))
 
     def test_el_hijo_prende_los_avisos_y_hereda_el_binario(self):
         from native_gateway import _lanzar_recert

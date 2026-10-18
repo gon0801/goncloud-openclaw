@@ -1377,8 +1377,11 @@ class Recertificar(Mac):
         nombres = ("m1", "m2", "m3a", "m3b", "m3c", "pwd", "m7")
         return tuple(Veredicto(nombre, "no pasa" if nombre in malas else "pasa", nombre) for nombre in nombres)
 
-    def medir(self, *, sondas=None, banco=None, avisos=None, version="1.19.3", ruta="mac-local/opencode", now=1_800_000_000.0):
+    def medir(self, *, sondas=None, banco=None, avisos=None, version="1.19.3", ruta="mac-local/opencode",
+              now=1_800_000_000.0, runtime_source=None):
         textos = [] if avisos is None else avisos
+        runtime = self.root / "runtime-r"
+        runtime.mkdir(exist_ok=True)
 
         def enviar(texto, **kwargs):
             textos.append(texto)
@@ -1389,7 +1392,8 @@ class Recertificar(Mac):
             opencode_bin=self.bin / "opencode", claude_bin=self.bin / "claude",
             correr_sondas=self.veredictos if sondas is None else sondas,
             correr_banco=(lambda env, cwd: (0, "case=ingenieria desenlace=verde causa=ninguna\n")) if banco is None else banco,
-            enviar_aviso=enviar)
+            enviar_aviso=enviar,
+            runtime_source=str(runtime) if runtime_source is None else runtime_source)
 
     def registro(self):
         return json.loads((self.state / "versiones-medidas.json").read_text())
@@ -1425,6 +1429,46 @@ class Recertificar(Mac):
         closed = encargo.cargar_ruta(self.checkout, self.state, "mac-local").open_for("1.19.3", None, canary=False)
         self.assertIsNotNone(closed)
 
+    def _head_del_fixture(self):
+        env = {clave: valor for clave, valor in os.environ.items() if not clave.startswith("GIT_")}
+        if not (self.checkout / ".git").exists():
+            subprocess.run(["git", "-C", str(self.checkout), "init", "-q"], check=True, env=env, capture_output=True)
+            subprocess.run(
+                ["git", "-C", str(self.checkout), "-c", "user.name=t", "-c", "user.email=t@example.invalid",
+                 "commit", "-q", "--allow-empty", "-m", "base"],
+                check=True, env=env, capture_output=True)
+        hecho = subprocess.run(
+            ["git", "-C", str(self.checkout), "rev-parse", "HEAD"],
+            check=True, env=env, capture_output=True, text=True)
+        return hecho.stdout.strip()
+
+    def test_un_rojo_de_otro_commit_se_remide_y_el_mismo_o_un_verde_no(self):
+        head = self._head_del_fixture()
+        llamado = []
+
+        def escribir(estado, commit):
+            (self.state / "versiones-medidas.json").write_text(json.dumps({
+                "schema": "agent-work.cli-versions.v1",
+                "routes": {"mac-local/opencode": {"1.19.3": {
+                    "estado": estado, "commit": commit, "intentos": 3}}}}))
+
+        def sondas(*args, **kwargs):
+            llamado.append(1)
+            return self.veredictos()
+
+        escribir("rojo", "a" * 40)
+        answer = self.medir(sondas=sondas)
+        self.assertEqual((answer["accion"], llamado, self.entrada()["intentos"]), ("verde", [1], 1))
+        llamado.clear()
+        escribir("rojo", head)
+        antes = self.registro()
+        answer = self.medir(sondas=sondas)
+        self.assertEqual((answer["accion"], llamado, self.registro()), ("ya-medida", [], antes))
+        escribir("verde", "b" * 40)
+        antes = self.registro()
+        answer = self.medir(sondas=sondas)
+        self.assertEqual((answer["accion"], llamado, self.registro()), ("ya-medida", [], antes))
+
     def test_una_version_terminal_o_ya_en_coverage_no_se_vuelve_a_medir(self):
         (self.state / "versiones-medidas.json").write_text(json.dumps({
             "schema": "agent-work.cli-versions.v1",
@@ -1445,16 +1489,36 @@ class Recertificar(Mac):
     def test_infraestructura_avisa_desde_el_primero_y_a_la_tercera_queda_rojo(self):
         avisos = []
         banco = lambda env, cwd: (0, "el banco no imprimió desenlace\n")
+        base = 1_800_000_000.0
         for intento in (1, 2):
-            answer = self.medir(banco=banco, avisos=avisos)
+            answer = self.medir(banco=banco, avisos=avisos, now=base + (intento - 1) * 600)
             entry = self.entrada()
             self.assertEqual((answer["accion"], entry["estado"], entry["intentos"]),
                              ("infraestructura", "infraestructura", intento))
-        answer = self.medir(banco=banco, avisos=avisos)
+        answer = self.medir(banco=banco, avisos=avisos, now=base + 1200)
         entry = self.entrada()
         self.assertEqual((answer["accion"], entry["estado"], entry["intentos"]), ("rojo", "rojo", 3))
         self.assertEqual(len(avisos), 3)
         self.assertIn(entry["evidencia"], avisos[0])
+
+    def test_infraestructura_no_se_repite_antes_de_diez_minutos(self):
+        ahora = 1_800_000_000.0
+        medido = datetime.fromtimestamp(ahora, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        (self.state / "versiones-medidas.json").write_text(json.dumps({
+            "schema": "agent-work.cli-versions.v1",
+            "routes": {"mac-local/opencode": {"1.19.3": {
+                "estado": "infraestructura", "medidoEn": medido, "intentos": 1}}}}))
+        antes = self.registro()
+        llamado = []
+        answer = self.medir(
+            now=ahora + 599,
+            sondas=lambda *args, **kwargs: llamado.append(1) or self.veredictos())
+        self.assertEqual((answer["accion"], llamado, self.registro()), ("espera-reintento", [], antes))
+        answer = self.medir(
+            now=ahora + 600,
+            sondas=lambda *args, **kwargs: llamado.append(1) or self.veredictos())
+        self.assertEqual((llamado, answer["accion"]), ([1], "verde"))
+        self.assertEqual(self.entrada()["intentos"], 2)
 
     def test_el_host_ocupado_pospone_sin_escribir(self):
         self.beat(slot="running", taskId="t-1", model="zai-coding-plan/glm-5.3", since=time.time())
@@ -1496,6 +1560,13 @@ class Recertificar(Mac):
         closed = self.preparar()
         self.assertEqual(closed["causa"], "ruta-roja")
         self.assertIn("m3b", closed["frase"])
+        doc["routes"]["mac-local/opencode"]["1.19.3"] = {
+            "estado": "rojo", "commit": "a" * 40, "causa": "m7", "sondas": {"m7": "no pasa"}}
+        (self.state / "versiones-medidas.json").write_text(json.dumps(doc))
+        (self.state / "catalogo.json").unlink(missing_ok=True)
+        otra_vez = self.preparar()
+        self.assertEqual((otra_vez["ok"], otra_vez.get("espera")), (True, "recertificando"))
+        self.assertNotEqual(otra_vez.get("causa"), "ruta-roja")
 
     def test_infraestructura_tambien_espera_sin_rechazar(self):
         (self.bin / "version").write_text("1.19.3\n")
@@ -1528,6 +1599,7 @@ class Recertificar(Mac):
 
         self.medir(banco=banco)
         self.assertEqual(visto.get("AGENT_WORK_BANCO_MODELO"), "zai-coding-plan/glm-5.3-flash")
+        self.assertEqual(visto.get("AGENT_WORK_RUNTIME_SOURCE"), str(self.root / "runtime-r"))
         visto.clear()
         self.medir(banco=banco, ruta="mac-local/claude", version="2.1.302")
         self.assertNotIn("AGENT_WORK_BANCO_MODELO", visto)
@@ -1573,15 +1645,16 @@ class Recertificar(Mac):
         def explota(*args, **kwargs):
             raise RuntimeError("se cayó")
 
-        answer = self.medir(sondas=explota, avisos=avisos)
+        base = 1_800_000_000.0
+        answer = self.medir(sondas=explota, avisos=avisos, now=base)
         entry = self.entrada()
         self.assertEqual((answer["accion"], entry["estado"], entry["intentos"]),
                          ("infraestructura", "infraestructura", 1))
         self.assertNotIn("se cayó", json.dumps(entry))
         self.assertNotIn("se cayó", avisos[0])
         self.assertNotIn("Users", avisos[0])
-        self.medir(sondas=explota, avisos=avisos)
-        answer = self.medir(sondas=explota, avisos=avisos)
+        self.medir(sondas=explota, avisos=avisos, now=base + 600)
+        answer = self.medir(sondas=explota, avisos=avisos, now=base + 1200)
         self.assertEqual((answer["accion"], self.entrada()["estado"]), ("rojo", "rojo"))
 
     def test_coverage_y_el_canario_abren_aunque_el_registro_diga_rojo(self):
@@ -1617,6 +1690,111 @@ class Recertificar(Mac):
         self.beat()
         answer = self.preparar("--perfil", "ingenieria")
         self.assertEqual(answer["causa"], "generacion-no-certificada")
+
+    def test_sin_r_no_gasta_intento_y_avisa_una_vez(self):
+        avisos = []
+        llamado = []
+        guardado = os.environ.pop("AGENT_WORK_SUCESION_RUNTIME_SOURCE", None)
+
+        def enviar(texto, **kwargs):
+            avisos.append(texto)
+            return {"enviado": True}
+
+        def sondas(*args, **kwargs):
+            llamado.append(1)
+            return self.veredictos()
+
+        try:
+            answer = encargo.recertificar(
+                state_root=self.state, checkout=self.checkout, now=1_800_000_000.0, version="1.19.3",
+                opencode_bin=self.bin / "opencode", claude_bin=self.bin / "claude",
+                correr_sondas=sondas, correr_banco=lambda env, cwd: (0, "no corre\n"),
+                enviar_aviso=enviar, runtime_source=None)
+            entry = self.entrada()
+            self.assertEqual((answer["accion"], entry["estado"], entry["causa"], entry["intentos"], llamado),
+                             ("infraestructura", "infraestructura", "sin-r", 0, []))
+            self.assertEqual(len(avisos), 1)
+            self.assertNotIn("Users", avisos[0])
+            segunda = encargo.recertificar(
+                state_root=self.state, checkout=self.checkout, now=1_800_000_600.0, version="1.19.3",
+                opencode_bin=self.bin / "opencode", claude_bin=self.bin / "claude",
+                correr_sondas=sondas, correr_banco=lambda env, cwd: (0, "no corre\n"),
+                enviar_aviso=enviar, runtime_source=None)
+            self.assertEqual((segunda["accion"], len(avisos), self.entrada()["intentos"], llamado),
+                             ("infraestructura", 1, 0, []))
+            archivo = self.root / "no-es-carpeta"
+            archivo.write_text("x", encoding="utf-8")
+            answer = self.medir(runtime_source=str(archivo), sondas=sondas, avisos=avisos, version="1.19.4")
+            self.assertEqual((answer["causa"], self.entrada("1.19.4")["causa"], llamado), ("sin-r", "sin-r", []))
+        finally:
+            if guardado is None:
+                os.environ.pop("AGENT_WORK_SUCESION_RUNTIME_SOURCE", None)
+            else:
+                os.environ["AGENT_WORK_SUCESION_RUNTIME_SOURCE"] = guardado
+
+    def test_sin_r_despues_de_un_rojo_ajeno_empieza_sin_intentos(self):
+        (self.state / "versiones-medidas.json").write_text(json.dumps({
+            "schema": "agent-work.cli-versions.v1",
+            "routes": {"mac-local/opencode": {"1.19.3": {
+                "estado": "rojo", "commit": "a" * 40, "intentos": 3, "causa": "m7"}}}}))
+        guardado = os.environ.pop("AGENT_WORK_SUCESION_RUNTIME_SOURCE", None)
+        try:
+            answer = encargo.recertificar(
+                state_root=self.state, checkout=self.checkout, now=1_800_000_000.0, version="1.19.3",
+                opencode_bin=self.bin / "opencode", claude_bin=self.bin / "claude",
+                correr_sondas=lambda *args, **kwargs: self.veredictos(),
+                correr_banco=lambda env, cwd: (0, "no corre\n"),
+                enviar_aviso=lambda texto, **kwargs: {"enviado": True}, runtime_source=None)
+        finally:
+            if guardado is not None:
+                os.environ["AGENT_WORK_SUCESION_RUNTIME_SOURCE"] = guardado
+        self.assertEqual((answer["accion"], self.entrada()["intentos"], self.entrada()["causa"]),
+                         ("infraestructura", 0, "sin-r"))
+
+    def test_el_registro_guarda_el_commit_del_inicio(self):
+        secuencia = iter(["a" * 40, "b" * 40, "c" * 40])
+        with mock.patch.object(encargo, "_head", side_effect=lambda _checkout: next(secuencia)):
+            self.medir()
+        self.assertEqual(self.entrada()["commit"], "a" * 40)
+
+    def test_una_medicion_nueva_no_hereda_el_banco_viejo(self):
+        from recertificar import Veredicto
+        viejo = self.state / "recertificacion" / "mac-local-opencode" / "1.19.3"
+        viejo.mkdir(parents=True)
+        (viejo / "banco.log").write_text("banco viejo\n", encoding="utf-8")
+        nombres = ("m1", "m2", "m3a", "m3b", "m3c", "pwd", "m7")
+        answer = self.medir(sondas=lambda *args: tuple(
+            Veredicto(nombre, "no pasa" if nombre == "m7" else "pasa", nombre) for nombre in nombres))
+        self.assertEqual(answer["accion"], "rojo")
+        self.assertFalse((viejo / "banco.log").exists())
+
+    def test_guarda_el_flujo_de_cada_sonda_y_el_digest_lo_cubre(self):
+        doble = self.bin / "sonda-doble"
+        doble.write_text(
+            "#!/usr/bin/env python3\nimport json\nprint(json.dumps({'type': 'text', 'timestamp': 1}))\n",
+            encoding="utf-8")
+        doble.chmod(0o755)
+        runtime = self.root / "runtime-r"
+        runtime.mkdir(exist_ok=True)
+        encargo.recertificar(
+            state_root=self.state, checkout=self.checkout, now=1_800_000_000.0, version="1.19.3",
+            opencode_bin=doble, claude_bin=self.bin / "claude",
+            correr_banco=lambda env, cwd: (0, "case=ingenieria desenlace=verde causa=ninguna\n"),
+            enviar_aviso=lambda texto, **kwargs: {"enviado": True},
+            runtime_source=str(runtime))
+        base = self.state / "recertificacion" / "mac-local-opencode" / "1.19.3"
+        for sonda in ("m1", "m2", "m3a", "m3b", "m3c", "pwd", "m7"):
+            self.assertTrue((base / "sondas" / sonda / "events.jsonl").is_file(), sonda)
+            self.assertTrue((base / "sondas" / sonda / "stderr.log").is_file(), sonda)
+        self.assertEqual(self.entrada()["digest"], encargo._digest_dir(base))
+
+    def test_el_cli_entrega_el_runtime_source_al_banco(self):
+        runtime = self.root / "runtime-cli"
+        runtime.mkdir()
+        with mock.patch.object(encargo, "recertificar", return_value={"ok": True, "accion": "verde"}) as medir:
+            code, out, err = self.cli("recertificar", "--runtime-source", str(runtime))
+        self.assertEqual((code, err), (0, ""))
+        self.assertEqual(medir.call_args.kwargs["runtime_source"], str(runtime))
 
     def test_una_ruta_sandbox_no_se_mide(self):
         self.sandbox_tested()

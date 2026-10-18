@@ -53,6 +53,7 @@ class LanzarEncargos(unittest.TestCase):
                     "OPENCLAW_BIN": "/isolated/openclaw", "AGENT_WORK_PYTHON": str(self.bin / "python-host"),
                     "AGENT_WORK_SLOT_GROUP": self.group, "AGENT_WORK_WORKSPACE_ROOT": str(self.dev),
                     "AGENT_WORK_SETTLE_SECONDS": "0.5", "AGENT_WORK_RESTART_SECONDS": "0.3"}
+        self.env.pop("AGENT_WORK_SUCESION_RUNTIME_SOURCE", None)
 
     def clean(self):
         socket = self.tmux("display-message", "-p", "#{socket_path}").stdout.strip()
@@ -99,6 +100,7 @@ class LanzarEncargos(unittest.TestCase):
             "--slot-group", self.group,
             "OPENCLAW_BIN=/isolated/openclaw", "LANG=en_US.UTF-8", f"PWD={ROOT}"]])
         self.assertEqual(oct(spool.stat().st_mode & 0o777), "0o700")
+        self.assertNotIn("AGENT_WORK_SUCESION_RUNTIME_SOURCE", (spool / "host-cmd.txt").read_text())
 
     def test_canario_reaches_the_host_and_a_second_run_reuses_it(self):
         launched = self.launch("--canario")
@@ -142,6 +144,21 @@ class LanzarEncargos(unittest.TestCase):
         for args, env in ((["de-mas"], {}), ([], {"AGENT_WORK_OPENCODE": str(self.bin / "no-existe")}),
                           ([], {"AGENT_WORK_WORKSPACE_ROOT": str(self.root / "no-existe")})):
             self.assertEqual((self.launch(*args, **env).returncode, self.sessions()), (2, []))
+
+    def test_pasa_el_r_de_sucesion_por_flag_o_por_ambiente(self):
+        por_flag = self.root / "runtime-flag"
+        por_ambiente = self.root / "runtime-ambiente"
+        por_flag.mkdir()
+        por_ambiente.mkdir()
+        primero = self.launch("--runtime-source", str(por_flag))
+        self.assertEqual(primero.returncode, 0, primero.stderr)
+        comando = (self.state / "enc-1" / "host-cmd.txt").read_text()
+        self.assertIn(f"AGENT_WORK_SUCESION_RUNTIME_SOURCE={por_flag}", comando)
+        self.assertEqual(self.tmux("kill-session", "-t", "host-encargos").returncode, 0)
+        segundo = self.launch(AGENT_WORK_SUCESION_RUNTIME_SOURCE=str(por_ambiente))
+        self.assertEqual(segundo.returncode, 0, segundo.stderr)
+        self.assertIn(f"AGENT_WORK_SUCESION_RUNTIME_SOURCE={por_ambiente}",
+                      (self.state / "enc-1" / "host-cmd.txt").read_text())
 
     def test_a_host_of_this_machine_outside_the_launcher_does_not_stop_it(self):
         """What the process table shows is not this launcher's business: the host itself locks its spool."""

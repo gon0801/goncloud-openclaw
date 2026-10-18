@@ -51,7 +51,8 @@ from modelos import (MODEL_PATTERN, POLICY_FILE, PROVIDER, Billing, Catalog, Cat
                      WorkspaceRefused, authorize, catalogo_claude, explicar, pedido, policy_document,
                      RouteNotCertified, ruta_roja, succession_actual)
 from sesion import (ALLOWED_ROOT, COVERAGE_FILE, EXIT_NO_SCRATCH, EXIT_NO_WORKSPACE, EXIT_OUTSIDE_GROUP, PROFILE_ID,
-                    MEDIDAS_FILE, Route, Workspace, adaptador, cargar_ruta, entrada_medida, model_in_use, read_events)
+                    MEDIDAS_FILE, Route, Workspace, adaptador, cargar_ruta, entrada_medida,
+                    infraestructura_en_espera, medicion_terminal, model_in_use, read_events)
 import recertificar as recert_mod
 
 HOST_ID = "mac-local"
@@ -295,12 +296,16 @@ def preparar(repo: Path | None, modelo: str | None, *, perfil: str | None = None
     closed = cargar_ruta(checkout, state_root, HOST_ID, adapter_id).open_for(
         version_cli, manifiesto["generation"] if manifiesto else None, canary=canary)
     medida = entrada_medida(state_root, HOST_ID, adapter_id, version_cli)
-    if (isinstance(closed, RouteNotCertified) and isinstance(medida, dict)
-            and medida.get("estado") == "rojo"):
+    head = _head(checkout)
+    rojo_terminal = (isinstance(medida, dict) and medida.get("estado") == "rojo"
+                     and medicion_terminal(medida, head))
+    if isinstance(closed, RouteNotCertified) and rojo_terminal:
         return explicar(ruta_roja(medida, adapter_id, version_cli))
     # Mientras la versión se mide, el pedido se registra igual: no hay rechazo de ruta ni de host.
-    midiendo = (closed is not None and isinstance(medida, dict)
-                and medida.get("estado") in ("probando", "infraestructura"))
+    # Un rojo de otro commit tampoco es cierre: el host lo vuelve a medir.
+    midiendo = (closed is not None and isinstance(medida, dict) and (
+        medida.get("estado") in ("probando", "infraestructura")
+        or (medida.get("estado") == "rojo" and not rojo_terminal)))
     workspace = None
     if repo is not None:
         workspace = Workspace.for_repository(str(repo), allowed_root=allowed_root)
@@ -1128,15 +1133,70 @@ def _banco_de(adapter_id: str, correr_banco):
     return _correr_banco_claude if adapter_id == "claude" else _correr_banco_real
 
 
+def _r_de_recert(runtime_source: str | None) -> Path | None:
+    """El checkout de R, el mismo que sucesion: el flag o AGENT_WORK_SUCESION_RUNTIME_SOURCE.
+    Sin valor, o con uno que no es una carpeta, no hay R. No se inventa una ruta."""
+    valor = runtime_source or os.environ.get("AGENT_WORK_SUCESION_RUNTIME_SOURCE")
+    if not isinstance(valor, str) or not valor:
+        return None
+    ruta = Path(valor)
+    return ruta if ruta.is_dir() else None
+
+
+def _avisar_medicion(texto: str, checkout: Path, openclaw_bin: Path, enviar_aviso) -> dict:
+    policy = ProviderPolicy.load(Path(checkout) / POLICY_FILE)
+    if policy.unreadable is not None:
+        envio = {"enviado": False, "causa": policy.unreadable}
+    else:
+        try:
+            envio = (enviar_aviso or aviso_mod.avisar)(texto, policy=policy, openclaw_bin=openclaw_bin)
+        except Exception as error:
+            envio = {"enviado": False, "causa": type(error).__name__}
+    aviso = {"enviado": bool(envio.get("enviado"))}
+    if not aviso["enviado"]:
+        aviso["causa"] = envio.get("causa", "no salió")
+    return aviso
+
+
+def _anotar_sin_r(*, state_root: Path, checkout: Path, ruta: str, version: str, now: float,
+                  openclaw_bin: Path, enviar_aviso, nombre: str) -> dict:
+    """Sin R no se marca probando ni se gasta un intento. El aviso sale una vez por versión."""
+    stamp = datetime.fromtimestamp(now, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    with _policy_lock(Path(state_root) / MEDIDAS_FILE):
+        doc = _leer_medidas(state_root)
+        previa = _entrada_medida(doc, ruta, version)
+        aviso_previo = previa.get("aviso") if isinstance(previa, dict) else None
+        if (isinstance(previa, dict) and previa.get("causa") == "sin-r"
+                and isinstance(aviso_previo, dict) and aviso_previo.get("enviado")):
+            previa["medidoEn"] = stamp
+            _guardar_entrada(doc, ruta, version, previa)
+            _escribir_medidas(state_root, doc)
+            return {"ok": True, "accion": "infraestructura", "ruta": ruta, "version": version,
+                    "estado": "infraestructura", "causa": "sin-r"}
+        intentos = 0 if (isinstance(previa, dict) and previa.get("estado") == "rojo") else (
+            int(previa.get("intentos") or 0) if isinstance(previa, dict) else 0)
+    texto = f"La ruta de encargos no pudo medir {nombre} {version}: sin-r."
+    aviso = _avisar_medicion(texto, checkout, openclaw_bin, enviar_aviso)
+    record = {"estado": "infraestructura", "medidoEn": stamp, "commit": _head(checkout),
+              "sondas": {}, "banco": None, "intentos": intentos, "causa": "sin-r", "aviso": aviso}
+    with _policy_lock(Path(state_root) / MEDIDAS_FILE):
+        doc = _leer_medidas(state_root)
+        _guardar_entrada(doc, ruta, version, record)
+        _escribir_medidas(state_root, doc)
+    return {"ok": True, "accion": "infraestructura", "ruta": ruta, "version": version,
+            "estado": "infraestructura", "causa": "sin-r", "aviso": texto}
+
+
 def recertificar(*, state_root: Path, checkout: Path, ruta: str = "mac-local/opencode", now: float,
                  opencode_bin: Path = OPENCODE_BIN, claude_bin: Path = CLAUDE_BIN, version: str | None = None,
                  correr_sondas=None, correr_banco=None, enviar_aviso=None,
-                 openclaw_bin: Path = OPENCLAW_BIN) -> dict:
+                 openclaw_bin: Path = OPENCLAW_BIN, runtime_source: str | None = None) -> dict:
     """`encargo.py recertificar --ruta mac-local/opencode|mac-local/claude`.
 
     Misma forma que sucesion: decide y marca probando con el candado, corre sondas y banco
     sin él, y vuelve a tomarlo para anotar el desenlace. Una versión ya terminal, o ya
-    presente en coverage, no se vuelve a medir."""
+    presente en coverage, no se vuelve a medir. El banco recibe el R de sucesion
+    (`--runtime-source` o `AGENT_WORK_SUCESION_RUNTIME_SOURCE`). Sin esa carpeta no mide."""
     if ruta not in RECERT_RUTAS:
         return {"ok": False, "causa": f"ruta desconocida: {ruta}"}
     host_id, adapter_id = RECERT_RUTAS[ruta]
@@ -1149,25 +1209,38 @@ def recertificar(*, state_root: Path, checkout: Path, ruta: str = "mac-local/ope
         return {"ok": False, "accion": "sin-version", "causa": str(version)}
     if _version_en_coverage(coverage, host_id, adapter_id, version):
         return {"ok": True, "accion": "ya-certificada", "ruta": ruta, "version": version}
+    head = _head(checkout)
     previa = _entrada_medida(_leer_medidas(state_root), ruta, version)
-    if isinstance(previa, dict) and previa.get("estado") in ("verde", "rojo"):
+    if medicion_terminal(previa, head):
         return {"ok": True, "accion": "ya-medida", "ruta": ruta, "version": version, "estado": previa["estado"]}
+    if infraestructura_en_espera(previa, now):
+        return {"ok": True, "accion": "espera-reintento", "ruta": ruta, "version": version}
+    runtime = _r_de_recert(runtime_source)
+    if runtime is None:
+        nombre = "claude" if adapter_id == "claude" else "opencode"
+        return _anotar_sin_r(state_root=state_root, checkout=checkout, ruta=ruta, version=version, now=now,
+                             openclaw_bin=openclaw_bin, enviar_aviso=enviar_aviso, nombre=nombre)
     if _host_ocupado(state_root, now):
         return {"ok": True, "accion": "host-ocupado", "ruta": ruta, "version": version}
     with _policy_lock(Path(state_root) / MEDIDAS_FILE):
         doc = _leer_medidas(state_root)
         previa = _entrada_medida(doc, ruta, version)
-        if isinstance(previa, dict) and previa.get("estado") in ("verde", "rojo"):
+        if medicion_terminal(previa, head):
             return {"ok": True, "accion": "ya-medida", "ruta": ruta, "version": version, "estado": previa["estado"]}
-        intentos = int(previa.get("intentos") or 0) if isinstance(previa, dict) else 0
+        if infraestructura_en_espera(previa, now):
+            return {"ok": True, "accion": "espera-reintento", "ruta": ruta, "version": version}
+        intentos = 0 if (isinstance(previa, dict) and previa.get("estado") == "rojo") else (
+            int(previa.get("intentos") or 0) if isinstance(previa, dict) else 0)
         _guardar_entrada(doc, ruta, version, {
             "estado": "probando", "medidoEn": datetime.fromtimestamp(now, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-            "commit": _head(checkout), "intentos": intentos})
+            "commit": head, "intentos": intentos})
         _escribir_medidas(state_root, doc)
     binario = claude_bin if adapter_id == "claude" else opencode_bin
-    medir = correr_sondas or (lambda adaptador, binario, checkout: recert_mod.correr_sondas(adaptador, binario, checkout=checkout))
     rel = f"recertificacion/{ruta.replace('/', '-')}/{version}"
     evidencia_dir = Path(state_root) / rel
+    shutil.rmtree(evidencia_dir, ignore_errors=True)
+    medir = correr_sondas or (lambda adaptador, binario, checkout: recert_mod.correr_sondas(
+        adaptador, binario, checkout=checkout, evidencia=evidencia_dir))
     nombre = "claude" if adapter_id == "claude" else "opencode"
     veredictos = ()
     salida = ""
@@ -1195,7 +1268,8 @@ def recertificar(*, state_root: Path, checkout: Path, ruta: str = "mac-local/ope
         elif inconcluso is not None:
             clase, causa = "infraestructura", inconcluso.sonda
         else:
-            env_banco = {"AGENT_WORK_BANCO_REAL": "1", "AGENT_WORK_BANCO_GUARDAR": str(evidencia_dir)}
+            env_banco = {"AGENT_WORK_BANCO_REAL": "1", "AGENT_WORK_BANCO_GUARDAR": str(evidencia_dir),
+                         "AGENT_WORK_RUNTIME_SOURCE": str(runtime)}
             if adapter_id != "claude":
                 env_banco["AGENT_WORK_BANCO_MODELO"] = recert_mod.MODELO
             rc, salida = _banco_de(adapter_id, correr_banco)(env_banco, Path(checkout))
@@ -1221,19 +1295,9 @@ def recertificar(*, state_root: Path, checkout: Path, ruta: str = "mac-local/ope
     else:
         texto = f"La ruta de encargos no pudo medir {nombre} {version}: {causa}. Evidencia: {rel}"
         causa_entry = causa
-    policy = ProviderPolicy.load(Path(checkout) / POLICY_FILE)
-    if policy.unreadable is not None:
-        envio = {"enviado": False, "causa": policy.unreadable}
-    else:
-        try:
-            envio = (enviar_aviso or aviso_mod.avisar)(texto, policy=policy, openclaw_bin=openclaw_bin)
-        except Exception as error:
-            envio = {"enviado": False, "causa": type(error).__name__}
-    aviso = {"enviado": bool(envio.get("enviado"))}
-    if not aviso["enviado"]:
-        aviso["causa"] = envio.get("causa", "no salió")
+    aviso = _avisar_medicion(texto, checkout, openclaw_bin, enviar_aviso)
     record = {"estado": clase, "medidoEn": datetime.fromtimestamp(now, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-              "commit": _head(checkout), "sondas": {item.sonda: item.estado for item in veredictos},
+              "commit": head, "sondas": {item.sonda: item.estado for item in veredictos},
               "banco": banco_estado, "evidencia": rel, "digest": _digest_dir(evidencia_dir),
               "intentos": intentos, "aviso": aviso}
     if causa_entry:
@@ -1782,6 +1846,7 @@ def _parser() -> argparse.ArgumentParser:
     recert_cmd = commands.add_parser(
         "recertificar", help="mide una versión nueva del CLI y la anota si las sondas y el banco pasan")
     recert_cmd.add_argument("--ruta", default="mac-local/opencode", choices=tuple(RECERT_RUTAS))
+    recert_cmd.add_argument("--runtime-source", help="AGENT_WORK_RUNTIME_SOURCE para el banco, igual que sucesion")
     listing = commands.add_parser("proveedores", help="qué proveedores pueden correr, cómo cobran y qué falta")
     listing.add_argument("--refrescar", action="store_true", help="pide a opencode que vuelva a bajar su lista")
     allow = commands.add_parser("permitir", help="escribe un permiso, un filtro o el id de un permiso que existe")
@@ -1899,7 +1964,8 @@ def _run_diario(args: argparse.Namespace, where: dict, now: float) -> int:
 
 
 def _run_recertificar(args: argparse.Namespace, where: dict, now: float) -> int:
-    respuesta = recertificar(ruta=args.ruta, now=now, claude_bin=args.claude, **where)
+    respuesta = recertificar(ruta=args.ruta, now=now, claude_bin=args.claude,
+                             runtime_source=args.runtime_source, **where)
     print(json.dumps(respuesta, ensure_ascii=False))
     return 0 if respuesta.get("ok") else 3
 

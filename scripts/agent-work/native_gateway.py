@@ -35,7 +35,8 @@ from progress_bridge import transfer_host_projection, transfer_projection
 import proyeccion
 from resources import BoundaryBusy
 from sesion import (ADAPTADORES, GroupBoundaryBackend, LaunchHeader, LaunchSpec, MalformedHeader,
-                    Package, adaptador, cargar_ruta, entrada_medida, plan_launch, session_name)
+                    Package, adaptador, cargar_ruta, entrada_medida, infraestructura_en_espera,
+                    medicion_terminal, plan_launch, session_name)
 from spool import atomic_json, canonical, incident_identity
 
 CHECKOUT = Path(__file__).resolve().parents[2]
@@ -776,9 +777,15 @@ class RunHost:
         if route.status == "certified" and version in route.certified_cli_versions:
             return None
         entry = self._entrada(adapter_id, version)
-        if isinstance(entry, dict) and entry.get("estado") == "rojo":
+        if (isinstance(entry, dict) and entry.get("estado") == "rojo"
+                and medicion_terminal(entry, self._head_checkout())):
             return ruta_roja(entry, adapter_id, version)
         return None
+
+    def _head_checkout(self):
+        # Cada pasada: un git pull del checkout tiene que verse sin reiniciar el host.
+        from encargo import _head
+        return _head(self.checkout)
 
     def _en_probando(self, adapter_id) -> bool:
         version = self._version_adapter(adapter_id)
@@ -796,7 +803,9 @@ class RunHost:
         if route.status != "certified" or version in route.certified_cli_versions:
             return False
         entry = self._entrada(adapter_id, version)
-        if isinstance(entry, dict) and entry.get("estado") in ("verde", "rojo"):
+        if medicion_terminal(entry, self._head_checkout()):
+            return False
+        if infraestructura_en_espera(entry, self.clock()):
             return False
         return True
 
@@ -806,8 +815,14 @@ class RunHost:
         if self.lanzar_recert is None or self.canary:
             return False
         entry = self._entrada(adapter_id, self._version_adapter(adapter_id))
-        if isinstance(entry, dict) and entry.get("estado") == "rojo":
+        if (isinstance(entry, dict) and entry.get("estado") == "rojo"
+                and medicion_terminal(entry, self._head_checkout())):
             return False
+        if infraestructura_en_espera(entry, self.clock()):
+            version = self._version_adapter(adapter_id)
+            route = cargar_ruta(self.checkout, self.state_root, self.client.host_id, adapter_id)
+            if not (route.status == "certified" and version in route.certified_cli_versions):
+                return True
         return self._debe_medir(adapter_id)
 
     def _soltar_recert(self):
@@ -849,6 +864,9 @@ class RunHost:
                 "--checkout", str(self.checkout), "--state-root", str(self.state_root),
                 "--opencode", str(self.opencode_bin), "--claude", str(self.claude_bin),
                 "recertificar", "--ruta", f"{self.client.host_id}/{adapter_id}"]
+        runtime = os.environ.get("AGENT_WORK_SUCESION_RUNTIME_SOURCE")
+        if runtime:
+            argv.extend(["--runtime-source", runtime])
         try:
             self._recert_proc = self.lanzar_recert(argv, log_path, fd)
             self._recert_intento = self.clock()
