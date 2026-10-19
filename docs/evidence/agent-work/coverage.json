@@ -31,7 +31,7 @@
     "mac-local": {
       "opencode": {
         "form": "run-per-task",
-        "certifiedCliVersions": {"1.18.35": "B22-fase0.md y B22-canarios.md"},
+        "certifiedCliVersions": {"1.18.35": "B22-fase0.md y B22-canarios.md", "2.0.29": "opencode-2.0.29-recertificacion.md"},
         "contextGenerations": {"1": "docs/evidence/sistema-agentes-unificado/SUA-03-mediciones.md (M-16, banco)", "2": "docs/evidence/sistema-agentes-unificado/SUA-03-mediciones.md (M-16, generación 2)"},
         "closureProof": {
           "boundary": "procesos del uid del operador con rgid del grupo agent-work-enc1",
