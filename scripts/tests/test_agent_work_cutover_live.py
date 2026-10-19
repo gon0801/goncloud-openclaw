@@ -103,9 +103,9 @@ def job(name="vigia-viejo", job_id="j1"):
 
 
 class NativePatchRunTimeout(unittest.TestCase):
-    """native_patch valida runTimeoutSeconds antes de devolver el parche (cr:4311182127): el None ya
-    negaba arriba, pero un 0, un no-entero o un fuera del schema de R llegaban al config.patch con el
-    cron viejo ya suspendido, y si R lo rechazaba el cron quedaba descolgado."""
+    """native_patch valida runTimeoutSeconds antes de devolver el parche (cr:4311182127): un
+    negativo, un no-entero o un bool llegaban al config.patch con el cron viejo ya suspendido, y si
+    R lo rechazaba el cron quedaba descolgado. 0 vale: sin tope (contrato de R 7f5259d)."""
 
     def setUp(self):
         self.entry = {"id": "loop:x", "host": "mini", "adapter": "fixture-cli-a"}
@@ -118,7 +118,7 @@ class NativePatchRunTimeout(unittest.TestCase):
         return cutover_live.native_patch(self.entry, self.config, self.limits)
 
     def test_un_valor_que_r_rechazaria_se_niega_antes_de_devolver_el_parche(self):
-        for mal in (0, -1, "3600", 1.5, True, [3600]):
+        for mal in (-1, "3600", 1.5, True, [3600]):
             with self.subTest(mal=mal):
                 self.managed["runTimeoutSeconds"] = mal
                 with self.assertRaises(cutover_live.CutoverRefused):
@@ -126,11 +126,17 @@ class NativePatchRunTimeout(unittest.TestCase):
 
     def test_un_valor_valido_sigue_armando_el_parche_con_lo_que_r_ya_tenga(self):
         # Sin tope superior: lo que R ya tenga se conserva tal cual (G-sin-candados), también un
-        # 5400 de un schema de R relajado.
-        for bien in (1, 3600, 5400):
+        # 5400 de un schema de R relajado. El 0 ya no se niega: corre sin tope (7f5259d).
+        for bien in (0, 1, 3600, 5400):
             with self.subTest(bien=bien):
                 self.managed["runTimeoutSeconds"] = bien
                 self.assertEqual(self.patch()["managedTasks"]["runTimeoutSeconds"], bien)
+
+    def test_sin_valor_en_la_config_viva_el_parche_usa_0_sin_tope(self):
+        # G-sin-candados r3 (David, 2026-10-19): R ya acepta 0 como "sin tope", así que una config
+        # viva sin runTimeoutSeconds abre con 0 en vez de negarse a imponer un tope este repo eligió.
+        del self.managed["runTimeoutSeconds"]
+        self.assertEqual(self.patch()["managedTasks"]["runTimeoutSeconds"], 0)
 
 
 class CutoverLiveTest(unittest.TestCase):
@@ -176,12 +182,13 @@ class CutoverLiveTest(unittest.TestCase):
         self.assertEqual(self.apply(gateway), "transferred")
         self.assertEqual(gateway.managed["runTimeoutSeconds"], 5400)
 
-    def test_a_cutover_without_a_run_timeout_in_r_refuses_instead_of_imposing_one(self):
+    def test_a_cutover_without_a_run_timeout_in_r_opens_with_0_no_cap(self):
+        # G-sin-candados r3 (David, 2026-10-19): 0 corre sin tope en R (7f5259d), así que una config
+        # viva sin valor ya no niega el cutover: escribe 0 y conserva lo demás.
         gateway = FakeGateway([job()], managed={"enabled": False, "hosts": {}})
         self.entry(runTimeoutSeconds=3600)
-        with self.assertRaisesRegex(cutover_live.CutoverRefused, "runTimeoutSeconds"):
-            self.apply(gateway)
-        self.assertEqual(gateway.patches, [], "nothing is written before the refusal")
+        self.assertEqual(self.apply(gateway), "transferred")
+        self.assertEqual(gateway.managed["runTimeoutSeconds"], 0)
 
     def test_the_cutover_adds_main_to_an_operator_requester_list_and_drops_nothing(self):
         gateway = FakeGateway([job()], managed={"enabled": False, "hosts": {}, "requesters": ["ingenieria"], "runTimeoutSeconds": 3600})

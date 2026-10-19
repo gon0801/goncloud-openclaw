@@ -126,23 +126,17 @@ def native_patch(entry, config, limits):
     if missing:
         raise CutoverRefused(f"{entry['id']} needs {', '.join(missing)} to open {entry['host']}/{entry['adapter']}")
     requesters = managed.get("requesters", [])
-    run_timeout = managed.get("runTimeoutSeconds")
-    if run_timeout is None:
-        # G-sin-candados (David, 2026-10-19): G ya no impone tope de corrida a la tarea administrada
-        # de claw; el 3600 de la entrada vieja del cutover deja de alimentar el parche. El schema de
-        # R vigente (managedTasks.runTimeoutSeconds, entero 1..3600, exigido cuando enabled) todavía
-        # no acepta "sin tope", así que un cutover hacia una config de R sin valor se niega aquí,
-        # antes de escribir nada: el valor lo fija el operador en R (o R se relaja y esta negación
-        # sobra). Lo que R ya tenga se conserva tal cual.
-        raise CutoverRefused("managedTasks.runTimeoutSeconds has no value in the Gateway config and G no longer "
-                             f"imposes one: set it in R's config (its schema accepts 1..3600) or relax R; "
-                             f"refusing to open {entry['id']} with a cap this repo chose")
-    # cr:4311182127 (CodeRabbit): el None ya negó arriba, pero un 0, un negativo, un no-entero o un
-    # bool pasaban el preflight y llegaban al config.patch con el cron viejo ya suspendido. No se
-    # impone el tope superior de 1..3600: lo que R ya tenga se conserva tal cual (G-sin-candados),
-    # y un valor que R ya tiene su propio schema se lo acepta.
-    if type(run_timeout) is not int or run_timeout < 1:
-        raise CutoverRefused("managedTasks.runTimeoutSeconds must be a positive integer")
+    # G-sin-candados (David, 2026-10-19): G ya no impone tope de corrida a la tarea administrada de
+    # claw; el 3600 de la entrada vieja del cutover deja de alimentar el parche. R (7f5259d) ya
+    # cambió el contrato: runTimeoutSeconds = 0 corre sin tope. Una config viva sin valor abre
+    # entonces con 0 en vez de negarse, y lo que R ya tenga se conserva tal cual.
+    run_timeout = managed.get("runTimeoutSeconds", 0)
+    # cr:4311182127 (CodeRabbit): un negativo, un no-entero o un bool llegaban al config.patch con el
+    # cron viejo ya suspendido. 0 es válido (sin tope, contrato de R 7f5259d) y no se impone tope
+    # superior: lo que R ya tenga se conserva tal cual (G-sin-candados), y un valor que R ya tiene
+    # su propio schema se lo acepta.
+    if type(run_timeout) is not int or run_timeout < 0:
+        raise CutoverRefused("managedTasks.runTimeoutSeconds must be an integer >= 0 (0 runs without a cap)")
     return {"managedTasks": {
         "enabled": True, "instructionRoot": root, "profile": values,
         # R hands the requester tools only to these agents; an operator's list keeps its entries.
