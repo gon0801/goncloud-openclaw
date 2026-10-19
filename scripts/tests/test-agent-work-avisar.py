@@ -11,9 +11,13 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts" / "agent-work"))
 import avisar  # noqa: E402
-import modelos  # noqa: E402
 
-POLICY = ROOT / "docs/evidence/agent-work/proveedores-permitidos.json"
+
+class PolicyDePrueba:
+    """Lo único que avisar.py lee de la política: el chat del dueño (el valor
+    era el del owner_telegram_chat de proveedores-permitidos.json)."""
+
+    owner_telegram_chat = "6470689715"
 
 
 class Avisar(unittest.TestCase):
@@ -33,7 +37,7 @@ class Avisar(unittest.TestCase):
             "fi\n"
         )
         self.bin.chmod(0o755)
-        self.policy = modelos.ProviderPolicy.load(POLICY)
+        self.policy = PolicyDePrueba()
 
     def con_salida(self, texto):
         (self.tmp / "salida.json").write_text(texto, encoding="utf-8")
@@ -101,7 +105,7 @@ class MessageId(unittest.TestCase):
             "fi\n"
         )
         self.bin.chmod(0o755)
-        self.policy = modelos.ProviderPolicy.load(POLICY)
+        self.policy = PolicyDePrueba()
 
     def avisar_con_avisos(self, texto):
         anterior = os.environ.get("AGENT_WORK_AVISOS")

@@ -58,14 +58,31 @@ out="$(bash "$INST" --dry-run 2>&1)" || fail "dry-run fallo: $out"
 printf '%s' "$out" | grep -q "tmux-activity-watch.sh" || fail "dry-run no anuncia tmux-activity-watch.sh"
 printf '%s' "$out" | grep -q "gui/59999" || fail "dry-run no usa el uid inyectado (falta gui/59999)"
 
-# (2) instala el conjunto completo.
+# (2) instala el conjunto completo, y retira los LaunchAgents de la ruta
+# muerta (encargos por CLI y vigía de R, G#350 F4) que una Mac instalada por
+# versiones anteriores todavía tenga puestos: los descarga (bootout), borra
+# su plist y el binario del vigía.
+PL2VIEJA="$HOME/Library/LaunchAgents/ai.goncloud.agent-work-sucesion.plist"
+PL3VIEJA="$HOME/Library/LaunchAgents/ai.goncloud.vigia-rebase-r.plist"
+mkdir -p "$HOME/Library/LaunchAgents"
+printf 'plist-viejo\n' >"$PL2VIEJA"
+printf 'plist-viejo\n' >"$PL3VIEJA"
+printf '#!/bin/sh\nexit 0\n' >"$HOME/bin/vigia-rebase-r.sh" 2>/dev/null || { mkdir -p "$HOME/bin" && printf '#!/bin/sh\nexit 0\n' >"$HOME/bin/vigia-rebase-r.sh"; }
+chmod +x "$HOME/bin/vigia-rebase-r.sh"
 out="$(bash "$INST" 2>&1)" || fail "instalar fallo: $out"
 for f in agent-tmux.sh agent-tmux-shell.zsh tmux-activity-watch.sh claude-stop-openclaw-event.sh shot.sh tablero-trabajo.sh; do
   [ -f "$HOME/bin/$f" ] || fail "falta \$HOME/bin/$f"
 done
+grep -q "bootout gui/59999/ai.goncloud.agent-work-sucesion" "$LAUNCHLOG" \
+  || fail "no descargo el LaunchAgent de sucesion con gui/59999 (G#350 F4)"
+grep -q "bootout gui/59999/ai.goncloud.vigia-rebase-r" "$LAUNCHLOG" \
+  || fail "no descargo el vigia de rebase de R con gui/59999 (G#350 F4)"
+[ ! -e "$PL2VIEJA" ] || fail "el plist de sucesion viejo quedo sin borrarse (G#350 F4)"
+[ ! -e "$PL3VIEJA" ] || fail "el plist del vigia viejo quedo sin borrarse (G#350 F4)"
+[ ! -e "$HOME/bin/vigia-rebase-r.sh" ] || fail "bin/vigia-rebase-r.sh quedo sin retirarse (G#350 F4)"
 [ -x "$HOME/bin/tablero-trabajo.sh" ] || fail "tablero-trabajo.sh quedo sin +x (claw lo corre directo)"
 [ -x "$HOME/bin/progress-events.py" ] || fail "progress-events.py no quedo instalado y ejecutable"
-for f in brief.py contexto.py contracts.py host.py lineas.py modelos.py resources.py routing.py sesion.py spool.py proyeccion.py; do
+for f in contexto.py proyeccion.py spool.py; do
   cmp -s "scripts/agent-work/$f" "$HOME/bin/agent-work/$f" || fail "agent-work/$f falta o difiere"
 done
 # El paquete chico de sistema_agentes que proyeccion.py importa (SUA-07 H0a).

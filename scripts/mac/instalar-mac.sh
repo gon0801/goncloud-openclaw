@@ -30,7 +30,7 @@ LINEA_SOURCE="source ~/bin/agent-tmux-shell.zsh"
 # Manifiesto binario: fuentes relativas a scripts/mac, destino ~/bin (cp -p
 # conserva el +x).
 BINS="progress-events.py agent-tmux.sh agent-tmux-shell.zsh tmux-activity-watch.sh claude-stop-openclaw-event.sh shot.sh tablero-trabajo.sh"
-AGENT_WORK_FILES="brief.py contexto.py contracts.py host.py lineas.py modelos.py resources.py routing.py sesion.py spool.py proyeccion.py"
+AGENT_WORK_FILES="contexto.py proyeccion.py spool.py"
 # El modulo puro que proyeccion.py importa (SUA-07 H0a) viaja como paquete chico de
 # sistema_agentes: solo lo que el host de la Mac usa, no el resto del paquete.
 SISTEMA_AGENTES_FILES="__init__.py derivar.py"
@@ -153,6 +153,19 @@ modo_verificar() {
 modo_instalar() {
   local f sha reiniciar=0 n=0
   mkdir -p "$BIN_DIR" "$BIN_DIR/agent-work" "$LA_DIR" || falla "no se pudieron crear directorios en $HOME"
+  # Retirada de la ruta muerta (encargos por CLI y vigía de R, G-archivar r2):
+  # una Mac instalada por versiones anteriores puede tener esos LaunchAgents
+  # puestos. Si su plist sigue ahí se descarga (bootout; si no estaba cargado,
+  # falla y se ignora) y se borra el plist, junto con el binario del vigía.
+  # Sin restos, todo esto es un no-op y la corrida queda idempotente.
+  local etiqueta
+  for etiqueta in ai.goncloud.agent-work-sucesion ai.goncloud.vigia-rebase-r; do
+    if [ -f "$LA_DIR/$etiqueta.plist" ]; then
+      "$LC_BIN" bootout "gui/$QUIEN_UID/$etiqueta" >/dev/null 2>&1 || true
+      rm -f "$LA_DIR/$etiqueta.plist"
+    fi
+  done
+  rm -f "$BIN_DIR/vigia-rebase-r.sh"
   for f in $BINS; do
     copiar_si_difiere "$AQUI/$f" "$BIN_DIR/$f" || falla "no se pudo instalar bin/$f"
     # El LaunchAgent ejecuta este script: si cambio, hay que reiniciarlo.
