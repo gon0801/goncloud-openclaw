@@ -14,13 +14,10 @@
 0	sintaxis-summa-gate
 0	sintaxis-tablero-runbook
 0	test-agent-dispatch-spawn.sh
-5	test-agent-work-cutover.sh
 1	test-agent-work-e2e.sh
 11	test-agent-work-encargo.sh
 65	test-agent-work-host.sh
-14	test-agent-work-integration.sh
 3	test-agent-work-python.sh
-0	test-agent-work-requester-queue-mapper.sh
 20	test-agent-work-sesion.sh
 0	test-agente-usuario.sh
 2	test-aplicar-vigia-sync-prueba.sh

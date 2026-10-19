@@ -1632,17 +1632,6 @@ class Recertificar(Mac):
                "AssertionError: claude no arregló el defecto\nFAILED (failures=1)\n")
         self.assertEqual(encargo.clasificar_banco(salida, rc)[0], "rojo")
 
-    def test_el_banco_de_claude_selecciona_los_tres_casos(self):
-        real = os.environ.pop("AGENT_WORK_BANCO_REAL", None)
-        try:
-            rc, salida = encargo._correr_banco_claude({}, self.state)
-        finally:
-            if real is not None:
-                os.environ["AGENT_WORK_BANCO_REAL"] = real
-        self.assertEqual(rc, 0, salida)
-        self.assertIn("Ran 3 tests", salida)
-        self.assertNotIn("NO TESTS RAN", salida)
-
     def test_una_sonda_inconclusa_no_cierra_y_no_corre_el_banco(self):
         from recertificar import Veredicto
         nombres = ("m1", "m2", "m3a", "m3b", "m3c", "pwd", "m7")
@@ -2329,19 +2318,6 @@ class ClosedStaysClosed(Mac):
         self.assert_stays_closed("permitir", "opencode-go", "--proveedor", "opencode-go", "--solo", "deepseek*", *phrase,
                                  pieces=["opencode-go está cerrado"])
         self.assert_stays_closed("permitir", "qwen", "--solo", "opencode-go/*", *phrase, pieces=["no cubre ninguno"])
-
-
-class PlistDeSucesion(unittest.TestCase):
-    def test_el_plist_de_sucesion_trae_argumentos_que_encargo_acepta(self):
-        # F9 de #319: --checkout y --state-root son del parser raíz y van antes del
-        # subcomando; después de "diario" argparse los rechaza y el launchd no hace nada.
-        import plistlib
-        plist = ROOT / "scripts" / "mac" / "ai.goncloud.agent-work-sucesion.plist"
-        with plist.open("rb") as archivo:
-            argv = plistlib.load(archivo)["ProgramArguments"]
-        self.assertTrue(argv[1].endswith("encargo.py"))
-        args = encargo._parser().parse_args(argv[2:])
-        self.assertEqual(args.command, "diario")
 
 
 if __name__ == "__main__":

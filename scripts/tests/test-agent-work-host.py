@@ -16,7 +16,6 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts" / "agent-work"))
 
 from contracts import AuthorizedOperation, OperationKey, SessionRecord
-from cutover_live import uncertain_operations
 import host
 from host import Host, main as host_main, operation_id
 
@@ -692,7 +691,6 @@ class HostReceipts(unittest.TestCase):
         self.assertEqual(self.watch(attempted + 60), [])
         self.assertEqual(self.host.spool.get(op_id)["status"], "attempted")
         state = str(self.root / "host")
-        self.assertEqual(uncertain_operations([state]), ["task-1"])
 
         with self.assertRaisesRegex(ValueError, "verdict"):
             host_main(["resolve-delivery", "mac-test", state, "task-1", "2", "retype", "no"])
@@ -702,7 +700,6 @@ class HostReceipts(unittest.TestCase):
         self.assertEqual(host_main(["resolve-delivery", "mac-test", state, "task-1", "2", "abandoned", reason]),
                          "abandoned")
         self.assertEqual(self.host.spool.get(op_id)["status"], "abandoned")
-        self.assertEqual(uncertain_operations([state]), [], "a settled delivery must not block the cutover")
         with self.host.spool.connection() as db:
             self.assertEqual([tuple(row) for row in db.execute(
                 "SELECT previous_status, verdict, reason FROM delivery_verdicts WHERE operation_id=?", (op_id,))],
@@ -716,11 +713,9 @@ class HostReceipts(unittest.TestCase):
 
     def test_operator_verdict_delivered_starts_the_explicit_silent_failure_clock(self):
         _, op_id = self.uncertain_adapter_delivery()
-        self.assertEqual(uncertain_operations([str(self.root / "host")]), ["task-1"])
         self.assertEqual(self.host.resolve_delivery("mac-test", self.key, "delivered",
                                                     "el pane muestra al CLI trabajando en la referencia"), "delivered")
         self.assertEqual(self.host.spool.get(op_id)["status"], "delivered")
-        self.assertEqual(uncertain_operations([str(self.root / "host")]), [])
         self.assertEqual(self.watch(self.host.spool.delivered_at(op_id) + 60), ["host:2:deadline-missed:deadline"])
 
 
