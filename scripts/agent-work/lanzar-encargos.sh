@@ -76,6 +76,15 @@ command=(env "OPENCLAW_BIN=$openclaw_bin" LANG=en_US.UTF-8 "$python_bin" scripts
 if [ -n "$runtime_source" ]; then
   command=(env "AGENT_WORK_SUCESION_RUNTIME_SOURCE=$runtime_source" "${command[@]}")
 fi
+# Adenda G-sin-candados (2026-10-19): el host —y con él todo opencode que lance— lleva los shims de
+# candados de quality-kit al frente del PATH. Sin carpeta, avisa y sigue: este script no inventa el
+# candado ni frena por su ausencia.
+shims=${AGENT_WORK_CANDADOS_SHIMS:-/Users/dn/.local/share/quality-kit/candados/shims}
+if [ -d "$shims" ]; then
+  command=(env "PATH=$shims:$PATH" "${command[@]}")
+else
+  echo "lanzar-encargos: aviso: no existen los shims de candados ($shims); el host corre sin ellos" >&2
+fi
 # The host exits when it dies and when it is asked to stop (SIGTERM); either way the loop brings it back.
 line="while :; do $(printf '%q ' "${command[@]}")2>&1 | tee -a $(printf '%q' "$spool/host.log"); sleep $restart_seconds; done"
 

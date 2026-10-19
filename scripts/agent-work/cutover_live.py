@@ -126,11 +126,22 @@ def native_patch(entry, config, limits):
     if missing:
         raise CutoverRefused(f"{entry['id']} needs {', '.join(missing)} to open {entry['host']}/{entry['adapter']}")
     requesters = managed.get("requesters", [])
+    # G-sin-candados (David, 2026-10-19): G ya no impone tope de corrida a la tarea administrada de
+    # claw; el 3600 de la entrada vieja del cutover deja de alimentar el parche. R (7f5259d) ya
+    # cambió el contrato: runTimeoutSeconds = 0 corre sin tope. Una config viva sin valor abre
+    # entonces con 0 en vez de negarse, y lo que R ya tenga se conserva tal cual.
+    run_timeout = managed.get("runTimeoutSeconds", 0)
+    # cr:4311182127 (CodeRabbit): un negativo, un no-entero o un bool llegaban al config.patch con el
+    # cron viejo ya suspendido. 0 es válido (sin tope, contrato de R 7f5259d) y no se impone tope
+    # superior: lo que R ya tenga se conserva tal cual (G-sin-candados), y un valor que R ya tiene
+    # su propio schema se lo acepta.
+    if type(run_timeout) is not int or run_timeout < 0:
+        raise CutoverRefused("managedTasks.runTimeoutSeconds must be an integer >= 0 (0 runs without a cap)")
     return {"managedTasks": {
         "enabled": True, "instructionRoot": root, "profile": values,
         # R hands the requester tools only to these agents; an operator's list keeps its entries.
         "requesters": requesters if "main" in requesters else [*requesters, "main"],
-        "runTimeoutSeconds": managed.get("runTimeoutSeconds") or entry.get("runTimeoutSeconds", 3600),
+        "runTimeoutSeconds": run_timeout,
         "hosts": {entry["host"]: {"deviceId": device,
                                   "adapters": sorted(set(host.get("adapters", [])) | {entry["adapter"]})}}}}
 

@@ -21,6 +21,15 @@ si la máquina cambia.
 Por qué "Review rate limited" de CodeRabbit pasa con aviso: decisión de David del
 2026-09-25 (#173 a #175) — con CodeRabbit en su límite, la revisión del bot basta.
 
+Por qué la revisión incompleta del bot ya no frena (David, orden
+G-sin-candados 2026-10-19): el gate solo niega un hallazgo BLOQUEANTE sin
+adjudicar — High/Critical, o uno marcado de seguridad, datos, credenciales o
+pérdida de datos por su título — y el CI rojo. Un Medium/Low abierto sin
+adjudicar y la "revision-parcial" del bot (sin completion, parcial, o sin bloque
+legible) son avisos que no frenan: un candado solo se queda si protege dinero,
+datos, credenciales o una decisión explícita de David, y una revisión parcial no
+lo es.
+
 Solo biblioteca estándar; standalone como avisar.py y reporte.py.
 """
 
@@ -52,7 +61,21 @@ CONTEXTO_CODERABBIT = "CodeRabbit"
 TEXTO_RATE_LIMITED = "Review rate limited"
 AUTOR_CR = "coderabbitai"
 MARCA_STICKY = "<!-- ai-review:sticky -->"
-SEVERIDADES_BOT_QUE_FRENAN = frozenset({"Critical", "High", "Medium"})
+SEVERIDADES_BOT_QUE_FRENAN = frozenset({"Critical", "High"})
+"""Lo BLOQUEANTE del bot sin adjudicar (David, orden G-sin-candados 2026-10-19). Medium/Low pasan
+a avisos: ver compuerta_hallazgos."""
+SEVERIDADES_BOT_MENORES = frozenset({"Medium", "Low"})
+MARCA_BLOQUEANTE = re.compile(
+    r"seguridad|security|credencial|credential|contrase[ñn]a|password|secreto|secret|"
+    r"token|api[ -]?key|inyecci[óo]n|datos personales|datos sensibles|pii|"
+    r"p[ée]rdida de datos|se pierden|data loss|corrupt|corrupci[óo]n|overwrite",
+    re.IGNORECASE,
+)
+"""Lo que vuelve BLOQUEANTE a un hallazgo de severidad menor: marcado de seguridad, datos o
+credenciales en su título (G-sin-candados), y también la pérdida, corrupción o pisado de datos,
+en español y en inglés (r2, cr:4311182158 — un Medium «Pérdida de datos al guardar sesiones» no
+podía quedar en aviso). El título es lo único que el hallazgos.v1 del bot trae para marcarlo; la
+tabla vive aquí arriba con el resto de los datos, que otro repo decide distinto."""
 SEVERIDADES_CR_QUE_FRENAN = frozenset({"Major", "Critical"})
 SEVERIDADES_CR_MENORES = frozenset({"Minor", "Low"})
 MARCAS_CR = (("🔴 Critical", "Critical"), ("🟠 Major", "Major"), ("🟡 Minor", "Minor"))
@@ -109,6 +132,8 @@ class HallazgoBot:
     fid: str
     severidad: str
     estado: str
+    titulo: str = ""
+    """El título del hallazgo: lo que MARCA_BLOQUEANTE mira para seguridad, datos o credenciales."""
 
 
 @dataclass(frozen=True)
@@ -195,6 +220,7 @@ def parsear_bot(cuerpo: str) -> MarcaBot:
                             str(hallazgo["id"]),
                             str(hallazgo["severity"]),
                             str(hallazgo["status"]["kind"]),
+                            str(hallazgo.get("title") or ""),
                         )
                     )
                 except (KeyError, TypeError):
@@ -294,30 +320,36 @@ def compuerta_coderabbit(vista, receta, head):
 
 
 def compuerta_bot(vista, receta, head):
+    """La revisión incompleta del bot avisa y no frena (David, orden G-sin-candados 2026-10-19):
+    una marca sin completion, parcial o sin bloque legible deja el PR pasar con su aviso. Lo que
+    sigue frenando aquí: que el bot no haya dicho nada (bot-ausente) y que la única evidencia sea
+    de otro head — sin revisión de este head no hay hallazgos honestos que mirar."""
     if "ai-review" not in receta.bots:
         return [], []
     marca = vista.marca_bot
     if marca is None:
         return ["bot-ausente"], []
     if marca.sha is None:
-        return ["revision-parcial"], []
+        return [], ["revision-parcial"]
     if not head.startswith(marca.sha):
         return ["evidencia-de-otro-head"], []
     if marca.estado != "complete" or not marca.bloque_valido:
-        return ["revision-parcial"], []
+        return [], ["revision-parcial"]
     return [], []
 
 
 def pendientes(vista):
-    """Lo que frena: F<n> del bot open con severidad alta y cr:<id> de hilos
-    Major/Critical sin resolver (los Minor/Low van a avisos, no aquí)."""
+    """Lo que frena: F<n> del bot open BLOQUEANTE (High/Critical, o marcado de seguridad, datos o
+    credenciales por su título) y cr:<id> de hilos Major/Critical sin resolver (los menores van a
+    avisos, no aquí)."""
     refs = []
     marca = vista.marca_bot
     if marca is not None and marca.bloque_valido:
         refs += [
             h.fid
             for h in marca.hallazgos
-            if h.estado == "open" and h.severidad in SEVERIDADES_BOT_QUE_FRENAN
+            if h.estado == "open"
+            and (h.severidad in SEVERIDADES_BOT_QUE_FRENAN or MARCA_BLOQUEANTE.search(h.titulo))
         ]
     refs += [
         h.ref
@@ -331,7 +363,8 @@ def pendientes(vista):
 
 def compuerta_hallazgos(vista, receta, head):
     validas = {a.ref for a in vista.adjudicaciones if a.permiso in PERMISOS_DE_ESCRITURA}
-    faltan = [f"hallazgo-sin-adjudicar:{ref}" for ref in pendientes(vista) if ref not in validas]
+    frenan = pendientes(vista)
+    faltan = [f"hallazgo-sin-adjudicar:{ref}" for ref in frenan if ref not in validas]
     avisos = [
         f"adjudicacion-sin-permiso:{a.autor}"
         for a in vista.adjudicaciones
@@ -342,6 +375,17 @@ def compuerta_hallazgos(vista, receta, head):
         for h in vista.hilos_cr
         if h.autor.startswith(AUTOR_CR) and not h.resuelto and h.severidad in SEVERIDADES_CR_MENORES
     ]
+    # Medium/Low del bot sin adjudicar avisan y no frenan (David, orden G-sin-candados 2026-10-19).
+    marca = vista.marca_bot
+    if marca is not None and marca.bloque_valido:
+        avisos += [
+            f"hallazgo-menor-sin-adjudicar:{h.fid}"
+            for h in marca.hallazgos
+            if h.estado == "open"
+            and h.severidad in SEVERIDADES_BOT_MENORES
+            and h.fid not in validas
+            and h.fid not in frenan
+        ]
     return faltan, avisos
 
 

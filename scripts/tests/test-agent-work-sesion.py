@@ -441,9 +441,19 @@ class Launch(Slot):
 
     def test_the_environment_opens_the_task_folder_and_only_its_run_directory(self):
         spec = self.spec()
+        # Adenda G-sin-candados: los shims de candados van al frente del PATH cuando su carpeta
+        # existe, y el entorno no cambia cuando no existe (el aviso lo da el lanzador del host).
+        with tempfile.TemporaryDirectory() as shims:
+            with mock.patch.dict(os.environ, {sesion.SHIMS_ENV: shims}):
+                env = opencode_env(spec)
+                self.assertTrue(env["PATH"].startswith(f"{shims}:"))
+                self.assertIn(os.environ["PATH"], env["PATH"])
+            with mock.patch.dict(os.environ, {sesion.SHIMS_ENV: f"{shims}/no-existe"}):
+                self.assertNotIn("PATH", opencode_env(spec))
         env = opencode_env(spec)
         self.assertEqual(env["PWD"], str(self.repo))
         config = json.loads(env.pop("OPENCODE_CONFIG_CONTENT"))
+        env.pop("PATH", None)  # con los shims reales de esta Mac, o sin ellos: lo de arriba ya lo mira
         # Live canary A 2026-10-13: glm left its helper script in /tmp, `rm /tmp/…` was denied and the
         # session ended with the work done and no result. The scratch folder is inside the one allowed key.
         self.assertEqual(env, {"PWD": str(self.repo), "TMPDIR": f"{self.spool}/runs/{self.operation()}/tmp",
@@ -796,7 +806,10 @@ class Decisions(Slot):
                                            "transferred": 0, "published": 0, "incidents": 0, "claimed": 1,
                                            "detected": 0})
         run = self.run_dir()
-        self.assertEqual(self.backend.launches, [{
+        lanzamiento = dict(self.backend.launches[0])
+        # El PATH con los shims de candados al frente se mira en su prueba (Launch): aquí sobra.
+        lanzamiento["env"] = {k: v for k, v in lanzamiento["env"].items() if k != "PATH"}
+        self.assertEqual([lanzamiento], [{
             "session": self.session(), "cwd": str(self.repo),
             "argv": (str(self.bin / "opencode"), "run", "-m", DEFAULT, "--format", "json", "--print-logs", "--log-level",
                      "INFO", "--title", "task-1", LINE.format(run.assignment)),
@@ -827,7 +840,8 @@ class Decisions(Slot):
         self.assertLess(abs(beat.pop("beatAt") - time.time()) + abs(beat.pop("startedAt") - time.time()), 10)
         self.assertEqual(beat, {"pid": os.getpid(), "checkout": str(self.checkout), "commit": "unknown",
                                 "cliVersion": "1.18.35", "policyDigest": policy.digest, "slot": "free", "blockedBy": [],
-                                "taskId": None, "model": None, "since": None, "spool": str(self.spool), "canary": False})
+                                "taskId": None, "model": None, "since": None, "spool": str(self.spool), "canary": False,
+                                "aviso": None})
         self.assertEqual(HostBeat.read(self.state).spool, str(self.spool))
         self.r.offer("task-1", b"agent-work.launch.v1\nmodel: deepseek/deepseek-v4-pro\n---\nhaz el saludo\n",
                      self.revision)
@@ -876,7 +890,7 @@ class Decisions(Slot):
             "carpetaDeSesion": None, "salida": None, "logTail": [],
             # SUA-03: a run without a package has no flota.v1, and the double wrote no logs.
             "modeloUsado": None, "modeloUsadoRazon": "no se pueden leer los logs de opencode", "permisos": [],
-            "flota": None}))
+            "flota": None, "aviso": None}))
         self.r.offer("task-2", b"otro\n", self.revision)
         self.assertEqual(self.one_pass()["claimed"], 1)
         self.assertEqual((self.beat()["slot"], len(self.backend.launches)), ("free", 2))
@@ -1479,26 +1493,32 @@ class Decisions(Slot):
         self.record().stderr.write_text(CREATED.format(self.repo))
         self.assertEqual((self.one_pass()["detected"], self.backend.stops, self.incidents()), (0, [], []))
 
-    def test_silence_is_reported_at_each_deadline_and_not_before(self):
+    def test_a_living_process_that_has_not_accepted_is_never_counted_dead(self):
+        # G-sin-candados (David, 2026-10-19): el host solo da por muerto un encargo cuyo proceso
+        # murió. Un acuse que no llega con el proceso vivo ya no termina en delivery-unaccepted;
+        # lo resuelve el operador (resolve-delivery) o el resultado que acabe llegando.
         self.launched()
         self.ahead = 299
         self.assertEqual(self.one_pass()["detected"], 0)
         self.ahead = 301
-        self.assertEqual(self.one_pass()["detected"], 1)
-        self.assertEqual((self.incidents(), self.held()),
-                         (["host:1:transport-unavailable:delivery-unaccepted"], ("uncertain", "Running", "")))
+        self.assertEqual(self.one_pass()["detected"], 0)
+        self.ahead = 9999
+        self.assertEqual((self.one_pass()["detected"], self.held()),
+                         (0, ("attempted", "Running", "")))
 
-    def test_an_accepted_task_has_an_hour_and_an_invalid_result_is_its_own_incident(self):
+    def test_an_accepted_task_runs_past_the_old_hour_and_an_invalid_result_is_its_own_incident(self):
+        # G-sin-candados: se quitó el plazo de 1 h por encargo; un aceptado cuyo proceso vive
+        # sigue esperando su resultado más allá de los 3600 s. Un resultado mal formado sigue
+        # siendo su propio incidente.
         self.launched()
         self.cli_writes(result=False)
         self.ahead = 3590
         self.assertEqual((self.one_pass()["detected"], self.held()), (0, ("delivered", "Running", "")))
         self.ahead = 3605
-        self.assertEqual(self.one_pass()["detected"], 1)
-        self.assertEqual(self.incidents(), ["host:1:deadline-missed:deadline"])
+        self.assertEqual((self.one_pass()["detected"], self.held()), (0, ("delivered", "Running", "")))
         self.run_dir().result.write_text('{"schema": "otra cosa"}')
         self.assertEqual(self.one_pass()["detected"], 1)
-        self.assertEqual(self.incidents(), ["host:1:deadline-missed:deadline", "host:1:invalid-result:invalid-result"])
+        self.assertEqual(self.incidents(), ["host:1:invalid-result:invalid-result"])
 
     def test_a_process_of_no_task_in_the_slot_group_blocks_the_claim(self):
         self.backend.foreign = lambda: ("9001 Tue Oct 13 00:58:21 2026 /bin/sleep 600",)
@@ -1622,10 +1642,36 @@ class Decisions(Slot):
         self.start(self.backend, canary=True)
         self.refused("ruta-no-certificada", "todavía no está certificada")
 
-    def test_a_new_opencode_version_closes_the_repos_certified_route(self):
+    def test_a_new_opencode_version_launches_with_its_aviso_in_the_run_and_the_beat(self):
+        # G-sin-candados (David, 2026-10-19): la versión nueva ya no cierra la ruta certificada;
+        # corre, y "versión no certificada" viaja al registro de la corrida y al latido del host.
         (self.bin / "version").write_text("1.18.36\n")
         self.start(self.backend)
-        self.refused("ruta-no-certificada", "Ruta certificada para 1.18.35, 2.0.29, la Mac tiene opencode 1.18.36.")
+        self.launched()
+        self.assertEqual(self.held(), ("attempted", "Running", ""))
+        aviso = json.loads(self.record().aviso.read_text())
+        self.assertEqual(aviso, {"frase": "versión no certificada: 1.18.36 (certificadas: 1.18.35, 2.0.29); "
+                                         "el encargo corre."})
+        self.assertIn("versión no certificada: 1.18.36", self.beat()["aviso"])
+
+    @unittest.skipUnless(PSTACK.is_dir(), "pide pstack 0.9.84 instalado en esta Mac")
+    def test_version_y_generacion_sin_certificar_corren_con_los_dos_avisos(self):
+        # G-sin-candados r2 (David, 2026-10-19, cr:4311182166): la generación del paquete también
+        # pasa a solo aviso; con versión y generación sin certificar, el encargo corre y los dos
+        # avisos viajan juntos en el registro de la corrida.
+        self.checkout_contexto()
+        coverage_path = self.checkout / EVIDENCE / "coverage.json"
+        coverage = json.loads(coverage_path.read_text())
+        coverage["hostAdapterRoute"]["mac-local"]["opencode"]["contextGenerations"] = {"1": "M-16"}
+        coverage_path.write_text(json.dumps(coverage))
+        (self.bin / "version").write_text("1.18.36\n")
+        self.start(self.backend)
+        self.r.offer("task-1", b"agent-work.launch.v1\nprofile: ingenieria\n---\nhaz el saludo\n", self.revision)
+        self.launched()
+        self.assertEqual(self.held(), ("attempted", "Running", ""))
+        aviso = json.loads(self.record().aviso.read_text())["frase"]
+        self.assertIn("versión no certificada: 1.18.36", aviso)
+        self.assertIn("generación del paquete no certificada: 2", aviso)
 
     def test_a_canary_host_launches_with_an_opencode_version_the_route_does_not_have_yet(self):
         (self.bin / "version").write_text("1.18.36\n")
@@ -1891,9 +1937,11 @@ class Decisions(Slot):
         self.launched()
         self.run_dir().result.write_text('{"schema": "otra cosa"}')
         self.ahead = 301
-        self.assertEqual((self.one_pass()["detected"], self.r.reports), (1, []))
-        self.assertEqual((self.incidents(), self.held()),
-                         (["host:1:transport-unavailable:delivery-unaccepted"], ("uncertain", "Running", "")))
+        # G-sin-candados: sin acuse y con el proceso vivo ya no hay delivery-unaccepted que
+        # recoja el resultado malo; se queda attempted hasta que el proceso muera (launch-failed)
+        # o el operador lo resuelva, y a R no se le reporta nada.
+        self.assertEqual((self.one_pass()["detected"], self.r.reports), (0, []))
+        self.assertEqual((self.incidents(), self.held()), ([], ("attempted", "Running", "")))
 
     def crash_writing(self, event, table):
         """Fail that write of the spool, as a full disk would, until the returned call undoes it."""
@@ -1906,19 +1954,23 @@ class Decisions(Slot):
         return lambda: run("DROP TRIGGER crash")
 
     def test_uncertain_and_its_incident_survive_a_crash_together(self):
+        # La escritura única sigue: un proceso que salió sin acuse termina launch-failed, que
+        # deja uncertain y su incidente en la misma transacción que antes (G-sin-candados quitó
+        # el delivery-unaccepted de los vivos; el camino de crash es el mismo).
         for table, event in (("incidents", "INSERT"), ("operations", "UPDATE")):
             with self.subTest(crash_writing=table):
                 self.setUp()
                 self.launched()
+                self.left(1)
                 self.ahead = 301
                 recover = self.crash_writing(event, table)
                 with self.assertRaises(sqlite3.DatabaseError):
                     self.run.watch()
                 recover()
-                self.assertEqual(self.run.watch(), ["host:1:transport-unavailable:delivery-unaccepted"],
+                self.assertEqual(self.run.watch(), ["host:1:transport-unavailable:launch-failed"],
                                  "the crash lost the incident")
                 self.assertEqual((self.incidents(), self.held()),
-                                 (["host:1:transport-unavailable:delivery-unaccepted"], ("uncertain", "Running", "")))
+                                 (["host:1:transport-unavailable:launch-failed"], ("uncertain", "Running", "")))
 
     def test_the_launch_and_its_attempt_clock_are_one_write(self):
         self.crash_writing("INSERT", "delivery_attempts")
@@ -2432,7 +2484,8 @@ class LiveResult(LiveSlot):
                         for kind, part in (("step_start", {"type": "step-start"}),
                                            ("text", {"type": "text", "text": "listo"}),
                                            ("step_finish", {"type": "step-finish", "reason": "stop"}))],
-            "modeloUsado": DEFAULT, "modeloUsadoRazon": None, "permisos": [], "flota": None}))
+            "modeloUsado": DEFAULT, "modeloUsadoRazon": None, "permisos": [], "flota": None,
+            "aviso": None}))
 
 
     def test_the_session_opens_in_the_task_folder_whatever_folder_the_host_and_its_tmux_server_started_in(self):
@@ -2510,14 +2563,17 @@ class LiveFastExit(LiveSlot):
 class LiveHang(LiveSlot):
     CASE = "hang"
 
-    def test_a_process_that_hangs_is_unaccepted_at_the_deadline_and_dies_with_the_cancellation(self):
+    def test_a_hung_process_outlives_the_old_deadline_and_dies_with_the_cancellation(self):
+        # G-sin-candados (David, 2026-10-19): sin acuse y con el proceso vivo no hay incidente
+        # a los 300 s; el cuelgue queda attempted hasta que el operador lo cancela, y la
+        # cancelación sí lo mata y cierra el slot.
         self.passes(lambda: (self.bin / "seen.json").exists())
         self.assertEqual((self.one_pass()["detected"], self.held()), (0, ("attempted", "Running", "")))
         hung = self.seen()["pid"]
         self.assertIn(hung, [process.pid for process in slot_group_processes()])
         self.ahead = 301
-        self.assertEqual(self.one_pass()["detected"], 1)
-        self.assertEqual(self.incidents(), ["host:1:transport-unavailable:delivery-unaccepted"])
+        self.assertEqual((self.one_pass()["detected"], self.incidents()), (0, []))
+        self.assertEqual(self.held(), ("attempted", "Running", ""))
         self.r.cancel("task-1")
         self.passes(self.closed)
         self.assertEqual((self.held(), self.sessions(), slot_group_processes()),

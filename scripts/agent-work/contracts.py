@@ -118,6 +118,12 @@ class SessionRecord:
         return self.path / "repo-antes.json"
 
     @property
+    def aviso(self) -> Path:
+        """Lo que la ruta avisó al lanzar esta corrida (G-sin-candados): "versión no certificada: X".
+        Una corrida cuya ruta abrió sin avisar no tiene este archivo."""
+        return self.path / "aviso.json"
+
+    @property
     def repo_after(self) -> Path:
         return self.path / "repo-despues.json"
 
@@ -187,13 +193,16 @@ class HostBeat:
     spool: str
     canary: bool
     """A canary host also runs a sandbox-tested route or a new opencode version, to certify it."""
+    aviso: Optional[str] = None
+    """Lo que la ruta avisó del CLI que este host decide (G-sin-candados): "versión no certificada:
+    X" mientras su versión no esté en certifiedCliVersions. None: nada que avisar."""
 
     def document(self) -> dict:
         """What the host writes to host.json, and read() takes back."""
         return {"pid": self.pid, "startedAt": self.started_at, "beatAt": self.beat_at, "checkout": self.checkout,
                 "commit": self.commit, "cliVersion": self.cli_version, "policyDigest": self.policy_digest,
                 "slot": self.slot, "blockedBy": list(self.blocked_by), "taskId": self.task_id, "model": self.model,
-                "since": self.since, "spool": self.spool, "canary": self.canary}
+                "since": self.since, "spool": self.spool, "canary": self.canary, "aviso": self.aviso}
 
     @staticmethod
     def read(state_root: Path) -> "Optional[HostBeat]":
@@ -224,4 +233,4 @@ class HostBeat:
             return None
         return HostBeat(raw["pid"], float(raw["startedAt"]), float(raw["beatAt"]), raw["checkout"], raw["commit"],
                         raw["cliVersion"], raw.get("policyDigest"), raw["slot"], tuple(blocked), raw.get("taskId"),
-                        raw.get("model"), raw.get("since"), raw["spool"], raw["canary"])
+                        raw.get("model"), raw.get("since"), raw["spool"], raw["canary"], raw.get("aviso"))

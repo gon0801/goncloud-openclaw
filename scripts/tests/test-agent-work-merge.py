@@ -133,13 +133,9 @@ class MergeConToy(unittest.TestCase):
         pr["comments"].append({"author": {"login": "gon0801"}, "body": cuerpo})
 
     def escenario_verde(self, numero=321, head=HEAD321, checkruns="rapido-checkruns.json"):
-        """El caso feliz: carril rápido con F4 adjudicado por gon0801 (admin)."""
-        pr = self.montar(numero, checkruns=checkruns)
-        self.con_adjudicacion(
-            pr, f"adjudicado F4 @{head}: no-bloqueante — triado, no frena el merge"
-        )
-        self.guardar(numero, pr)
-        return pr
+        """El caso feliz: carril rápido. Desde G-sin-candados el F4 Medium abierto no frena, así
+        que el caso feliz ya no necesita adjudicación."""
+        return self.montar(numero, checkruns=checkruns)
 
     def correr(self, *argumentos):
         salida, error = io.StringIO(), io.StringIO()
@@ -163,19 +159,34 @@ class MergeConToy(unittest.TestCase):
         ]
         return candidatos[-1]
 
+    def severidad_del_hallazgo(self, pr, fid, severidad):
+        """Cambia la severidad de un hallazgo del bloque del bot (para probar lo BLOQUEANTE)."""
+        cuerpo = self.comentario_del_bot(pr)
+        cuerpo["body"] = re.sub(
+            rf'({fid}","title":"[^"]*","severity":")\w+', rf"\g<1>{severidad}", cuerpo["body"]
+        )
+        return pr
+
+    def titulo_del_hallazgo(self, pr, fid, texto):
+        """Cambia el título de un hallazgo del bloque del bot (para probar la marca)."""
+        cuerpo = self.comentario_del_bot(pr)
+        cuerpo["body"] = re.sub(rf'({fid}","title":")[^"]*', rf"\g<1>{texto}", cuerpo["body"])
+        return pr
+
     # --- las tres grabadas, tal cual ----------------------------------------
 
-    def test_pr321_tal_cual_no_listo_por_f4_y_avisa_rate_limited(self):
+    def test_pr321_tal_cual_esta_listo_con_el_medium_como_aviso(self):
+        # G-sin-candados (David, 2026-10-19): el F4 Medium abierto sin adjudicar avisa y no frena.
         self.montar(321)
         codigo, salida, _ = self.listo(321, HEAD321)
-        self.assertEqual(codigo, 1)
+        self.assertEqual(codigo, 0)
         self.assertEqual(
             salida,
-            '{"avisos":["coderabbit-rate-limited"],"faltan":["hallazgo-sin-adjudicar:F4"],'
-            '"listo":false}\n',
+            '{"avisos":["coderabbit-rate-limited","hallazgo-menor-sin-adjudicar:F4"],'
+            '"faltan":[],"listo":true}\n',
         )
 
-    def test_pr322_tal_cual_no_listo_por_f1_y_dos_mayores(self):
+    def test_pr322_tal_cual_niega_por_los_dos_mayores_y_avisa_el_f1(self):
         self.montar(322)
         codigo, salida, _ = self.listo(322, HEAD322)
         self.assertEqual(codigo, 1)
@@ -184,11 +195,16 @@ class MergeConToy(unittest.TestCase):
             {
                 "listo": False,
                 "faltan": [
-                    "hallazgo-sin-adjudicar:F1",
                     "hallazgo-sin-adjudicar:cr:4293442167",
                     "hallazgo-sin-adjudicar:cr:4293442176",
                 ],
-                "avisos": ["coderabbit-rate-limited"],
+                "avisos": [
+                    "coderabbit-rate-limited",
+                    "hallazgo-menor-sin-adjudicar:F1",
+                    "hallazgo-menor-sin-adjudicar:F5",
+                    "hallazgo-menor-sin-adjudicar:F6",
+                    "hallazgo-menor-sin-adjudicar:F7",
+                ],
             },
         )
 
@@ -207,18 +223,23 @@ class MergeConToy(unittest.TestCase):
 
     # --- compuerta 1: draft y head ------------------------------------------
 
-    def test_carril_rapido_con_f4_adjudicado_esta_listo(self):
+    def test_carril_rapido_esta_listo_sin_ninguna_adjudicacion(self):
         self.escenario_verde()
         codigo, salida, _ = self.listo(321, HEAD321)
         self.assertEqual(codigo, 0)
         self.assertEqual(
             json.loads(salida),
-            {"listo": True, "faltan": [], "avisos": ["coderabbit-rate-limited"]},
+            {
+                "listo": True,
+                "faltan": [],
+                "avisos": ["coderabbit-rate-limited", "hallazgo-menor-sin-adjudicar:F4"],
+            },
         )
-        # Los permisos se piden SOLO de los autores de líneas de adjudicación.
+        # Los permisos se piden SOLO de los autores de líneas de adjudicación: sin adjudicaciones
+        # no se pregunta ninguno.
         self.assertEqual(
             [linea for linea in self.lineas_de_log() if "/collaborators/" in linea],
-            [f"api repos/{REPO}/collaborators/gon0801/permission"],
+            [],
         )
 
     def test_es_draft_no_esta_listo(self):
@@ -300,7 +321,7 @@ class MergeConToy(unittest.TestCase):
         self.escenario_verde()
         codigo, salida, _ = self.listo(321, HEAD321)
         self.assertEqual(codigo, 0)
-        self.assertEqual(json.loads(salida)["avisos"], ["coderabbit-rate-limited"])
+        self.assertIn("coderabbit-rate-limited", json.loads(salida)["avisos"])
 
     def test_hilo_menor_sin_resolver_solo_avisa(self):
         pr = self.montar(328)
@@ -344,8 +365,12 @@ class MergeConToy(unittest.TestCase):
         cuerpo["body"] = cuerpo["body"].replace(f"{HEAD321}:complete", f"{HEAD321}:partial")
         self.guardar(321, pr)
         codigo, salida, _ = self.listo(321, HEAD321)
-        self.assertEqual(codigo, 1)
-        self.assertEqual(json.loads(salida)["faltan"], ["revision-parcial"])
+        self.assertEqual(codigo, 0)
+        # El bloque legible sigue: su Medium abierto avisa aunque la marca esté a medias.
+        self.assertEqual(
+            json.loads(salida)["avisos"],
+            ["coderabbit-rate-limited", "revision-parcial", "hallazgo-menor-sin-adjudicar:F4"],
+        )
 
     def test_revision_parcial_por_forma_legada_sin_findings(self):
         pr = self.escenario_verde()
@@ -355,13 +380,65 @@ class MergeConToy(unittest.TestCase):
         )
         self.guardar(321, pr)
         codigo, salida, _ = self.listo(321, HEAD321)
+        self.assertEqual(codigo, 0)
+        # Sin bloque legible no hay hallazgos que avisar: solo la revisión a medias.
+        self.assertEqual(
+            json.loads(salida)["avisos"], ["coderabbit-rate-limited", "revision-parcial"]
+        )
+
+    def test_un_high_abierto_sin_adjudicar_sigue_negando(self):
+        # Lo BLOQUEANTE se queda (David, orden G-sin-candados: High/Critical sin adjudicar frena).
+        pr = self.severidad_del_hallazgo(self.escenario_verde(), "F4", "High")
+        self.guardar(321, pr)
+        codigo, salida, _ = self.listo(321, HEAD321)
         self.assertEqual(codigo, 1)
-        self.assertEqual(json.loads(salida)["faltan"], ["revision-parcial"])
+        self.assertEqual(json.loads(salida)["faltan"], ["hallazgo-sin-adjudicar:F4"])
+
+    def test_un_medium_marcado_de_credenciales_sigue_negando(self):
+        # Lo BLOQUEANTE por marca también: seguridad, datos o credenciales en el título.
+        pr = self.titulo_del_hallazgo(
+            self.escenario_verde(), "F4", "fuga de credenciales en el archivo de receta"
+        )
+        self.guardar(321, pr)
+        codigo, salida, _ = self.listo(321, HEAD321)
+        self.assertEqual(codigo, 1)
+        self.assertEqual(json.loads(salida)["faltan"], ["hallazgo-sin-adjudicar:F4"])
+
+    def test_un_medium_de_perdida_de_datos_sigue_negando(self):
+        # cr:4311182158 (CodeRabbit, r2): el título exacto del hilo — un Medium «Pérdida de datos
+        # al guardar sesiones» no puede quedar en aviso; frena igual que seguridad o credenciales.
+        pr = self.titulo_del_hallazgo(
+            self.escenario_verde(), "F4", "Pérdida de datos al guardar sesiones"
+        )
+        self.guardar(321, pr)
+        codigo, salida, _ = self.listo(321, HEAD321)
+        self.assertEqual(codigo, 1)
+        self.assertEqual(json.loads(salida)["faltan"], ["hallazgo-sin-adjudicar:F4"])
+
+    def test_la_marca_bloqueante_cubre_perdida_corrupcion_y_pisado_en_es_y_en(self):
+        # La tabla completa del encargo r2: pérdida, corrupción y pisado de datos, es/en.
+        for titulo in (
+            "Pérdida de datos al guardar sesiones",
+            "perdida de datos al exportar",
+            "se pierden los mensajes en cola",
+            "Data loss when saving sessions",
+            "corrupted session store",
+            "Corrupción del almacén de sesiones",
+            "overwrites the session file on save",
+        ):
+            with self.subTest(titulo=titulo):
+                self.assertIsNotNone(merge.MARCA_BLOQUEANTE.search(titulo), titulo)
+        # Y lo que no es nada de eso sigue sin frenar por marca.
+        for titulo in ("refactor del módulo de sesiones", "rename the sessions module"):
+            with self.subTest(titulo=titulo):
+                self.assertIsNone(merge.MARCA_BLOQUEANTE.search(titulo), titulo)
 
     # --- compuerta 5: hallazgos y adjudicaciones ------------------------------
 
     def test_adjudicacion_de_head_viejo_no_vale(self):
-        pr = self.montar(321, checkruns="rapido-checkruns.json")
+        pr = self.severidad_del_hallazgo(
+            self.montar(321, checkruns="rapido-checkruns.json"), "F4", "High"
+        )
         self.con_adjudicacion(
             pr,
             "adjudicado F4 @ed4463879eb3139154ff16cf1e6e5fc1fb01451b: "
@@ -373,7 +450,11 @@ class MergeConToy(unittest.TestCase):
         self.assertEqual(json.loads(salida)["faltan"], ["hallazgo-sin-adjudicar:F4"])
 
     def test_adjudicacion_sin_permiso_no_cuenta_y_avisa(self):
-        self.escenario_verde()
+        pr = self.severidad_del_hallazgo(self.escenario_verde(), "F4", "High")
+        self.con_adjudicacion(
+            pr, f"adjudicado F4 @{HEAD321}: no-bloqueante — triado, no frena el merge"
+        )
+        self.guardar(321, pr)
         (self.store / "permiso-gon0801.json").write_text('{"permission":"read"}\n')
         codigo, salida, _ = self.listo(321, HEAD321)
         self.assertEqual(codigo, 1)
@@ -474,15 +555,8 @@ class MergeConToy(unittest.TestCase):
             {
                 "mergeado": True,
                 "mergeCommit": MERGE_COMMIT,
-                "adjudicaciones": [
-                    {
-                        "ref": "F4",
-                        "autor": "gon0801",
-                        "permiso": "admin",
-                        "veredicto": "no-bloqueante",
-                    }
-                ],
-                "avisos": ["coderabbit-rate-limited"],
+                "adjudicaciones": [],
+                "avisos": ["coderabbit-rate-limited", "hallazgo-menor-sin-adjudicar:F4"],
             },
         )
         self.assertIn(

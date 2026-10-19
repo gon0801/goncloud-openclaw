@@ -24,15 +24,15 @@ RESULT_SCHEMA = "agent-work.result.v1"
 SILENT_EPISODES = {"invalid-result": "invalid-result", "transport-unavailable": "session-closed",
                    "deadline-missed": "deadline"}
 ACCEPT_SCHEMA = "agent-work.accept.v1"
-UNACCEPTED_EPISODE = "delivery-unaccepted"
 # Episodes of the run-per-task route. Both travel as episodeId of transport-unavailable, which R accepts;
 # what was refused, the exit code and the cause stay in the spool, where `encargo.py estado` reads them.
 REFUSED_EPISODE = "launch-refused"
 LAUNCH_FAILED_EPISODE = "launch-failed"
 ACCEPT_DEADLINE_SECONDS = 300.0
-"""From launch to acceptance. Measured three times: 18 s (canary 8), 13.51 s and 16.49 s (B22-fase0.md, M5)."""
-RESULT_DEADLINE_SECONDS = 3600.0
-"""From acceptance to result. David, P10866: "3. 1 hora"."""
+"""From launch to acceptance, for a delivery that never started: a launch deferred this long ends as
+launch-failed. Measured three times: 18 s (canary 8), 13.51 s and 16.49 s (B22-fase0.md, M5). A run
+whose process lives is never killed by this clock: the host only gives a started encargo up for dead
+when the opencode process died (David, orden G-sin-candados 2026-10-19)."""
 ACCEPT_BOUND = ("hostId", "taskId", "generation", "instanceId", "claimId")
 RESULT_BOUND = ("hostId", "taskId", "generation", "instanceId", "producerId", "capability")
 MAX_ACCEPT_BYTES = 4096
@@ -797,7 +797,7 @@ class Host:
         return [incident_key] if changed else []
 
     def detect_run_failures(self, host_id: str, session_exit: Callable[[OperationKey], object | None], *,
-                            now: float, accept_deadline_seconds: float, result_deadline_seconds: float,
+                            now: float, accept_deadline_seconds: float, result_deadline_seconds: float | None = None,
                             session_directory: Callable[[OperationKey], str | None] | None = None,
                             stop_session: Callable[[OperationKey], object] | None = None) -> list[str]:
         """The silent failures of launched sessions, one incident each. session_exit answers None while the
@@ -808,7 +808,12 @@ class Host:
         a result is session-closed, both in the pass after the exit and whatever the exit code: opencode
         ends with 0 after denying a permission. A session opened outside the task's folder is stopped. A
         launch deferred since accept_deadline_seconds ago ends as launch-failed. No dialog is read:
-        `opencode run` never waits for a permission."""
+        `opencode run` never waits for a permission.
+
+        A living encargo runs for as long as it needs (David, orden G-sin-candados 2026-10-19): neither
+        clock below ends a delivery whose process is still alive. The accept clock only ends a launch that
+        never started, and result_deadline_seconds has no default — whoever passes one (the measurement
+        banco, so a hung run cannot burn its experiment) gets the old deadline-missed incident back."""
         self._host(host_id)
         check_deadline(accept_deadline_seconds)
         check_deadline(result_deadline_seconds)
@@ -851,18 +856,17 @@ class Host:
             except OSError:
                 continue
             if not accepted:
-                attempted = self.spool.attempted_at(op_id)
                 if strayed or left is not None:
                     detected += self._end_delivery(key, LAUNCH_FAILED_EPISODE)
-                elif attempted is not None and now - attempted >= accept_deadline_seconds:
-                    detected += self._end_delivery(key, UNACCEPTED_EPISODE)
+                # A living process that has not accepted yet is not dead: no incident, no clock.
                 continue
             delivered = self.spool.delivered_at(op_id)
             if invalid:
                 kind = "invalid-result"
             elif left is not None:
                 kind = "transport-unavailable"
-            elif delivered is not None and now - delivered >= result_deadline_seconds:
+            elif (delivered is not None and result_deadline_seconds is not None
+                    and now - delivered >= result_deadline_seconds):
                 kind = "deadline-missed"
             else:
                 continue

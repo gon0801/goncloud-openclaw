@@ -232,15 +232,18 @@ class Preparar(Mac):
         malformed = self.preparar("--perfil", "Ingenieria")
         self.assertEqual(malformed["causa"], "perfil-desconocido")
 
-    def test_a_profiled_pedido_names_an_uncertified_package_generation_in_the_same_turn(self):
+    def test_a_profiled_pedido_with_an_uncertified_generation_runs_with_its_aviso(self):
+        # G-sin-candados r2 (David, 2026-10-19, cr:4311182166): la generación del paquete también
+        # pasa a solo aviso; el pedido corre y la frase lo nombra.
         self.beat()
         path = self.checkout / EVIDENCE / "coverage.json"
         coverage = json.loads(path.read_text())
         del coverage["hostAdapterRoute"]["mac-local"]["opencode"]["contextGenerations"]
         path.write_text(json.dumps(coverage))
         answer = self.preparar("--perfil", "ingenieria")
-        self.assertEqual((answer["causa"], answer["accion"]), ("generacion-no-certificada", "no-registrar"))
-        self.assertIn("generación 2", answer["frase"])
+        self.assertIs(answer["ok"], True, answer)
+        self.assertNotIn("causa", answer)
+        self.assertIn("generación del paquete no certificada: 2", answer["frase"])
 
     def test_a_profiled_pedido_says_when_the_checkout_has_no_package_to_deliver(self):
         self.beat()
@@ -453,13 +456,18 @@ class Preparar(Mac):
 
     def test_a_host_that_would_decide_with_something_else_is_out_of_step(self):
         for change, piece in (({"policyDigest": "f" * 64}, "otra política"), ({"policyDigest": None}, "otra política"),
-                              ({"checkout": "/otro/checkout"}, "otro checkout"),
-                              ({"cliVersion": "1.18.20"}, "otra versión de opencode")):
+                              ({"checkout": "/otro/checkout"}, "otro checkout")):
             with self.subTest(change):
                 self.beat(**change)
                 answer = self.preparar()
                 self.assertEqual((answer.get("causa"), answer.get("accion")), ("host-desfasado", "no-registrar"))
                 self.assertIn(piece, answer["frase"])
+        # G-sin-candados (David, 2026-10-19): el desfase de versión del CLI es solo aviso; el
+        # encargo se prepara y la frase lo dice.
+        self.beat(cliVersion="1.18.20")
+        desfasado = self.preparar()
+        self.assertIs(desfasado["ok"], True)
+        self.assertIn("otra versión de opencode", desfasado["frase"])
         self.beat(slot="blocked", blockedBy=["777 Mon Oct 12 18:00:00 2026 sleep 300"])
         blocked = self.preparar()
         self.assertEqual(blocked["causa"], "slot-bloqueado")
@@ -482,13 +490,19 @@ class Preparar(Mac):
         )
         self.assertEqual(self.argv_log(), ["--version", "models", "--version", "--version", "models"])
 
-    def test_a_new_cli_version_relists_and_closes_the_repos_certified_route(self):
+    def test_a_new_cli_version_relists_and_prepares_with_its_aviso(self):
+        # G-sin-candados (David, 2026-10-19): la versión nueva ya no cierra la ruta al preparar;
+        # el pedido sale con "versión no certificada" en su frase.
         self.beat()
         self.assertTrue(self.preparar()["ok"])
         (self.bin / "version").write_text("1.18.36\n")
-        closed = self.preparar()
-        self.assertEqual((closed["causa"], closed["frase"]),
-                         ("ruta-no-certificada", "Ruta certificada para 1.18.35, 2.0.29, la Mac tiene opencode 1.18.36."))
+        abierto = self.preparar()
+        self.assertIs(abierto["ok"], True)
+        # Dos avisos encadenados: la versión nueva no está certificada y, además, el host vivo
+        # decide con otra (host-desfasado, también solo aviso desde G-sin-candados).
+        self.assertEqual(abierto["frase"], "versión no certificada: 1.18.36 (certificadas: 1.18.35, 2.0.29); "
+                                           "el encargo corre. El host de encargos corre con otra versión de "
+                                           "opencode: el host tiene 1.18.35 y aquí hay 1.18.36.")
         self.assertEqual(self.argv_log()[-2:], ["--version", "models"])
 
     def test_the_script_answers_one_json_line_when_run_as_a_program(self):
@@ -513,7 +527,7 @@ class Estado(Mac):
         self.assertEqual(answer, {"ok": True, "pid": 4242, "slot": "running", "bloqueadoPor": [], "tarea": "t-9",
                                   "modelo": "zai-coding-plan/glm-5.3", "checkout": str(self.checkout),
                                   "commit": "c" * 40, "politica": self.policy().digest[:12], "cli": "1.18.35",
-                                  "canario": False})
+                                  "canario": False, "aviso": None})
         self.beat(beatAt=time.time() - 121)
         code, out, _ = self.cli("estado")
         self.assertEqual((code, json.loads(out)["frase"]), (3, "El host de encargos no corre desde hace 2 min."))
@@ -1549,6 +1563,7 @@ class Recertificar(Mac):
         self.assertEqual((answer["ok"], answer.get("espera")), (True, "recertificando"))
         self.assertEqual(
             answer["frase"],
+            "versión no certificada: 1.19.3 (certificadas: 1.18.35, 2.0.29); el encargo corre. "
             "La ruta de encargos está midiendo opencode 1.19.3; el encargo sale en unos minutos")
         self.assertEqual(answer["inputRevision"]["kind"], "code")
         self.assertIn("zai-coding-plan/glm-5.3-flash", answer["briefArgs"])
@@ -1678,7 +1693,9 @@ class Recertificar(Mac):
         self.assertNotIn("espera", answer)
         self.assertNotEqual(answer.get("causa"), "ruta-roja")
 
-    def test_una_generacion_sin_certificar_no_queda_tapada_por_un_rojo(self):
+    def test_un_rojo_terminal_sigue_negando_aunque_la_generacion_ya_solo_avise(self):
+        # G-sin-candados r2: la generación ahora avisa y corre, pero no tapa al rojo terminal —
+        # esa versión ya falló su banco, y lo que frena es el rojo (protege datos).
         path = self.checkout / EVIDENCE / "coverage.json"
         coverage = json.loads(path.read_text())
         del coverage["hostAdapterRoute"]["mac-local"]["opencode"]["contextGenerations"]
@@ -1689,7 +1706,17 @@ class Recertificar(Mac):
                 "estado": "rojo", "causa": "m3b", "sondas": {"m3b": "no pasa"}}}}}))
         self.beat()
         answer = self.preparar("--perfil", "ingenieria")
-        self.assertEqual(answer["causa"], "generacion-no-certificada")
+        self.assertEqual(answer["causa"], "ruta-roja")
+
+    def test_un_claude_que_no_contesta_su_version_niega_en_lugar_de_avisar(self):
+        # CodeRabbit #349 (hilo 4311182166): "sin contestar su versión" no es el aviso de "no
+        # certificada"; niega igual que el host (RunHost.plan), aunque el canario abra la ruta.
+        self.beat(canary=True)
+        (self.bin / "claude").write_text("#!/bin/sh\nexit 1\n")
+        (self.bin / "claude").chmod(0o755)
+        answer = self.preparar("--modelo", "claude opus")
+        self.assertEqual((answer["causa"], answer["accion"]), ("ruta-no-certificada", "no-registrar"))
+        self.assertIn("sin contestar su versión", answer["frase"])
 
     def test_sin_r_no_gasta_intento_y_avisa_una_vez(self):
         avisos = []
