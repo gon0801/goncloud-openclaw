@@ -1,0 +1,5 @@
+# Los .sh se ejecutan con bash (reusar_completa.sh, run-checks.sh, los tests
+# de scripts/tests/): con core.autocrlf=true (default de Git for Windows, la
+# plataforma que documenta el README) un CRLF rompe el shebang y el parseo
+# del script en local y en CI.
+*.sh text eol=lf

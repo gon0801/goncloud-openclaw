@@ -50,8 +50,21 @@ shards=$(seccion "$WF" shards)
 [ -n "$shards" ] || fail "falta el job shards"
 printf '%s\n' "$shards" | grep -qF 'needs: [clasificador, reuso]' \
   || fail "los shards deben depender del clasificador y del reuso"
-printf '%s\n' "$shards" | grep -qF "if: needs.clasificador.outputs.carril != 'fast' && needs.reuso.outputs.reusar != 'true'" \
-  || fail "los shards corren salvo carril fast o reuso; en pull_request el reuso no corre y su output vacio mantiene la corrida"
+
+# El if: del JOB (cuatro espacios, antes de steps:), no un if de paso ni un
+# comentario: la condicion que decide la corrida de la matriz vive ahi.
+if_shards=$(printf '%s\n' "$shards" | grep -E '^    if:' || true)
+[ -n "$if_shards" ] || fail "los shards deben decidir su corrida en el if: del JOB, no en un paso"
+printf '%s\n' "$if_shards" | grep -qF '!cancelled()' \
+  || fail "en pull_request el job reuso se salta: sin !cancelled(), un need skipped arrastra a la matriz entera a skipped y en NINGUN PR corria la bateria"
+printf '%s\n' "$if_shards" | grep -qF "(github.event_name != 'pull_request' || github.event.pull_request.draft != true)" \
+  || fail "los shards NO deben correr en un PR draft: la condicion de draft vive en el if: del JOB (la bateria llega al pasar a ready)"
+printf '%s\n' "$if_shards" | grep -qF "needs.clasificador.outputs.carril != 'fast'" \
+  || fail "los shards corren salvo carril fast EXACTO (fail-closed: carril ausente o invalido corre)"
+printf '%s\n' "$if_shards" | grep -qF "needs.reuso.outputs.reusar != 'true'" \
+  || fail "en push con arbol identico ya validado, los shards se omiten (una vez por bloque)"
+printf '%s\n' "$shards" | grep -qF 'ref: ${{ github.event.pull_request.head.sha || github.sha }}' \
+  || fail "en PR los shards deben hacer checkout del arbol EXACTO de la cabeza (head.sha), no del merge ref refs/pull/N/merge: es el arbol que el reuso certifica"
 
 reuso=$(seccion "$WF" reuso)
 [ -n "$reuso" ] || fail "falta el job reuso (reuso del veredicto por arbol)"
@@ -65,7 +78,7 @@ printf '%s\n' "$reuso" | grep -qF 'reusar: ${{ steps.reuso.outputs.reusar }}' \
   || fail "el job reuso debe exponer reusar como output"
 printf '%s\n' "$reuso" | grep -qF 'persist-credentials: false' \
   || fail "el checkout del reuso no debe persistir credenciales"
-echo "ok (1): draft sin bateria; ready_for_review dispara los shards; reuso solo en push con github.token"
+echo "ok (1): draft sin bateria; ready_for_review dispara los shards (vivos en PR, checkout de la cabeza); reuso solo en push con github.token"
 
 # ── (2) El gate exige la bateria en PR no draft con carril completo ────────
 gate=$(seccion "$WF" gate)
@@ -245,26 +258,41 @@ instantanea() {
 }
 antes=$(instantanea)
 
-# Entorno hostil del hook, apuntando AL CENTINELA (jamas al repo real): el
-# escenario completo debe ignorar estas variables por completo. Si falta el
-# filtro de GIT_*, el git del repo temporal mutaria el centinela y la
-# instantanea posterior cambiaria.
+# Entorno hostil del hook, apuntando AL CENTINELA (jamas al repo real).
+# DENTRO del bloque pasan las dos cosas que pueden pegarle: la creacion del
+# repo del escenario (lo unico que muta con git init/add/commit) y la corrida
+# del escenario COMPLETO del reuso hasta reusar=true (la unica via que
+# ejecuta el script real). Si falta el filtro en la creacion, el centinela
+# muta y la instantanea posterior cambia; si falta el de correr_reuso, el git
+# del script lee el centinela y no llega a reusar=true. El centinela ya es
+# DISTINTO del escenario (otro contenido y commit), asi que leerlo no puede
+# confundirse con el arbol que se certifica.
 (
   export GIT_DIR="$centinela/.git"
   export GIT_INDEX_FILE="$centinela/.git/index"
   escenario="$TMP/escenario-hostil"
   mkdir -p "$escenario/doble"
   cp "$repo/doble/gh" "$escenario/doble/gh"
-  cd "$escenario" || exit 9
-  limpiar_git_env
-  git init -q -b master .
-  printf 'contenido\n' >archivo.txt
-  git add .
-  git -c user.email=t@t -c user.name=t commit -qm uno
-) || fail "el escenario hostil no debio fallar"
+  (
+    cd "$escenario" || exit 9
+    limpiar_git_env
+    git init -q -b master .
+    printf 'contenido\n' >archivo.txt
+    git add .
+    git -c user.email=t@t -c user.name=t commit -qm uno
+  ) || exit 1
+  sha_e=$(git_limpio "$escenario" rev-parse HEAD) || exit 1
+  arbol_e=$(git_limpio "$escenario" rev-parse 'HEAD^{tree}') || exit 1
+  escena_e=$(jq -cn --arg sha "$sha_e" --arg arbol "$arbol_e" --argjson patas "$patas" \
+    '{pulls: [{number: 7, head: {sha: $sha}}], arbol: {commit: {tree: {sha: $arbol}}}, "check-runs": {check_runs: $patas}}') \
+    || exit 1
+  salida6="$TMP/salida-6.txt"; : >"$salida6"
+  correr_reuso "$escenario" "$salida6" "$escena_e" >/dev/null || exit 1
+  grep -q 'reusar=true' "$salida6" || exit 1
+) || fail "el escenario hostil debia llegar a reusar=true sin tocar el centinela"
 despues=$(instantanea)
 [ "$antes" = "$despues" ] \
   || fail "el repo centinela cambio (core.bare, HEAD o indice): el GIT_* del hook se colo en los subprocess del escenario"
-echo "ok (6): GIT_* hostil del hook deja intacto el repo apuntado (regresion 2026-10-18)"
+echo "ok (6): GIT_* hostil del hook deja intacto el repo apuntado y el reuso llega a reusar=true (regresion 2026-10-18)"
 
 echo "ok: contrato CI-una-vez-por-bloque completo (disparadores, gate, reuso por arbol, doble de gh y centinela GIT_*)"

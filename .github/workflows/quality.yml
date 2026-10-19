@@ -226,8 +226,10 @@ jobs:
   # de su PR y las cinco patas de shards ya quedaron en success ahi, la
   # bateria no se repite. Fail-closed hacia CORRER: el script jamas termina en
   # error, su unica salida es reusar=true (salta la bateria) o reusar=false
-  # (la corre completa). En pull_request el job no corre y su output queda
-  # vacio, lo que mantiene a la matriz corriendo (fail-open hacia correr).
+  # (la corre completa). En pull_request el job se salta, y es el
+  # `!cancelled()` del if de shards el que ignora ese skipped de need: sin
+  # eso, un need skipped arrastra a la matriz entera a skipped (r2: en
+  # NINGUN PR corria la bateria).
   reuso:
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -255,14 +257,19 @@ jobs:
   # Reglas fijadas por S (15.0) y no renegociadas:
   #   1. Condicion de corrida de cada shard:
   #        needs: [clasificador, reuso]
-  #        if: needs.clasificador.outputs.carril != 'fast' &&
-  #            needs.reuso.outputs.reusar != 'true'
+  #        if: !cancelled() &&
+  #            carril != 'fast' &&
+  #            (no es pull_request || draft != true) &&
+  #            reusar != 'true'
+  #      El `!cancelled()` es obligatorio: en pull_request el job reuso se
+  #      salta y, sin eso, un need skipped arrastra a la matriz entera a
+  #      skipped aunque su propio if sea verdadero (r2 del revisor: en
+  #      NINGUN PR corria la bateria).
   #      Solo un `fast` EXACTO autoriza a omitir por carril; carril ausente o
   #      invalido corre la bateria (fail-closed). En push, el reuso por arbol
   #      identico ya validado tambien la omite (una vez por bloque); en
-  #      pull_request el output del reuso queda vacio y no cambia nada, y en
-  #      draft el gate autoriza la omision porque la bateria llega al pasar a
-  #      ready.
+  #      draft la omite el propio if (el gate lo autoriza) porque la bateria
+  #      llega al pasar a ready.
   #   2. El gate depende del clasificador y de TODOS los shards, con la regla
   #      de pares: success pasa; skipped pasa SOLO con clasificacion fast
   #      valida; todo lo demas (failure/cancelled) rebota. S anoto "un par por
@@ -287,7 +294,10 @@ jobs:
     # `!= 'fast'` y no `== 'completo'`: si el output llegara vacio o con basura,
     # corre la bateria. La omision se autoriza SOLO con un fast exacto, o en
     # push con reusar=true (arbol identico ya validado: una vez por bloque).
-    if: needs.clasificador.outputs.carril != 'fast' && needs.reuso.outputs.reusar != 'true'
+    # En draft no corre la matriz (la bateria llega al pasar a ready), y el
+    # `!cancelled()` evita que el skipped del reuso --que en pull_request no
+    # corre-- arrastre a la matriz entera a skipped.
+    if: ${{ !cancelled() && needs.clasificador.outputs.carril != 'fast' && (github.event_name != 'pull_request' || github.event.pull_request.draft != true) && needs.reuso.outputs.reusar != 'true' }}
     strategy:
       fail-fast: false
       matrix:
@@ -310,6 +320,11 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
+          # En pull_request el default seria refs/pull/N/merge (el merge
+          # commit): se prueba el arbol EXACTO de la cabeza, el mismo donde
+          # el reuso busca las cinco patas de shards en success. En push no
+          # hay PR y `||` cae al SHA del evento.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: Set up Node
         # Este repo no tiene package.json en la raiz: sin este paso explicito
