@@ -702,15 +702,18 @@ class Routes(unittest.TestCase):
         self.assertEqual(coverage["hostAdapterRoute"]["mac-local"]["opencode"]["form"], "run-per-task")
         route = sesion.Route.load(coverage, "mac-local")
         self.assertEqual(route, sesion.Route("mac-local", "opencode", "run-per-task", "certified",
-                                             frozenset({"1.18.35"}), frozenset({"1", "2"})))
+                                             frozenset({"1.18.35", "2.0.29"}), frozenset({"1", "2"})))
+        # 2.0.29: decisión de David del 2026-10-18 con el hueco conocido del shell
+        # (docs/evidence/agent-work/opencode-2.0.29-recertificacion.md).
+        self.assertIsNone(route.open_for("2.0.29", canary=False))
         self.assertIsNone(route.open_for("1.18.35", canary=False))
         self.assertIsNone(route.open_for("1.18.35", 1, canary=False),
                           "M-16 certifies generation 1 of the package (SUA-03-mediciones.md)")
         self.assertIsNone(route.open_for("1.18.35", 2, canary=False),
                           "M-16 (generación 2) certifies generation 2 of the package")
-        self.assertEqual(route.open_for("1.18.36", canary=False), modelos.RouteNotCertified("1.18.36", ("1.18.35",)))
+        self.assertEqual(route.open_for("1.18.36", canary=False), modelos.RouteNotCertified("1.18.36", ("1.18.35", "2.0.29")))
         self.assertEqual(modelos.explicar(route.open_for("1.18.36", canary=False)).frase,
-                         "Ruta certificada para 1.18.35, la Mac tiene opencode 1.18.36.")
+                         "Ruta certificada para 1.18.35, 2.0.29, la Mac tiene opencode 1.18.36.")
         self.assertIsNone(route.open_for("1.18.36", canary=True))
 
     def test_the_adopted_session_certificate_does_not_open_the_run_per_task_route_even_for_a_canary(self):
