@@ -144,8 +144,10 @@ class AgentsRouting(unittest.TestCase):
                           f"evidence {item} of mac-local/opencode does not exist")
         # The receipts of each opencode version the run-per-task route is certified for.
         receipts = self.coverage["hostAdapterRoute"]["mac-local"]["opencode"]["certifiedCliVersions"]
-        self.assertEqual(receipts, {"1.18.35": "B22-fase0.md y B22-canarios.md"})
-        for name in ("B22-fase0.md", "B22-canarios.md"):
+        # 2.0.29: decisión de David del 2026-10-18 con el hueco conocido del shell (su recibo lo dice).
+        self.assertEqual(receipts, {"1.18.35": "B22-fase0.md y B22-canarios.md",
+                                    "2.0.29": "opencode-2.0.29-recertificacion.md"})
+        for name in ("B22-fase0.md", "B22-canarios.md", "opencode-2.0.29-recertificacion.md"):
             self.assertTrue((ROOT / "docs/evidence/agent-work" / name).is_file(), name)
 
     def test_every_field_that_speaks_of_certification_agrees_with_host_adapter_coverage(self):

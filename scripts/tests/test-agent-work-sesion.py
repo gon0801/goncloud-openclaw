@@ -1625,7 +1625,7 @@ class Decisions(Slot):
     def test_a_new_opencode_version_closes_the_repos_certified_route(self):
         (self.bin / "version").write_text("1.18.36\n")
         self.start(self.backend)
-        self.refused("ruta-no-certificada", "Ruta certificada para 1.18.35, la Mac tiene opencode 1.18.36.")
+        self.refused("ruta-no-certificada", "Ruta certificada para 1.18.35, 2.0.29, la Mac tiene opencode 1.18.36.")
 
     def test_a_canary_host_launches_with_an_opencode_version_the_route_does_not_have_yet(self):
         (self.bin / "version").write_text("1.18.36\n")
@@ -1637,7 +1637,7 @@ class Decisions(Slot):
         (self.bin / "version").write_text("")
         self.start(self.backend)
         self.refused("ruta-no-certificada",
-                     "Ruta certificada para 1.18.35, la Mac tiene opencode sin contestar su versión.")
+                     "Ruta certificada para 1.18.35, 2.0.29, la Mac tiene opencode sin contestar su versión.")
 
     def died(self, where):
         self.backend.dies = where

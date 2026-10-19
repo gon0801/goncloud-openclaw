@@ -488,7 +488,7 @@ class Preparar(Mac):
         (self.bin / "version").write_text("1.18.36\n")
         closed = self.preparar()
         self.assertEqual((closed["causa"], closed["frase"]),
-                         ("ruta-no-certificada", "Ruta certificada para 1.18.35, la Mac tiene opencode 1.18.36."))
+                         ("ruta-no-certificada", "Ruta certificada para 1.18.35, 2.0.29, la Mac tiene opencode 1.18.36."))
         self.assertEqual(self.argv_log()[-2:], ["--version", "models"])
 
     def test_the_script_answers_one_json_line_when_run_as_a_program(self):
