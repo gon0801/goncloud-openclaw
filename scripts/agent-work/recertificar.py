@@ -25,15 +25,16 @@ from modelos import (
     ProviderPolicy,
     authorize,
     catalogo_claude,
+    version_de_salida,
 )
 from sesion import (
-    DENIED_BY_RULE,
-    REJECTED_TOOL_CALL,
     LaunchSpec,
     Workspace,
     claude_argv,
     claude_env,
     claude_events,
+    lanzamiento_con_servicio_propio,
+    negacion_de_flujo,
     opencode_env,
     read_events,
     session_directory,
@@ -226,10 +227,32 @@ def _lanzar(
     return codigo, vencio
 
 
+def _version_del_binario(binario: Path) -> str | None:
+    """La versión que ese binario firma en `--version` ("opencode v2.0.29" en la 2, "1.18.35" en
+    la 1.x), con el parser del catálogo. Un doble de prueba que no contesta una versión, un binario
+    ausente o un --version colgado vuelven None: la sonda lanza con la forma de la 1.x, la que los
+    dobles emulan."""
+    try:
+        hecho = subprocess.run([str(binario), "--version"], capture_output=True, text=True, timeout=20,
+                               stdin=subprocess.DEVNULL)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    return version_de_salida(hecho.stdout.strip())
+
+
 def _argv_opencode(binario: Path, modelo: str, pedido: str, *, logs: bool) -> tuple[str, ...]:
-    argv = [str(binario), "run", "-m", modelo, "--format", "json"]
+    """El mismo argv que `opencode_argv` decide para el host, con la versión de ESTE binario: la 2
+    corre con `--standalone` (su servicio de fondo ignora el OPENCODE_CONFIG_CONTENT del proceso,
+    y las sondas prueban justamente ese encierro) y su `--log-level` ya no acepta mayúsculas.
+    Medido en 2.0.29, G-opencode2-r1."""
+    version = _version_del_binario(binario)
+    propia = version is not None and lanzamiento_con_servicio_propio(version)
+    argv = [str(binario), "run"]
+    if propia:
+        argv.append("--standalone")
+    argv += ["-m", modelo, "--format", "json"]
     if logs:
-        argv += ["--print-logs", "--log-level", "INFO"]
+        argv += ["--print-logs", "--log-level", "info" if propia else "INFO"]
     argv.append(pedido)
     return tuple(argv)
 
@@ -399,8 +422,8 @@ def _tool_negado(evento: dict) -> bool:
         return False
     parte = evento.get("part") if isinstance(evento.get("part"), dict) else {}
     estado = parte.get("state") if isinstance(parte.get("state"), dict) else {}
-    error = estado.get("error")
-    return isinstance(error, str) and error.startswith((DENIED_BY_RULE, REJECTED_TOOL_CALL))
+    # Los cuatro textos: los dos de la 1.x y los dos de la 2 (negacion_de_flujo, G-opencode2-r1).
+    return negacion_de_flujo(estado.get("error"), str(parte.get("tool"))) is not None
 
 
 def _siguio_tras_el_deny(record: SessionRecord) -> bool:

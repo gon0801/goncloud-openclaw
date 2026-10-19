@@ -438,13 +438,17 @@ class CatalogStore:
         return stdout
 
     def _version(self) -> str:
-        version = self._run("--version").strip()
-        if not CLI_VERSION.fullmatch(version):
+        version = version_de_salida(self._run("--version").strip())
+        if version is None:
             raise CatalogUnavailable(f"{self.opencode_bin} --version no contestó una versión")
         return version
 
     def _list(self, version: str, *, upstream: bool) -> Catalog:
-        listing = self._run("models", *(("--refresh",) if upstream else ()))
+        # `models --refresh` pide re-bajar la lista en la 1.x. La 2 no tiene la bandera: con ella
+        # contesta su ayuda por stdout con salida 0 (medido en 2.0.29, G-opencode2-r1), que aquí es
+        # "una línea que no es un id". Su `models` a secas lista desde el servicio vivo, que es el
+        # equivalente: solo la 1.x lleva la bandera.
+        listing = self._run("models", *(("--refresh",) if upstream and version.startswith("1.") else ()))
         lines = [line.strip() for line in listing.splitlines() if line.strip()]
         # Una salida vacía o con otra forma no es "ese proveedor no tiene sesión": es opencode sin contestar
         # lo que se le pidió. No se guarda, para que la siguiente llamada vuelva a preguntar.
@@ -612,6 +616,43 @@ def claude_por_omision() -> Path:
         return Path(en_path)
     local = Path(os.environ.get("HOME") or Path.home()) / ".local/bin/claude"
     return local if local.is_file() else Path("claude")
+
+
+OPENCODE_BIN_LOCAL = "~/.opencode/bin/opencode"
+OPENCODE_BIN_BREW = "/opt/homebrew/bin/opencode"
+
+
+def opencode_por_omision() -> Path:
+    """El opencode de esta Mac: AGENT_WORK_OPENCODE, el de ~/.opencode/bin (donde el instalador
+    de la 2 lo deja y lo mide `encargo.py --opencode`), el del PATH o el de Homebrew (1.x, que
+    ya no existe en esta Mac). El orden no es el del `command -v` a secas: el exec del host corre
+    con un PATH recortado (claude_por_omision, G7), y una ruta fija que existe manda sobre una
+    búsqueda que puede no mirar ~/.opencode/bin. Medido en G-opencode2-r1: la Mac pasó de la
+    1.19.3 de Homebrew a la 2.0.29 en ~/.opencode/bin."""
+    import shutil
+
+    if os.environ.get("AGENT_WORK_OPENCODE"):
+        return Path(os.environ["AGENT_WORK_OPENCODE"])
+    local = Path(os.environ.get("HOME") or Path.home()) / ".opencode/bin/opencode"
+    if local.is_file():
+        return local
+    en_path = shutil.which("opencode")
+    if en_path:
+        return Path(en_path)
+    return Path(OPENCODE_BIN_BREW)
+
+
+def version_de_salida(texto: str) -> "str | None":
+    """La versión en la salida de `--version`, o None si no la hay. La 1.x contesta solo el número
+    ("1.18.35"); la 2 firma su salida ("opencode v2.0.29", medido en G-opencode2-r1). El token va
+    sin la `v` y sin el nombre del CLI, que es la forma que guardan catalogo.json, host.json y
+    coverage: una misma versión se escribe igual venga como venga firmada. Una salida que no trae
+    ningún token de versión no es una versión: None hace que `_version` la rechace."""
+    for token in reversed(texto.split()):
+        candidato = token[1:] if token.startswith("v") and len(token) > 1 else token
+        if candidato[0].isdigit() and CLI_VERSION.fullmatch(candidato):
+            return candidato
+    return None
 
 
 @dataclass(frozen=True)

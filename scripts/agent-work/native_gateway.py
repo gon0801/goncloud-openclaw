@@ -27,7 +27,7 @@ import contexto
 import flota
 from host import (ACCEPT_DEADLINE_SECONDS, RESULT_DEADLINE_SECONDS, GIT_REPO_VARS, DeliveryDeferred, Host,
                   PhotoFailed, repo_photo, writes_source)
-from modelos import claude_por_omision
+from modelos import claude_por_omision, opencode_por_omision
 from modelos import (POLICY_FILE, CatalogStore, CatalogUnavailable, ContextoIncompleto, ExactModel, ModelNotListed,
                      PerfilRechazado, ProviderNotConfigured, ProviderPolicy, authorize, catalogo_claude, explicar,
                      ruta_roja)
@@ -1362,7 +1362,8 @@ def main(argv=None):
     parser.add_argument("--tmux-bin", default="tmux")
     parser.add_argument("--workspace-root",
                         help="claim tasks and run one opencode process per task, in a git repo under this root")
-    parser.add_argument("--opencode-bin", default="/opt/homebrew/bin/opencode")
+    parser.add_argument("--opencode-bin", default=None,
+                        help="ruta de opencode (por omisión la que resuelve modelos.opencode_por_omision)")
     parser.add_argument("--claude-bin", default=None, help="ruta de claude para la ruta claude (4.7)")
     parser.add_argument("--slot-group",
                         help=f"group whose processes are the slot's boundary (default {SLOT_GROUP}); "
@@ -1412,7 +1413,7 @@ def main(argv=None):
         manager = ResourceManager(host.spool, args.host_id, backend)
         run = RunHost(client, host, manager, backend, instance_id=args.cli_instance_id,
                       checkout=CHECKOUT, state_root=args.state_root or host.state_dir.parent,
-                      opencode_bin=args.opencode_bin, claude_bin=args.claude_bin,
+                      opencode_bin=args.opencode_bin or opencode_por_omision(), claude_bin=args.claude_bin,
                       allowed_root=args.workspace_root, canary=args.canary,
                       accept_deadline_seconds=args.accept_deadline_seconds,
                       result_deadline_seconds=args.result_deadline_seconds,
