@@ -28,6 +28,21 @@
 # exactamente una vez, y cada shard publica sus logs como artifact para auditar
 # esa union sin re-correr nada.
 #
+# Una vez por bloque (orden del dueno 2026-10-18; patron del PR 477 de
+# goncloud-Orbit): el PR vive en draft durante implementacion y revision y la
+# matriz de shards NO corre (solo clasificador, ci-contract y los checks
+# documentales); tras el APROBADO el PR pasa a ready y `ready_for_review`
+# dispara la bateria UNA vez sobre el SHA final; el gate exige shards=success
+# en un PR no draft con carril completo. Al unir a main, si el arbol del
+# commit empujado es identico al de la cabeza de su PR y sus cinco shards ya
+# quedaron en success, el veredicto se REUSA sin repetir la bateria (job
+# `reuso` + .github/scripts/reusar_completa.sh); ante cualquier duda se corre:
+# fail-closed hacia CORRER, nunca hacia saltar. El carril fast no cambia: un
+# PR solo-docs no corre bateria ni en draft ni en ready, y ese verde rapido de
+# docs YA ERA el reuso de verde documental, asi que no se duplica. No existe
+# `gh workflow run` en el flujo normal. Fijado por
+# scripts/tests/test-ci-una-vez-por-bloque.sh.
+#
 # Los checks documentales son un paso REAL del job clasificador ("Checks
 # documentales del rango"): valida los contratos de los archivos CAMBIADOS
 # (.saikit/progress/*.json parseable y con schema/fase; docs/evidence/**.md|txt
@@ -51,9 +66,16 @@ on:
   push:
     branches: [main, master]
   pull_request:
+    # `ready_for_review` es el paso donde la bateria corre UNA vez sobre el
+    # SHA final (tras el APROBADO); en draft solo corre lo rapido.
+    types: [opened, synchronize, reopened, ready_for_review]
 
+# Minimos para el reuso por arbol: leer el PR asociado al commit empujado y
+# los check runs de su cabeza. Sin tokens nuevos: usa github.token.
 permissions:
   contents: read
+  pull-requests: read
+  checks: read
 
 # Ahorro de CI (2026-09): si llega un push nuevo al mismo PR, la corrida
 # anterior se cancela sola y solo la ULTIMA corre la bateria. El gate es
@@ -199,6 +221,29 @@ jobs:
             echo "motivo: ${MOTIVO:-la clasificacion no llego a producirse}"
           } >> "$GITHUB_STEP_SUMMARY"
 
+  # ── Reuso del veredicto por arbol (una vez por bloque) ─────────────────────
+  # Solo push a main/master: si el arbol empujado es identico al de la cabeza
+  # de su PR y las cinco patas de shards ya quedaron en success ahi, la
+  # bateria no se repite. Fail-closed hacia CORRER: el script jamas termina en
+  # error, su unica salida es reusar=true (salta la bateria) o reusar=false
+  # (la corre completa). En pull_request el job no corre y su output queda
+  # vacio, lo que mantiene a la matriz corriendo (fail-open hacia correr).
+  reuso:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: github.event_name == 'push'
+    outputs:
+      reusar: ${{ steps.reuso.outputs.reusar }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Reusa el veredicto si el arbol ya paso la bateria
+        id: reuso
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash .github/scripts/reusar_completa.sh
+
   # ── Shards (Fase 15.1/15.2, carriles R y W) ────────────────────────────────
   # R (15.1) le dio al runner el reparto: SAIKIT_SHARD=i/5 corre la porcion i,
   # asignada por duracion medida; la union de los cinco es la bateria entera,
@@ -209,10 +254,15 @@ jobs:
   # hermanos — los cinco tienen que llegar a veredicto propio).
   # Reglas fijadas por S (15.0) y no renegociadas:
   #   1. Condicion de corrida de cada shard:
-  #        needs: [clasificador]
-  #        if: needs.clasificador.outputs.carril != 'fast'
-  #      Solo un `fast` EXACTO autoriza a omitir; carril ausente o invalido
-  #      corre la bateria (fail-closed).
+  #        needs: [clasificador, reuso]
+  #        if: needs.clasificador.outputs.carril != 'fast' &&
+  #            needs.reuso.outputs.reusar != 'true'
+  #      Solo un `fast` EXACTO autoriza a omitir por carril; carril ausente o
+  #      invalido corre la bateria (fail-closed). En push, el reuso por arbol
+  #      identico ya validado tambien la omite (una vez por bloque); en
+  #      pull_request el output del reuso queda vacio y no cambia nada, y en
+  #      draft el gate autoriza la omision porque la bateria llega al pasar a
+  #      ready.
   #   2. El gate depende del clasificador y de TODOS los shards, con la regla
   #      de pares: success pasa; skipped pasa SOLO con clasificacion fast
   #      valida; todo lo demas (failure/cancelled) rebota. S anoto "un par por
@@ -233,10 +283,11 @@ jobs:
   shards:
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    needs: [clasificador]
+    needs: [clasificador, reuso]
     # `!= 'fast'` y no `== 'completo'`: si el output llegara vacio o con basura,
-    # corre la bateria. La omision se autoriza SOLO con un fast exacto.
-    if: needs.clasificador.outputs.carril != 'fast'
+    # corre la bateria. La omision se autoriza SOLO con un fast exacto, o en
+    # push con reusar=true (arbol identico ya validado: una vez por bloque).
+    if: needs.clasificador.outputs.carril != 'fast' && needs.reuso.outputs.reusar != 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -339,7 +390,7 @@ jobs:
   gate:
     runs-on: ubuntu-latest
     if: always()
-    needs: [clasificador, shards, ci-contract]
+    needs: [clasificador, shards, ci-contract, reuso]
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v7
@@ -395,6 +446,9 @@ jobs:
           # El contrato de cobertura se decide aparte de los shards: no admite
           # la via del skipped-autorizado-por-fast porque no depende del carril.
           R_CI_CONTRACT: ${{ needs.ci-contract.result }}
+          EVENTO: ${{ github.event_name }}
+          DRAFT: ${{ github.event.pull_request.draft }}
+          REUSO: ${{ needs.reuso.outputs.reusar }}
         run: |
           rc=0
           printf 'clasificador=%s carril=%s\n' "$R_CLASIFICADOR" "${CARRIL:-}"
@@ -418,8 +472,14 @@ jobs:
               *=skipped)
                 if [ "$R_CLASIFICADOR:$CARRIL" = "success:fast" ]; then
                   echo "gate: $par omitido, autorizado por clasificacion fast"
+                elif [ "$EVENTO" = "pull_request" ] && [ "$DRAFT" = "true" ]; then
+                  # Una vez por bloque: en draft la bateria no corre; llega
+                  # UNA vez al pasar el PR a ready (tras el APROBADO).
+                  echo "gate: $par omitido en draft, la bateria corre al pasar a ready"
+                elif [ "$REUSO" = "true" ]; then
+                  echo "gate: $par omitido, veredicto reusado por arbol identico ya validado"
                 else
-                  echo "gate: $par omitido SIN clasificacion fast valida" >&2
+                  echo "gate: $par omitido SIN autorizacion (ni fast, ni draft, ni reuso)" >&2
                   rc=1
                 fi ;;
               *)
@@ -427,6 +487,14 @@ jobs:
                 rc=1 ;;
             esac
           done
+          # (b2) En un PR que NO es draft con carril completo, la bateria es
+          # obligatoria: el PR pasa a ready solo tras el APROBADO y la matriz
+          # corre sobre el SHA final; shards=skipped ya no vale ahi. En draft
+          # y en el carril fast de docs el veredicto no cambia.
+          if [ "$EVENTO" = "pull_request" ] && [ "$DRAFT" != "true" ] && [ "$CARRIL" = "completo" ] && [ "$R_SHARDS" != "success" ]; then
+            echo "gate: PR no draft con carril completo exige shards=success (obtuvo $R_SHARDS)" >&2
+            exit 1
+          fi
           # (c) El contrato de cobertura NO se omite nunca: corre en ambos
           # carriles y cualquier resultado que no sea success (incluido
           # skipped) rebota.
