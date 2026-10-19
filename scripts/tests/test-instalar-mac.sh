@@ -24,13 +24,6 @@ mkdir -p "$T/bin"
 cat >"$T/bin/launchctl-falso" <<STUB
 #!/bin/sh
 printf '%s\n' "LAUNCHCTL \$*" >> "$LAUNCHLOG"
-# print de la sucesion: con semilla en \$T/print-sucesion.txt esta cargada y su
-# volcado es la semilla; sin semilla no esta cargada (exit 1). Otros print (el
-# vigilante) siguen contestando cargado (exit 0).
-if [ "\$1" = print ] && printf '%s\n' "\$*" | grep -q ai.goncloud.agent-work-sucesion; then
-  if [ -f "$T/print-sucesion.txt" ]; then cat "$T/print-sucesion.txt"; exit 0; fi
-  exit 1
-fi
 # bootstrap que falla N veces (N en \$T/fallar-bootstrap): simula un bootout que
 # todavia no termino.
 if [ "\$1" = bootstrap ] && [ -s "$T/fallar-bootstrap" ]; then
@@ -63,18 +56,33 @@ export INSTALAR_REF=HEAD
 out="$(bash "$INST" --dry-run 2>&1)" || fail "dry-run fallo: $out"
 [ -z "$(ls -A "$HOME")" ] || fail "dry-run escribio en HOME: $(ls -A "$HOME")"
 printf '%s' "$out" | grep -q "tmux-activity-watch.sh" || fail "dry-run no anuncia tmux-activity-watch.sh"
-printf '%s' "$out" | grep -q "vigia-rebase-r.sh" || fail "dry-run no anuncia el vigia del rebase (G#345 F6)"
-printf '%s' "$out" | grep -q "vigia-rebase-r.plist" || fail "dry-run no anuncia el plist del vigia (G#345 F6)"
 printf '%s' "$out" | grep -q "gui/59999" || fail "dry-run no usa el uid inyectado (falta gui/59999)"
 
-# (2) instala el conjunto completo.
+# (2) instala el conjunto completo, y retira los LaunchAgents de la ruta
+# muerta (encargos por CLI y vigía de R, G#350 F4) que una Mac instalada por
+# versiones anteriores todavía tenga puestos: los descarga (bootout), borra
+# su plist y el binario del vigía.
+PL2VIEJA="$HOME/Library/LaunchAgents/ai.goncloud.agent-work-sucesion.plist"
+PL3VIEJA="$HOME/Library/LaunchAgents/ai.goncloud.vigia-rebase-r.plist"
+mkdir -p "$HOME/Library/LaunchAgents"
+printf 'plist-viejo\n' >"$PL2VIEJA"
+printf 'plist-viejo\n' >"$PL3VIEJA"
+printf '#!/bin/sh\nexit 0\n' >"$HOME/bin/vigia-rebase-r.sh" 2>/dev/null || { mkdir -p "$HOME/bin" && printf '#!/bin/sh\nexit 0\n' >"$HOME/bin/vigia-rebase-r.sh"; }
+chmod +x "$HOME/bin/vigia-rebase-r.sh"
 out="$(bash "$INST" 2>&1)" || fail "instalar fallo: $out"
-for f in agent-tmux.sh agent-tmux-shell.zsh tmux-activity-watch.sh claude-stop-openclaw-event.sh shot.sh tablero-trabajo.sh vigia-rebase-r.sh; do
+for f in agent-tmux.sh agent-tmux-shell.zsh tmux-activity-watch.sh claude-stop-openclaw-event.sh shot.sh tablero-trabajo.sh; do
   [ -f "$HOME/bin/$f" ] || fail "falta \$HOME/bin/$f"
 done
+grep -q "bootout gui/59999/ai.goncloud.agent-work-sucesion" "$LAUNCHLOG" \
+  || fail "no descargo el LaunchAgent de sucesion con gui/59999 (G#350 F4)"
+grep -q "bootout gui/59999/ai.goncloud.vigia-rebase-r" "$LAUNCHLOG" \
+  || fail "no descargo el vigia de rebase de R con gui/59999 (G#350 F4)"
+[ ! -e "$PL2VIEJA" ] || fail "el plist de sucesion viejo quedo sin borrarse (G#350 F4)"
+[ ! -e "$PL3VIEJA" ] || fail "el plist del vigia viejo quedo sin borrarse (G#350 F4)"
+[ ! -e "$HOME/bin/vigia-rebase-r.sh" ] || fail "bin/vigia-rebase-r.sh quedo sin retirarse (G#350 F4)"
 [ -x "$HOME/bin/tablero-trabajo.sh" ] || fail "tablero-trabajo.sh quedo sin +x (claw lo corre directo)"
 [ -x "$HOME/bin/progress-events.py" ] || fail "progress-events.py no quedo instalado y ejecutable"
-for f in brief.py contexto.py contracts.py flota.py host.py lineas.py modelos.py native_gateway.py progress_bridge.py resources.py routing.py sesion.py spool.py cutover.py proyeccion.py; do
+for f in contexto.py proyeccion.py spool.py; do
   cmp -s "scripts/agent-work/$f" "$HOME/bin/agent-work/$f" || fail "agent-work/$f falta o difiere"
 done
 # El paquete chico de sistema_agentes que proyeccion.py importa (SUA-07 H0a).
@@ -89,27 +97,14 @@ done
 # El host instalado lee los datos de su carpeta: las adaptaciones que el manifiesto fija.
 (cd / && python3 -I -c "import sys; sys.path.insert(0, sys.argv[1]); import contexto; adaptaciones = contexto.leer_adaptaciones(); assert set(adaptaciones) == {\"opencode-run\", \"openclaw\"}, adaptaciones" "$HOME/bin/agent-work") >/dev/null 2>&1 \
   || fail "agent-work/contexto.py instalado no lee contexto/ instalado"
-# routing.py importa brief.py: cada modulo instalado tiene que importar solo con lo instalado.
+# cada modulo instalado tiene que importar solo con lo instalado.
 for f in "$HOME"/bin/agent-work/*.py; do
   m="$(basename "$f" .py)"
   (cd / && python3 -I -c "import sys; sys.path.insert(0, sys.argv[1]); import $m" "$HOME/bin/agent-work") >/dev/null 2>&1 \
     || fail "agent-work/$m.py instalado no importa con lo instalado"
 done
-[ -x "$HOME/bin/agent-work/cutover.py" ] || fail "cutover.py instalado sin +x"
 PL="$HOME/Library/LaunchAgents/ai.goncloud.tmux-activity-watch.plist"
 [ -f "$PL" ] || fail "falta el plist generado"
-# El vigia semanal del rebase (G#345 F6): mismo patron que el vigilante, con
-# el plist generado contra el HOME de mentira y cargado con el uid inyectado.
-[ -f "$HOME/bin/vigia-rebase-r.sh" ] && cmp -s scripts/mac/vigia-rebase-r.sh "$HOME/bin/vigia-rebase-r.sh" \
-  || fail "bin/vigia-rebase-r.sh falta o difiere"
-PL3="$HOME/Library/LaunchAgents/ai.goncloud.vigia-rebase-r.plist"
-[ -f "$PL3" ] || fail "falta el plist del vigia generado"
-grep -qF "$HOME/bin/vigia-rebase-r.sh" "$PL3" || fail "el plist del vigia no apunta al HOME instalado"
-grep -qF "$HOME/Library/Logs/goncloud/vigia-rebase-r.log" "$PL3" || fail "el plist del vigia no escribe su log en el HOME"
-grep -qF "/Users/dn" "$PL3" && fail "el plist del vigia trae /Users/dn a fuego"
-grep -q "bootstrap gui/59999.*ai.goncloud.vigia-rebase-r" "$LAUNCHLOG" \
-  || fail "no cargo el vigia con gui/59999 (G#345 F6)"
-[ -d "$HOME/Library/Logs/goncloud" ] || fail "falta Library/Logs/goncloud para el log del vigia"
 [ -f "$HOME/.tmux.conf" ] || fail "falta \$HOME/.tmux.conf"
 grep -qF "source ~/bin/agent-tmux-shell.zsh" "$HOME/.zshrc" 2>/dev/null \
   || fail "falta la linea de source en .zshrc"
@@ -118,46 +113,6 @@ printf '%s' "$out" | grep -q "instalado" || fail "no imprime que quedo instalado
 # (3) el plist generado usa el HOME de mentira, sin rutas fijas (mutacion: /Users/dn a fuego).
 grep -qF "$HOME/bin/tmux-activity-watch.sh" "$PL" || fail "el plist no apunta al HOME instalado"
 grep -qF "/Users/dn" "$PL" && fail "el plist trae /Users/dn a fuego"
-
-# (3b) la sucesion diaria de SUA-04 (4.3): sin R construido no se instala (B1); con el, sí.
-PL2="$HOME/Library/LaunchAgents/ai.goncloud.agent-work-sucesion.plist"
-[ ! -f "$PL2" ] || fail "sin R construido el plist de sucesion no debia instalarse"
-printf '%s' "$out" | grep -q "sin R construido" || fail "no dijo que falta el R construido: $out"
-mkdir -p "$HOME/dev/wt/r-sua02-c-gate" && printf 'x\n' > "$HOME/dev/wt/r-sua02-c-gate/openclaw.mjs"
-out="$(bash "$INST" 2>&1)" || fail "instalar con R construido fallo: $out"
-[ -f "$PL2" ] || fail "falta el plist de sucesion generado"
-grep -qF "$HOME/dev/wt/r-sua02-c-gate" "$PL2" || fail "el plist de sucesion no trae AGENT_WORK_SUCESION_RUNTIME_SOURCE con el HOME"
-grep -qF "AGENT_WORK_AVISOS" "$PL2" || fail "el plist de sucesion no prende los avisos (AGENT_WORK_AVISOS=1)"
-grep -qF "$HOME/dev/wt/agent-work-host/scripts/agent-work/encargo.py" "$PL2" || fail "el plist de sucesion no corre encargo.py del checkout del host"
-grep -qF "<string>diario</string>" "$PL2" || fail "el plist de sucesion no llama diario"
-grep -qF "<integer>5</integer>" "$PL2" || fail "el plist de sucesion no es a las 05"
-grep -qF "<integer>30</integer>" "$PL2" || fail "el plist de sucesion no es a las :30"
-grep -qF "en_US.UTF-8" "$PL2" || fail "el plist de sucesion no fija LANG"
-grep -qF "$HOME/Library/Logs/goncloud/agent-work-sucesion.log" "$PL2" || fail "el plist de sucesion no deja su log"
-grep -qF "/Users/dn" "$PL2" && fail "el plist de sucesion trae /Users/dn a fuego"
-grep -q "bootstrap gui/59999" "$LAUNCHLOG" || fail "no cargo la sucesion con gui/59999"
-# Semilla del print de la sucesion: a partir de aqui el stub la reporta cargada
-# con el runtime por omision, igual que el archivo instalado; las corridas
-# siguientes no deben relanzarla (caso 5).
-cat >"$T/print-sucesion.txt" <<SEMILLA
-	domain = gui/59999 {
-		"environment" => {
-			"AGENT_WORK_SUCESION_RUNTIME_SOURCE" => "$HOME/dev/wt/r-sua02-c-gate"
-		}
-	}
-SEMILLA
-
-# (3c) F2 (ronda 3): AGENT_WORK_SUCESION_RUNTIME mueve el runtime del canario en
-# el plist de sucesion generado; hoy la plantilla manda y el entorno se ignora.
-export HOME="$T/casa3c"; mkdir -p "$HOME"
-mkdir -p "$HOME/dev/wt/r-canario" && printf 'x\n' >"$HOME/dev/wt/r-canario/openclaw.mjs"
-out="$(AGENT_WORK_SUCESION_RUNTIME="$HOME/dev/wt/r-canario" bash "$INST" 2>&1)" \
-  || fail "instalar con runtime de canario propio fallo: $out"
-PL2C="$HOME/Library/LaunchAgents/ai.goncloud.agent-work-sucesion.plist"
-grep -qF "$HOME/dev/wt/r-canario" "$PL2C" || fail "el plist de sucesion no trae el runtime de AGENT_WORK_SUCESION_RUNTIME"
-grep -qF "r-sua02-c-gate" "$PL2C" && fail "el plist de sucesion trae el runtime por omision pese al entorno"
-grep -qF "/Users/dn" "$PL2C" && fail "el plist de sucesion trae /Users/dn a fuego"
-export HOME="$T/casa"
 
 # (4) el vigilante se carga con el uid inyectado.
 grep -q "bootstrap gui/59999" "$LAUNCHLOG" || fail "no cargo el vigilante con gui/59999"
@@ -200,31 +155,6 @@ bash "$INST" >/dev/null 2>&1 || fail "no reintento el bootstrap tras un fallo"
 [ "$(grep -c bootstrap "$LAUNCHLOG")" -ge $((nb + 2)) ] || fail "no reintento el bootstrap"
 rm -f "$T/fallar-bootstrap"
 
-# (5e) F3 (ronda 3): la sucesion cargada cuyo archivo instalado difiere del
-# generado se recarga (bootout y bootstrap, como el vigilante); hoy basta con
-# que este cargada y no se recarga.
-printf 'viejo\n' >"$PL2"
-bash "$INST" >/dev/null 2>&1 || fail "instalar con el plist de sucesion pisado fallo"
-lin_bo="$(grep -n "bootout gui/59999/ai.goncloud.agent-work-sucesion" "$LAUNCHLOG" | tail -1 | cut -d: -f1)"
-[ -n "$lin_bo" ] || fail "no recargo la sucesion: falta bootout gui/59999/ai.goncloud.agent-work-sucesion"
-lin_bs="$(grep -n "bootstrap gui/59999.*ai.goncloud.agent-work-sucesion" "$LAUNCHLOG" | tail -1 | cut -d: -f1)"
-[ -n "$lin_bs" ] || fail "no recargo la sucesion: falta el bootstrap tras el bootout"
-[ "$lin_bs" -gt "$lin_bo" ] || fail "el bootstrap de la sucesion no va despues del bootout"
-# el plist pisado vuelve a ser el generado (misma sustitucion que usa el script).
-esp="$T/esp.plist"; esc="$(printf '%s' "$HOME" | sed 's/[&|\\]/\\&/g')"
-sed "s|/Users/dn|$esc|g" scripts/mac/ai.goncloud.agent-work-sucesion.plist >"$esp"
-cmp -s "$esp" "$PL2" || fail "el plist de sucesion pisado no volvio al generado"
-rm -f "$esp"
-
-# (5f) F3 (ronda 3): --verificar mira tambien lo cargado: un volcado print con
-# runtime viejo falla nombrando el plist de sucesion; con el volcado sano, verde.
-mv "$T/print-sucesion.txt" "$T/print-sucesion.sana"
-printf 'domain = gui/59999 {\n\t"AGENT_WORK_SUCESION_RUNTIME_SOURCE" => "/Users/viejo/r-viejo"\n}\n' >"$T/print-sucesion.txt"
-out="$(bash "$INST" --verificar 2>&1)" && fail "verificar paso con la sucesion cargada contra un runtime viejo"
-printf '%s' "$out" | grep -q "ai.goncloud.agent-work-sucesion" || fail "verificar no nombra el plist de sucesion cargado viejo: $out"
-mv "$T/print-sucesion.sana" "$T/print-sucesion.txt"
-bash "$INST" --verificar >/dev/null 2>&1 || fail "verificar fallo con la sucesion cargada sana"
-
 # (6) --verificar: verde instalado, rojo nombrando el archivo tocado o ausente.
 bash "$INST" --verificar >/dev/null 2>&1 || fail "verificar fallo sobre instalacion sana"
 echo MANO >>"$HOME/bin/agent-tmux.sh"
@@ -233,14 +163,6 @@ printf '%s' "$out" | grep -q "agent-tmux.sh" || fail "verificar no nombra el arc
 rm "$HOME/bin/claude-stop-openclaw-event.sh"
 out="$(bash "$INST" --verificar 2>&1)" && fail "verificar paso con archivo ausente"
 printf '%s' "$out" | grep -q "claude-stop-openclaw-event.sh" || fail "verificar no nombra el archivo ausente: $out"
-# El vigia tambien lo mira --verificar (G#345 F6): script y plist ausentes,
-# rojo nombrandolos.
-rm "$HOME/bin/vigia-rebase-r.sh"
-out="$(bash "$INST" --verificar 2>&1)" && fail "verificar paso con vigia-rebase-r.sh ausente"
-printf '%s' "$out" | grep -q "vigia-rebase-r.sh" || fail "verificar no nombra vigia-rebase-r.sh ausente: $out"
-rm "$PL3"
-out="$(bash "$INST" --verificar 2>&1)" && fail "verificar paso con el plist del vigia ausente"
-printf '%s' "$out" | grep -q "ai.goncloud.vigia-rebase-r.plist" || fail "verificar no nombra el plist del vigia ausente: $out"
 
 # (7) blob contra la rama: fuente adulterada no se instala (mutacion: sin comprobar blob).
 export HOME="$T/casa2"; mkdir -p "$HOME"

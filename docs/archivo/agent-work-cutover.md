@@ -1,3 +1,9 @@
+# ARCHIVO (2026-10-19, G-archivar)
+
+El corte a tareas administradas y su código (`cutover.py`, `cutover_live.py`, `ensayo-gateway.sh`)
+se archivaron: claw corre en OpenClaw 2026.10.4 público sin tareas administradas. Este runbook
+queda solo como referencia histórica; los archivos y pruebas que nombra ya no existen.
+
 # Ensayo de adopción de encargos
 
 Estado: T11 completa (PR #252), y la parte A de T12 está instalada en la Mini desde el 2026-10-10 (`docs/evidence/agent-work/T12-parte-a.md`). `cutover.py` funciona solo con `--simulation`: no instala un binario, no modifica cron ni habla con un Gateway. El corte real es `scripts/agent-work/cutover_live.py` (T11-b).

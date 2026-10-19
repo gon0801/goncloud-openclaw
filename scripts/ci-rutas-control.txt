@@ -33,23 +33,13 @@ docs/evidence/corpus-rendiciones.tsv
 .saikit/progress/*.json
 # Evidencia versionada: la revisa scripts/tests/test-evidencia-sin-texto-de-usuario.sh (candado de privacidad).
 docs/evidence/**/*.jsonl
-# Configuracion de agent-work: proveedores de modelos (test-agent-work-modelos/claude/avisar/lineas.py).
+# Configuracion de agent-work: proveedores de modelos (test-agent-work-modelos/avisar/lineas.py).
 docs/evidence/agent-work/proveedores-permitidos.json
-# Configuracion de agent-work: cobertura que leen modelos, routing, acceptance y el e2e del loop principal.
+# Configuracion de agent-work: cobertura que leen modelos, routing y el e2e del loop principal.
 docs/evidence/agent-work/coverage.json
 # Configuracion de agent-work: politica de calidad (test-sistema-agentes-contrato.py).
 docs/evidence/agent-work/politica-calidad.json
 # Configuracion de agent-work: receta de merge que lee scripts/agent-work/merge.py (test-agent-work-merge.py).
 docs/evidence/agent-work/recetas-repos.json
-# Configuracion de agent-work: limites que leen los e2e de artifact y cutover.
-docs/evidence/agent-work/limits.json
-# Configuracion de agent-work: mapa de runtime (test-agent-work-requester-queue-mapper.sh, acceptance, artifact).
-docs/evidence/agent-work/runtime-map.json
-# Registro del par de aceptacion (test_agent_work_acceptance.py).
-docs/evidence/agent-work/acceptance-pair.json
-# Manifiesto de artefactos (test_agent_work_artifact.py).
-docs/evidence/agent-work/artifact-manifest.json
-# Foto de crons verificada por hash en test-agent-work-routing.py.
-docs/evidence/agent-work/SUA-00-M09b-cron-snapshot.json
 # Inventario del sistema unificado (test-sistema-agentes-contrato.py).
 docs/evidence/sistema-agentes-unificado/SUA-00-inventario.json

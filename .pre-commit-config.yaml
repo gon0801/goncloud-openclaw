@@ -49,6 +49,6 @@ repos:
     rev: v0.16.8
     hooks:
       - id: ruff-check
-        files: ^(scripts/sistema_agentes/|scripts/tests/test-sistema-agentes-(contrato|importar|sombra|derivar)\.py|scripts/agent-work/(contexto|flota|conducta|lineas|avisar|reporte|publicar-contexto|agentes|merge|proyeccion)\.py|scripts/tests/test-agent-work-(contexto|flota|conducta|lineas|avisar|reporte|publicar|agentes|claude|merge|proyeccion|raices)\.py)
+        files: ^(scripts/sistema_agentes/|scripts/tests/test-sistema-agentes-(contrato|importar|sombra|derivar)\.py|scripts/agent-work/(contexto|avisar|reporte|merge|proyeccion)\.py|scripts/tests/test-agent-work-(contexto|avisar|reporte|merge|proyeccion)\.py)
       - id: ruff-format
-        files: ^(scripts/sistema_agentes/|scripts/tests/test-sistema-agentes-(contrato|importar|sombra|derivar)\.py|scripts/agent-work/(contexto|flota|conducta|lineas|avisar|reporte|publicar-contexto|agentes|merge|proyeccion)\.py|scripts/tests/test-agent-work-(contexto|flota|conducta|lineas|avisar|reporte|publicar|agentes|claude|merge|proyeccion|raices)\.py)
+        files: ^(scripts/sistema_agentes/|scripts/tests/test-sistema-agentes-(contrato|importar|sombra|derivar)\.py|scripts/agent-work/(contexto|avisar|reporte|merge|proyeccion)\.py|scripts/tests/test-agent-work-(contexto|avisar|reporte|merge|proyeccion)\.py)

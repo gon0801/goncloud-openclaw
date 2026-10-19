@@ -560,7 +560,6 @@ class Inventario(unittest.TestCase):
             "main_cli_loop",
             "detect_silent_failures",
             "managedTasks.host.cancellation",
-            "cutover_live.py",
             "ProgressPublisher",
         }
         self.assertEqual(pedidas - {p["id"] for p in self.inventario["piezas"]}, set())

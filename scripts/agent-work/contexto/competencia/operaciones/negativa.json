@@ -3,7 +3,7 @@
   "profile": "operaciones",
   "kind": "negativa",
   "route": "mini-native/native/operaciones",
-  "brief": "Implementa en el repo de G una prueba nueva para brief.py.",
+  "brief": "Implementa en el repo de G una prueba nueva para el emisor de proyecciones.",
   "fixture": {
     "repo": {}
   },

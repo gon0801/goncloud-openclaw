@@ -96,7 +96,7 @@ class ImportePuro(unittest.TestCase):
 
 
 class CliDesdeOtroCwd(unittest.TestCase):
-    """El cron de la Mini corre `python3 <checkout>/scripts/agent-work/proyeccion.py`
+    """El CLI corre `python3 <checkout>/scripts/agent-work/proyeccion.py`
     desde el cwd que sea: el sys.path que arma el script tiene que alcanzar
     sistema_agentes.derivar sin variables nuevas."""
 
@@ -113,11 +113,6 @@ class CliDesdeOtroCwd(unittest.TestCase):
                 env=entorno,
                 cwd=temp,
             )
-
-    def test_pasar_help_corre_desde_un_cwd_ajeno(self):
-        hecho = self.correr("pasar", "--help")
-        self.assertEqual(hecho.returncode, 0, hecho.stderr)
-        self.assertIn("pasar", hecho.stdout)
 
     def test_derivar_corre_desde_un_cwd_ajeno(self):
         hecho = self.correr(
