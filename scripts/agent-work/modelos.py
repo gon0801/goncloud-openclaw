@@ -664,6 +664,19 @@ class RouteNotCertified:
 
 
 @dataclass(frozen=True)
+class VersionSinCertificar:
+    """Aviso, no rechazo (David, orden G-sin-candados 2026-10-19: "que solo AVISE"): la ruta está
+    certificada pero esta versión del CLI no está en certifiedCliVersions todavía. El encargo
+    corre, y el aviso viaja al resultado de pedirlo y al estado del host hasta que la medición la
+    certifique. Un rojo de la medición sí cierra (ruta_roja): eso ya midió y falló."""
+
+    cli_version: str
+    certified_versions: tuple[str, ...]
+    cli: str = "opencode"
+    """El CLI de la ruta: la frase lo nombra (opencode o claude)."""
+
+
+@dataclass(frozen=True)
 class RutaRoja:
     """La versión se midió y no pasó. La ruta sigue cerrada y la frase nombra la sonda."""
     cli_version: str
@@ -950,6 +963,14 @@ def _frase_ruta(caso: RouteNotCertified) -> tuple[str, tuple[str, ...]]:
                 ())
     return (f"La ruta de encargos por {caso.cli} todavía no está certificada. "
             f"La Mac tiene {caso.cli} {caso.cli_version}."), ()
+
+
+def frase_version_sin_certificar(caso: VersionSinCertificar) -> str:
+    """El aviso que viaja al resultado y al estado del host, con las palabras de David:
+    "versión no certificada: X"."""
+    certificadas = _lista(caso.certified_versions) or "ninguna"
+    return (f"versión no certificada: {caso.cli_version} (certificadas: {certificadas}); "
+            "el encargo corre.")
 
 
 def _frase_generacion(caso: GenerationNotCertified) -> tuple[str, tuple[str, ...]]:

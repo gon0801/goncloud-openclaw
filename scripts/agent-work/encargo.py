@@ -49,8 +49,9 @@ from modelos import (MODEL_PATTERN, POLICY_FILE, PROVIDER, Billing, Catalog, Cat
                      ContextoIncompleto, Explicacion, HostDown, HostMismatch, ModelFilter, ModelId, ModelNotListed,
                      OperatorCitation, PerfilRechazado, PermittedModel, PolicyUnreadable, ProviderClosure,
                      ProviderGrant, ProviderId, ProviderNotConfigured, ProviderPolicy, SlotBlocked, UNVERIFIED_REF,
-                     WorkspaceRefused, authorize, catalogo_claude, explicar, pedido, policy_document,
-                     RouteNotCertified, ruta_roja, succession_actual)
+                     VersionSinCertificar, WorkspaceRefused, authorize, catalogo_claude, explicar,
+                     frase_version_sin_certificar, pedido, policy_document, ruta_roja,
+                     succession_actual)
 from sesion import (ALLOWED_ROOT, COVERAGE_FILE, EXIT_NO_SCRATCH, EXIT_NO_WORKSPACE, EXIT_OUTSIDE_GROUP, PROFILE_ID,
                     MEDIDAS_FILE, Route, Workspace, adaptador, cargar_ruta, entrada_medida,
                     infraestructura_en_espera, medicion_terminal, model_in_use, read_events)
@@ -156,6 +157,9 @@ class EstadoTarea:
     permisos: tuple[str, ...] = ()
     """Cada permiso que opencode evaluó, permitido o negado, como "<permiso>:<acción>"."""
     flota: dict | None = None
+    aviso: str | None = None
+    """Lo que la ruta avisó al lanzar esta corrida (G-sin-candados): "versión no certificada: X".
+    None: la ruta abrió sin avisar nada."""
     """El sistema-agentes.flota.v1 del intento, cuando la corrida tuvo paquete y ya cerró."""
 
 
@@ -298,15 +302,22 @@ def preparar(repo: Path | None, modelo: str | None, *, perfil: str | None = None
     canary = isinstance(beat, HostBeat) and beat.canary
     closed = cargar_ruta(checkout, state_root, HOST_ID, adapter_id).open_for(
         version_cli, manifiesto["generation"] if manifiesto else None, canary=canary)
+    # Una versión fuera de certifiedCliVersions ya no niega el encargo (David, orden G-sin-candados
+    # 2026-10-19: "que solo AVISE"): corre, y los avisos viajan en la frase del Preparado. Lo que
+    # sigue negando aquí: un rojo terminal de la medición (esa versión ya falló su banco), un
+    # estado de ruta que no es certified y una generación del paquete sin certificar (protege el
+    # paquete).
+    avisos = [frase_version_sin_certificar(closed)] if isinstance(closed, VersionSinCertificar) else []
+    aviso_ruta = avisos[0] if avisos else None
     medida = entrada_medida(state_root, HOST_ID, adapter_id, version_cli)
     head = _head(checkout)
     rojo_terminal = (isinstance(medida, dict) and medida.get("estado") == "rojo"
                      and medicion_terminal(medida, head))
-    if isinstance(closed, RouteNotCertified) and rojo_terminal:
+    if aviso_ruta is not None and rojo_terminal:
         return explicar(ruta_roja(medida, adapter_id, version_cli))
     # Mientras la versión se mide, el pedido se registra igual: no hay rechazo de ruta ni de host.
     # Un rojo de otro commit tampoco es cierre: el host lo vuelve a medir.
-    midiendo = (closed is not None and isinstance(medida, dict) and (
+    midiendo = (aviso_ruta is not None and isinstance(medida, dict) and (
         medida.get("estado") in ("probando", "infraestructura")
         or (medida.get("estado") == "rojo" and not rojo_terminal)))
     workspace = None
@@ -315,7 +326,7 @@ def preparar(repo: Path | None, modelo: str | None, *, perfil: str | None = None
         if not isinstance(workspace, Workspace):
             return explicar(workspace)
     if not midiendo:
-        if closed is not None:
+        if closed is not None and aviso_ruta is None:
             return explicar(closed)
         if isinstance(beat, HostDown):
             return explicar(beat)
@@ -323,9 +334,15 @@ def preparar(repo: Path | None, modelo: str | None, *, perfil: str | None = None
                                    ("policy", beat.policy_digest, policy.digest),
                                    ("cli-version", beat.cli_version, catalog.cli_version)):
             if theirs != ours:
+                if what == "cli-version":
+                    # host-desfasado también es solo aviso (G-sin-candados): el host decide con otra
+                    # versión del CLI; el encargo corre y el estado de ambos lo dice.
+                    avisos.append(explicar(HostMismatch(what, str(theirs), str(ours))).frase)
+                    continue
                 return explicar(HostMismatch(what, str(theirs), str(ours)))
         if beat.slot == "blocked":
             return explicar(SlotBlocked(beat.blocked_by))
+    aviso = " ".join(avisos) or None
     revision = None
     if workspace is not None:
         sha = _head(workspace.root)
@@ -337,13 +354,13 @@ def preparar(repo: Path | None, modelo: str | None, *, perfil: str | None = None
         args += ("--perfil", perfil)
     if midiendo:
         nombre = "claude" if adapter_id == "claude" else "opencode"
+        frase = " ".join([*avisos, f"La ruta de encargos está midiendo {nombre} {version_cli}; "
+                                    "el encargo sale en unos minutos"])
         return Preparado(str(model.model), model.billing, revision, args,
                          isinstance(beat, HostBeat) and beat.slot == "running",
-                         model.policy_digest[:12], version_cli, espera="recertificando",
-                         frase=(f"La ruta de encargos está midiendo {nombre} {version_cli}; "
-                                "el encargo sale en unos minutos"))
+                         model.policy_digest[:12], version_cli, espera="recertificando", frase=frase)
     return Preparado(str(model.model), model.billing, revision, args,
-                     beat.slot == "running", model.policy_digest[:12], beat.cli_version)
+                     beat.slot == "running", model.policy_digest[:12], beat.cli_version, frase=aviso)
 
 
 _SALIDAS = {
@@ -452,13 +469,17 @@ def estado(task_id: "str | None", *, state_root: Path, checkout: Path,
                 explicacion = replace(explicacion, causa=causa)
     usado, razon = el_adaptador.modelo_en_uso(events, modelo)
     flota = _json(RunDir(Path(assignment["resultRef"]).parent).fleet) if assignment.get("resultRef") else None
+    aviso_grabado = _json(record.aviso)
+    frase_aviso = (aviso_grabado.get("frase") or None
+                   if isinstance(aviso_grabado, dict) and isinstance(aviso_grabado.get("frase"), str) else None)
     return EstadoTarea(
         task_id, modelo, grant.billing if grant else None, found["status"],
         found["resource"] if found["resource"] in ("AbsenceVerified", "CleanupPending") else None, explicacion,
         tuple(f"{denied.permission}:{denied.pattern}" for denied in events.denied) if events else (),
         events.providers_called if events else (), events.session_directory if events else None, salida,
         tuple(limpio(line) for line in (*events.tail, *events.log_errors)) if events else (),
-        usado, razon, events.evaluations if events else (), flota if isinstance(flota, dict) else None)
+        usado, razon, events.evaluations if events else (), flota if isinstance(flota, dict) else None,
+        frase_aviso)
 
 
 def _cited(decision: OperatorCitation) -> str:
@@ -1798,20 +1819,22 @@ def _answer(result: "Preparado | Explicacion | HostBeat | EstadoTarea", now: flo
                    "carpetaDeSesion": result.carpeta_de_sesion, "salida": result.salida,
                    "logTail": list(result.log_tail), "modeloUsado": result.modelo_usado,
                    "modeloUsadoRazon": result.modelo_usado_razon, "permisos": list(result.permisos),
-                   "flota": result.flota}
+                   "flota": result.flota, "aviso": result.aviso}
     if isinstance(result, Preparado):
         answer = {"ok": True, "modelo": result.modelo, "cobro": result.cobro, "inputRevision": result.input_revision,
                   "briefArgs": list(result.brief_args), "enFila": result.en_fila,
                   "host": {"politica": result.politica, "cli": result.cli}}
         if result.espera:
             answer["espera"] = result.espera
+        if result.frase:
+            # El aviso de la ruta (G-sin-candados): "versión no certificada: X" viaja en el resultado.
             answer["frase"] = result.frase
         return 0, answer
     return 0, {"ok": True, "pid": result.pid, "latidoHace": round(now - result.beat_at, 1), "slot": result.slot,
                "bloqueadoPor": list(result.blocked_by), "tarea": result.task_id, "modelo": result.model,
                "checkout": result.checkout, "commit": result.commit,
                "politica": result.policy_digest and result.policy_digest[:12], "cli": result.cli_version,
-               "canario": result.canary}
+               "canario": result.canary, "aviso": result.aviso}
 
 
 def _parser() -> argparse.ArgumentParser:

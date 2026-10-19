@@ -453,13 +453,18 @@ class Preparar(Mac):
 
     def test_a_host_that_would_decide_with_something_else_is_out_of_step(self):
         for change, piece in (({"policyDigest": "f" * 64}, "otra política"), ({"policyDigest": None}, "otra política"),
-                              ({"checkout": "/otro/checkout"}, "otro checkout"),
-                              ({"cliVersion": "1.18.20"}, "otra versión de opencode")):
+                              ({"checkout": "/otro/checkout"}, "otro checkout")):
             with self.subTest(change):
                 self.beat(**change)
                 answer = self.preparar()
                 self.assertEqual((answer.get("causa"), answer.get("accion")), ("host-desfasado", "no-registrar"))
                 self.assertIn(piece, answer["frase"])
+        # G-sin-candados (David, 2026-10-19): el desfase de versión del CLI es solo aviso; el
+        # encargo se prepara y la frase lo dice.
+        self.beat(cliVersion="1.18.20")
+        desfasado = self.preparar()
+        self.assertIs(desfasado["ok"], True)
+        self.assertIn("otra versión de opencode", desfasado["frase"])
         self.beat(slot="blocked", blockedBy=["777 Mon Oct 12 18:00:00 2026 sleep 300"])
         blocked = self.preparar()
         self.assertEqual(blocked["causa"], "slot-bloqueado")
@@ -482,13 +487,19 @@ class Preparar(Mac):
         )
         self.assertEqual(self.argv_log(), ["--version", "models", "--version", "--version", "models"])
 
-    def test_a_new_cli_version_relists_and_closes_the_repos_certified_route(self):
+    def test_a_new_cli_version_relists_and_prepares_with_its_aviso(self):
+        # G-sin-candados (David, 2026-10-19): la versión nueva ya no cierra la ruta al preparar;
+        # el pedido sale con "versión no certificada" en su frase.
         self.beat()
         self.assertTrue(self.preparar()["ok"])
         (self.bin / "version").write_text("1.18.36\n")
-        closed = self.preparar()
-        self.assertEqual((closed["causa"], closed["frase"]),
-                         ("ruta-no-certificada", "Ruta certificada para 1.18.35, 2.0.29, la Mac tiene opencode 1.18.36."))
+        abierto = self.preparar()
+        self.assertIs(abierto["ok"], True)
+        # Dos avisos encadenados: la versión nueva no está certificada y, además, el host vivo
+        # decide con otra (host-desfasado, también solo aviso desde G-sin-candados).
+        self.assertEqual(abierto["frase"], "versión no certificada: 1.18.36 (certificadas: 1.18.35, 2.0.29); "
+                                           "el encargo corre. El host de encargos corre con otra versión de "
+                                           "opencode: el host tiene 1.18.35 y aquí hay 1.18.36.")
         self.assertEqual(self.argv_log()[-2:], ["--version", "models"])
 
     def test_the_script_answers_one_json_line_when_run_as_a_program(self):
@@ -513,7 +524,7 @@ class Estado(Mac):
         self.assertEqual(answer, {"ok": True, "pid": 4242, "slot": "running", "bloqueadoPor": [], "tarea": "t-9",
                                   "modelo": "zai-coding-plan/glm-5.3", "checkout": str(self.checkout),
                                   "commit": "c" * 40, "politica": self.policy().digest[:12], "cli": "1.18.35",
-                                  "canario": False})
+                                  "canario": False, "aviso": None})
         self.beat(beatAt=time.time() - 121)
         code, out, _ = self.cli("estado")
         self.assertEqual((code, json.loads(out)["frase"]), (3, "El host de encargos no corre desde hace 2 min."))
@@ -1549,6 +1560,7 @@ class Recertificar(Mac):
         self.assertEqual((answer["ok"], answer.get("espera")), (True, "recertificando"))
         self.assertEqual(
             answer["frase"],
+            "versión no certificada: 1.19.3 (certificadas: 1.18.35, 2.0.29); el encargo corre. "
             "La ruta de encargos está midiendo opencode 1.19.3; el encargo sale en unos minutos")
         self.assertEqual(answer["inputRevision"]["kind"], "code")
         self.assertIn("zai-coding-plan/glm-5.3-flash", answer["briefArgs"])

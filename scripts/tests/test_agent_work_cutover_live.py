@@ -47,7 +47,9 @@ class FakeGateway:
 
     def __init__(self, jobs, cancel_on_disable=False, unavailable=None, managed=None):
         self.jobs = jobs
-        self.managed = managed or {"enabled": False, "hosts": {}}
+        # R's live config carries runTimeoutSeconds (its schema wants it when enabled): G's cutover
+        # preserves it and no longer imposes its own (G-sin-candados).
+        self.managed = managed or {"enabled": False, "hosts": {}, "runTimeoutSeconds": 3600}
         self.runs = {}
         self.patches = []
         self.cancel_on_disable = cancel_on_disable
@@ -135,8 +137,23 @@ class CutoverLiveTest(unittest.TestCase):
         self.assertEqual(self.apply(gateway), "transferred")
         self.assertEqual(gateway.managed["requesters"], ["main"])
 
+    def test_the_cutover_keeps_r_run_timeout_and_ignores_the_entry_old_cap(self):
+        # G-sin-candados (David, 2026-10-19): G ya no impone tope de corrida; el 3600 de la entrada
+        # vieja deja de alimentar el parche y se conserva el valor que la config de R ya tenga.
+        gateway = FakeGateway([job()], managed={"enabled": False, "hosts": {}, "runTimeoutSeconds": 5400})
+        self.entry(runTimeoutSeconds=3600)
+        self.assertEqual(self.apply(gateway), "transferred")
+        self.assertEqual(gateway.managed["runTimeoutSeconds"], 5400)
+
+    def test_a_cutover_without_a_run_timeout_in_r_refuses_instead_of_imposing_one(self):
+        gateway = FakeGateway([job()], managed={"enabled": False, "hosts": {}})
+        self.entry(runTimeoutSeconds=3600)
+        with self.assertRaisesRegex(cutover_live.CutoverRefused, "runTimeoutSeconds"):
+            self.apply(gateway)
+        self.assertEqual(gateway.patches, [], "nothing is written before the refusal")
+
     def test_the_cutover_adds_main_to_an_operator_requester_list_and_drops_nothing(self):
-        gateway = FakeGateway([job()], managed={"enabled": False, "hosts": {}, "requesters": ["ingenieria"]})
+        gateway = FakeGateway([job()], managed={"enabled": False, "hosts": {}, "requesters": ["ingenieria"], "runTimeoutSeconds": 3600})
         self.entry()
         self.assertEqual(self.apply(gateway), "transferred")
         self.assertEqual(gateway.managed["requesters"], ["ingenieria", "main"])
@@ -161,7 +178,8 @@ class CutoverLiveTest(unittest.TestCase):
 
     def test_revert_removes_only_its_adapter_when_the_host_keeps_another(self):
         gateway = FakeGateway([job()], managed={"enabled": True, "instructionRoot": str(self.root),
-                                                "hosts": {"mini": {"deviceId": "device", "adapters": ["fixture-cli-b"]}}})
+                                                "hosts": {"mini": {"deviceId": "device", "adapters": ["fixture-cli-b"]}},
+                                                "runTimeoutSeconds": 3600})
         self.entry()
         self.assertEqual(self.apply(gateway), "transferred")
         self.assertEqual(gateway.managed["hosts"]["mini"]["adapters"], ["fixture-cli-a", "fixture-cli-b"])
@@ -171,7 +189,8 @@ class CutoverLiveTest(unittest.TestCase):
 
     def test_revert_drops_a_host_left_without_adapters_while_another_host_stays_open(self):
         gateway = FakeGateway([job()], managed={"enabled": True, "instructionRoot": str(self.root),
-                                                "hosts": {"pc": {"deviceId": "pc-device", "adapters": ["fixture-cli-b"]}}})
+                                                "hosts": {"pc": {"deviceId": "pc-device", "adapters": ["fixture-cli-b"]}},
+                                                "runTimeoutSeconds": 3600})
         self.entry()
         self.assertEqual(self.apply(gateway), "transferred")
         self.assertEqual(cutover_live.revert(self.state, gateway, sleep=lambda _: None), "reverted; old crons re-enabled")
@@ -210,7 +229,8 @@ class CutoverLiveTest(unittest.TestCase):
 
     def test_freeze_closes_all_admission_without_a_state_file(self):
         gateway = FakeGateway([job()], managed={"enabled": True, "instructionRoot": str(self.root),
-                                                "hosts": {"mini": {"deviceId": "device", "adapters": ["fixture-cli-b"]}}})
+                                                "hosts": {"mini": {"deviceId": "device", "adapters": ["fixture-cli-b"]}},
+                                                "runTimeoutSeconds": 3600})
         self.assertEqual(self.cli(gateway, "freeze"), (0, "frozen", ""))
         self.assertEqual((gateway.managed["enabled"], gateway.managed["hosts"]["mini"]["adapters"]), (False, ["fixture-cli-b"]))
 

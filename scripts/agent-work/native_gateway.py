@@ -25,11 +25,12 @@ from contracts import (HOST_BEAT_FILE, AuthorizedOperation, HostBeat, HostObserv
                        RunDir, SessionRecord, operation_id)
 import contexto
 import flota
-from host import (ACCEPT_DEADLINE_SECONDS, RESULT_DEADLINE_SECONDS, GIT_REPO_VARS, DeliveryDeferred, Host,
+from host import (ACCEPT_DEADLINE_SECONDS, GIT_REPO_VARS, DeliveryDeferred, Host,
                   PhotoFailed, repo_photo, writes_source)
 from modelos import claude_por_omision, opencode_por_omision
 from modelos import (POLICY_FILE, CatalogStore, CatalogUnavailable, ContextoIncompleto, ExactModel, ModelNotListed,
-                     PerfilRechazado, ProviderNotConfigured, ProviderPolicy, authorize, catalogo_claude, explicar,
+                     PerfilRechazado, ProviderNotConfigured, ProviderPolicy, RouteNotCertified,
+                     VersionSinCertificar, authorize, catalogo_claude, explicar, frase_version_sin_certificar,
                      ruta_roja)
 from progress_bridge import transfer_host_projection, transfer_projection
 import proyeccion
@@ -478,6 +479,10 @@ def claim_run_once(client, *, host, manager, backend, instance_id, deps, adapter
         if registered is not None:
             raise ValueError(f"the launch of a registered operation is now refused: {why.causa}")
         return host.refuse(key, authorized, client.admit_host, {"causa": why.causa, "frase": why.frase})
+    if plan.aviso:
+        # El aviso de la ruta viaja con la corrida (G-sin-candados): "versión no certificada: X"
+        # queda en el registro que `encargo.py estado` lee de esta tarea.
+        atomic_json(record.aviso, {"frase": plan.aviso})
     if plan.perfil is not None:
         # El paquete de la corrida, copiado ANTES de registrar la asignación: el protocolo que la
         # asignación le dice al CLI depende de si su perfil escribe fuente, y un protocolo que cambia
@@ -574,8 +579,12 @@ class RunHost:
 
     def __init__(self, client, host, manager, backend, *, instance_id, checkout, state_root, opencode_bin,
                  allowed_root, canary=False, accept_deadline_seconds=ACCEPT_DEADLINE_SECONDS,
-                 result_deadline_seconds=RESULT_DEADLINE_SECONDS, clock=time.time, claude_bin=None,
+                 result_deadline_seconds=None, clock=time.time, claude_bin=None,
                  lanzar_recert=None):
+        """`result_deadline_seconds` ya no tiene tope por omisión (David, orden G-sin-candados
+        2026-10-19: un encargo vivo corre lo que necesite; el host solo lo da por muerto si el
+        proceso de opencode murió). Un tope explícito existe para quien lo pide a propósito: el
+        banco de medición (BANCO_PLAZO), que cuelga corridas de su propio experimento."""
         self.client, self.host, self.manager, self.backend = client, host, manager, backend
         self.instance_id = instance_id
         self.checkout = Path(checkout)
@@ -670,9 +679,21 @@ class RunHost:
             slot = "blocked" if blocked else "free"
         beat = HostBeat(os.getpid(), self.started_at, self.clock(), str(self.checkout), self.commit, version,
                         self.policy.digest, slot, blocked, task_id, model, since, str(self.host.state_dir),
-                        self.canary)
+                        self.canary, self._aviso_de_ruta(version))
         atomic_json(self.state_root / HOST_BEAT_FILE, beat.document())
         return beat
+
+    def _aviso_de_ruta(self, version: str) -> "str | None":
+        """Lo que la ruta de este host avisa de su CLI (G-sin-candados): "versión no certificada:
+        X" mientras la versión viva no esté en certifiedCliVersions. El aviso no frena nada: viaja
+        en el beat para que el estado del host lo muestre hasta que la medición la certifique."""
+        if version == "unknown":
+            return None
+        ruta = cargar_ruta(self.checkout, self.state_root, self.client.host_id)
+        if ruta.status != "certified" or version in ruta.certified_cli_versions:
+            return None
+        return frase_version_sin_certificar(
+            VersionSinCertificar(version, tuple(sorted(ruta.certified_cli_versions))))
 
     def package(self, brief: bytes) -> "Package | ContextoIncompleto | PerfilRechazado | None":
         """What this checkout holds for a brief that asks for a profile (SUA-03, 4.5): the manifest whole
@@ -724,7 +745,11 @@ class RunHost:
         try:
             catalog = self.catalog(fresh=True)
         except CatalogUnavailable:
-            return route.open_for("sin contestar su versión", canary=False)
+            # Un CLI que no contesta su versión sigue negando la tarea (no hay catálogo que
+            # autorice nada). La versión no certificada ya no niega (G-sin-candados), pero la
+            # desconocida sí: open_for la trataría como aviso, y aquí no hay plan posible.
+            return RouteNotCertified("sin contestar su versión",
+                                     tuple(sorted(route.certified_cli_versions)), route.adapter_id)
         freno = self._freno(adapter_id, catalog.cli_version)
         if freno is not None:
             return freno
@@ -1371,7 +1396,10 @@ def main(argv=None):
     parser.add_argument("--state-root", help="where host.json and catalogo.json live (default: the parent of "
                                              "--host-state-dir)")
     parser.add_argument("--accept-deadline-seconds", type=float, default=ACCEPT_DEADLINE_SECONDS)
-    parser.add_argument("--result-deadline-seconds", type=float, default=RESULT_DEADLINE_SECONDS)
+    parser.add_argument("--result-deadline-seconds", type=float, default=None,
+                        help="tope explícito de resultado, solo para quien lo pide a propósito (el banco de "
+                             "medición); por omisión no hay tope: un encargo vivo corre lo que necesite y el "
+                             "host solo lo da por muerto cuando el proceso de opencode murió (G-sin-candados)")
     parser.add_argument("--canary", action="store_true",
                         help="also launch on a sandbox-tested-uncertified route or a new opencode version")
     parser.add_argument("--flush-results", action="store_true")

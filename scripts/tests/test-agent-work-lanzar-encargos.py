@@ -19,7 +19,7 @@ TMUX = shutil.which("tmux") or "/opt/homebrew/bin/tmux"
 # The double records each start and then lives until it is told to die.
 HOST_DOUBLE = """#!/bin/bash
 here=$(dirname "$0")
-{ printf '%s\\n' "$@"; printf 'OPENCLAW_BIN=%s\\nLANG=%s\\nPWD=%s\\n' "$OPENCLAW_BIN" "$LANG" "$PWD"; } \
+{ printf '%s\\n' "$@"; printf 'OPENCLAW_BIN=%s\\nLANG=%s\\nPWD=%s\\nPATH=%s\\n' "$OPENCLAW_BIN" "$LANG" "$PWD" "$PATH"; } \
   > "$here/host-$$.txt"
 echo "host double $$ up"
 trap 'kill $waiting; exit 0' TERM
@@ -52,7 +52,9 @@ class LanzarEncargos(unittest.TestCase):
                     "AGENT_WORK_PROGRESS_CLIENT": str(self.root / "progress-events.py"),
                     "OPENCLAW_BIN": "/isolated/openclaw", "AGENT_WORK_PYTHON": str(self.bin / "python-host"),
                     "AGENT_WORK_SLOT_GROUP": self.group, "AGENT_WORK_WORKSPACE_ROOT": str(self.dev),
-                    "AGENT_WORK_SETTLE_SECONDS": "0.5", "AGENT_WORK_RESTART_SECONDS": "0.3"}
+                    "AGENT_WORK_SETTLE_SECONDS": "0.5", "AGENT_WORK_RESTART_SECONDS": "0.3",
+                    # Sin shims por omisión: el caso feliz avisa y arranca igual (adenda G-sin-candados).
+                    "AGENT_WORK_CANDADOS_SHIMS": str(self.root / "shims-que-no-estan")}
         self.env.pop("AGENT_WORK_SUCESION_RUNTIME_SOURCE", None)
 
     def clean(self):
@@ -83,13 +85,14 @@ class LanzarEncargos(unittest.TestCase):
 
     def test_it_starts_the_one_host_that_launches_a_session_per_task(self):
         launched = self.launch()
-        self.assertEqual((launched.returncode, launched.stderr), (0, ""))
+        self.assertEqual((launched.returncode, launched.stdout), (0, launched.stdout))
         spool = self.state / "enc-1"
-        self.assertEqual(launched.stdout.splitlines(), [
-            "host: host-encargos arrancó",
-            f"HOST enc-1 opencode sesión=host-encargos spool={spool} grupo={self.group}"])
+        self.assertEqual(launched.stdout.splitlines()[:1], ["host: host-encargos arrancó"])
         self.assertEqual(self.sessions(), ["host-encargos"])
-        self.assertEqual([lines for _, lines in self.starts()], [[
+        [registro] = self.starts()
+        lineas = registro[1]
+        tope = lineas.index("OPENCLAW_BIN=/isolated/openclaw")
+        self.assertEqual(lineas[:tope], [
             "scripts/agent-work/native_gateway.py", "--openclaw-bin", "/isolated/openclaw",
             "--host-id", "mac-local", "--expect-url", "ws://127.0.0.1:18789",
             "--host-state-dir", str(spool), "--state-root", str(self.state),
@@ -97,16 +100,34 @@ class LanzarEncargos(unittest.TestCase):
             "--progress-client", str(self.root / "progress-events.py"), "--watch",
             "--cli-instance-id", "enc-1", "--cli-tmux-socket", self.socket, "--tmux-bin", TMUX,
             "--workspace-root", str(self.dev), "--opencode-bin", str(self.bin / "opencode"),
-            "--slot-group", self.group,
-            "OPENCLAW_BIN=/isolated/openclaw", "LANG=en_US.UTF-8", f"PWD={ROOT}"]])
+            "--slot-group", self.group])
+        self.assertEqual(lineas[tope:tope + 3],
+                         ["OPENCLAW_BIN=/isolated/openclaw", "LANG=en_US.UTF-8", f"PWD={ROOT}"])
+        # Adenda G-sin-candados: sin carpeta de shims, avisa y arranca igual.
+        self.assertEqual(lineas[tope + 3], f"PATH={os.environ['PATH']}")
+        self.assertIn(f"no existen los shims de candados ({self.root / 'shims-que-no-estan'}); "
+                      "el host corre sin ellos", launched.stderr)
         self.assertEqual(oct(spool.stat().st_mode & 0o777), "0o700")
         self.assertNotIn("AGENT_WORK_SUCESION_RUNTIME_SOURCE", (spool / "host-cmd.txt").read_text())
+
+    def test_the_launched_host_carries_the_candados_shims_at_the_front_of_its_path(self):
+        # Adenda G-sin-candados (2026-10-19): el entorno del proceso lanzado trae los shims de
+        # quality-kit al frente del PATH.
+        shims = self.root / "shims"
+        shims.mkdir()
+        launched = self.launch(AGENT_WORK_CANDADOS_SHIMS=str(shims))
+        self.assertEqual(launched.returncode, 0)
+        self.assertEqual(launched.stderr, "")
+        [registro] = self.starts()
+        linea_path = next(linea for linea in registro[1] if linea.startswith("PATH="))
+        self.assertTrue(linea_path.startswith(f"PATH={shims}:"))
+        self.assertTrue(linea_path.endswith(os.environ["PATH"]))
 
     def test_canario_reaches_the_host_and_a_second_run_reuses_it(self):
         launched = self.launch("--canario")
         self.assertEqual(launched.stdout.splitlines()[-1], "HOST enc-1 opencode sesión=host-encargos "
                          f"spool={self.state / 'enc-1'} grupo={self.group} canario")
-        self.assertEqual(self.starts()[0][1][-5:-3], [self.group, "--canary"])
+        self.assertEqual(self.starts()[0][1][-6:-4], [self.group, "--canary"])
         again = self.launch("--canario")
         self.assertEqual((again.returncode, again.stdout.splitlines()[0]), (0, "host: host-encargos ya corre"))
         self.assertEqual(len(self.starts()), 1, "a second host started")
@@ -126,10 +147,11 @@ class LanzarEncargos(unittest.TestCase):
         self.assertEqual(self.launch().returncode, 0)
         refused = self.launch("--canario")
         spool = self.state / "enc-1"
-        self.assertEqual((refused.returncode, refused.stdout, refused.stderr),
-                         (1, "", f"lanzar-encargos: host-encargos ya corre con otro comando (ver {spool}/host-cmd.txt). "
-                                 f"Para cambiarlo, apágalo antes: {TMUX} -L {self.socket} kill-session "
-                                 "-t host-encargos\n"))
+        self.assertEqual((refused.returncode, refused.stdout),
+                         (1, ""))
+        self.assertIn(f"lanzar-encargos: host-encargos ya corre con otro comando (ver {spool}/host-cmd.txt). "
+                      f"Para cambiarlo, apágalo antes: {TMUX} -L {self.socket} kill-session "
+                      "-t host-encargos", refused.stderr)
         self.assertEqual(len(self.starts()), 1)
         self.assertNotIn("--canary", (spool / "host-cmd.txt").read_text())
 

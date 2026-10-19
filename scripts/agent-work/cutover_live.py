@@ -126,11 +126,22 @@ def native_patch(entry, config, limits):
     if missing:
         raise CutoverRefused(f"{entry['id']} needs {', '.join(missing)} to open {entry['host']}/{entry['adapter']}")
     requesters = managed.get("requesters", [])
+    run_timeout = managed.get("runTimeoutSeconds")
+    if run_timeout is None:
+        # G-sin-candados (David, 2026-10-19): G ya no impone tope de corrida a la tarea administrada
+        # de claw; el 3600 de la entrada vieja del cutover deja de alimentar el parche. El schema de
+        # R vigente (managedTasks.runTimeoutSeconds, entero 1..3600, exigido cuando enabled) todavía
+        # no acepta "sin tope", así que un cutover hacia una config de R sin valor se niega aquí,
+        # antes de escribir nada: el valor lo fija el operador en R (o R se relaja y esta negación
+        # sobra). Lo que R ya tenga se conserva tal cual.
+        raise CutoverRefused("managedTasks.runTimeoutSeconds has no value in the Gateway config and G no longer "
+                             f"imposes one: set it in R's config (its schema accepts 1..3600) or relax R; "
+                             f"refusing to open {entry['id']} with a cap this repo chose")
     return {"managedTasks": {
         "enabled": True, "instructionRoot": root, "profile": values,
         # R hands the requester tools only to these agents; an operator's list keeps its entries.
         "requesters": requesters if "main" in requesters else [*requesters, "main"],
-        "runTimeoutSeconds": managed.get("runTimeoutSeconds") or entry.get("runTimeoutSeconds", 3600),
+        "runTimeoutSeconds": run_timeout,
         "hosts": {entry["host"]: {"deviceId": device,
                                   "adapters": sorted(set(host.get("adapters", [])) | {entry["adapter"]})}}}}
 

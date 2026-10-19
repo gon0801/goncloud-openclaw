@@ -23,7 +23,7 @@ from contracts import RunDir, SessionRecord
 from host import delivery_line
 from modelos import (CLAUDE_ALIASES, Catalog, DefaultModel, ExactModel, GenerationNotCertified, MalformedHeader,
                      ModelId, PerfilRechazado, PermittedModel, ProviderPolicy, Refusal, RouteNotCertified,
-                     WorkspaceRefused, authorize)
+                     VersionSinCertificar, WorkspaceRefused, authorize, frase_version_sin_certificar)
 from resources import BoundaryBusy, TmuxBackend, _ps
 from spool import atomic_json
 
@@ -185,17 +185,22 @@ class Route:
         return Route(host_id, adapter_id, ROUTE_FORM, status, certified, frozenset(generations))
 
     def open_for(self, cli_version: str, generation: int | None = None, *, canary: bool
-                 ) -> "None | RouteNotCertified | GenerationNotCertified":
-        """Abierta si el estado es `certified`, la versión está medida y, cuando la corrida lleva paquete,
-        su generación está certificada. Con canary también abre para una versión nueva, un estado
-        `sandbox-tested-uncertified` o una generación sin certificar: así se recertifica la ruta."""
+                 ) -> "None | RouteNotCertified | GenerationNotCertified | VersionSinCertificar":
+        """Abierta si el estado es `certified` y, cuando la corrida lleva paquete, su generación está
+        certificada. Con canary también abre para una versión nueva, un estado
+        `sandbox-tested-uncertified` o una generación sin certificar: así se recertifica la ruta.
+
+        Una versión fuera de certifiedCliVersions ya no cierra (David, orden G-sin-candados
+        2026-10-19: "que solo AVISE"): contesta VersionSinCertificar y el encargo corre con su
+        aviso. Lo que sigue cerrando: un estado que no es `certified` (la ruta no existe o no
+        pasó su banco) y una generación del paquete sin certificar (protege el paquete, datos)."""
         if canary and self.status in ("certified", "sandbox-tested-uncertified"):
             return None
         if self.status != "certified":
             # Las versiones medidas de una ruta sin certificar todavía no certifican nada.
             return RouteNotCertified(cli_version, (), self.adapter_id)
         if cli_version not in self.certified_cli_versions:
-            return RouteNotCertified(cli_version, tuple(sorted(self.certified_cli_versions)), self.adapter_id)
+            return VersionSinCertificar(cli_version, tuple(sorted(self.certified_cli_versions)), self.adapter_id)
         if generation is not None and str(generation) not in self.certified_context_generations:
             certified = tuple(sorted(int(key) for key in self.certified_context_generations if key.isdigit()))
             return GenerationNotCertified(generation, certified)
@@ -307,6 +312,9 @@ class LaunchSpec:
     herramientas: tuple[str, ...] = ()
     """Las herramientas del perfil para el adaptador que pregunta por ellas (claude:
     --allowed-tools). opencode las lleva en su configuración y no mira esta lista."""
+    aviso: str | None = None
+    """Lo que la ruta avisó al abrir (David, orden G-sin-candados 2026-10-19): una versión del
+    CLI fuera de certifiedCliVersions corre y avisa. None: la ruta abierta no avisó nada."""
 
 
 def session_name(operation: str) -> str:
@@ -373,7 +381,9 @@ def plan_launch(assignment: object, brief: bytes, *, policy: ProviderPolicy, cat
     if package is not None and now is None:
         raise TypeError("un plan con paquete exige el reloj del host (now)")
     closed = route.open_for(cli_version, package.manifest["generation"] if package else None, canary=canary)
-    if closed is not None:
+    # Una versión sin certificar ya no cierra la ruta: corre con su aviso (G-sin-candados).
+    aviso = frase_version_sin_certificar(closed) if isinstance(closed, VersionSinCertificar) else None
+    if closed is not None and aviso is None:
         return closed
     header = LaunchHeader.parse(brief)
     if isinstance(header, MalformedHeader):
@@ -434,7 +444,7 @@ def plan_launch(assignment: object, brief: bytes, *, policy: ProviderPolicy, cat
         # lanzamiento: plan_launch se queda puro y solo señala la carpeta.
         workspace = Workspace(run.repo)
     return LaunchSpec(model, workspace, run, record, session_name(operation), perfil, config, package,
-                      route.adapter_id, herramientas)
+                      route.adapter_id, herramientas, aviso)
 
 
 SCRATCH_RULE = (" Keep every helper script and scratch file inside the directory that holds acceptRef, and touch "
@@ -469,6 +479,26 @@ def opencode_argv(spec: LaunchSpec, opencode_bin: Path, *, task_id: str) -> tupl
             "--title", task_id, delivery_line(str(spec.run.assignment)) + SCRATCH_RULE)
 
 
+SHIMS_DIR_POR_OMISION = "/Users/dn/.local/share/quality-kit/candados/shims"
+SHIMS_ENV = "AGENT_WORK_CANDADOS_SHIMS"
+
+
+def candados_shims() -> Path:
+    """La carpeta de shims de candados de quality-kit (adenda G-sin-candados, 2026-10-19). El
+    override por ambiente existe para las pruebas y para una Mac que los tenga en otro sitio."""
+    return Path(os.environ.get(SHIMS_ENV) or SHIMS_DIR_POR_OMISION)
+
+
+def _path_con_shims() -> str | None:
+    """El PATH de la corrida con los shims al frente, o None para no tocarlo: si la carpeta no
+    existe, la corrida sigue sin ellos (el aviso lo da el lanzador del host, una sola vez; esta
+    función corre en cada reclamo y no debe llover el log)."""
+    shims = candados_shims()
+    if not shims.is_dir():
+        return None
+    return f"{shims}:{os.environ.get('PATH') or '/usr/bin:/bin'}"
+
+
 def opencode_env(spec: LaunchSpec) -> dict[str, str]:
     """El único sitio que arma el entorno de opencode.
 
@@ -496,6 +526,11 @@ def opencode_env(spec: LaunchSpec) -> dict[str, str]:
         "AGENT_WORK_MANAGED": "1",
         "OPENCODE_CONFIG_CONTENT": json.dumps(config, separators=(",", ":")),
     }
+    shims = _path_con_shims()
+    if shims is not None:
+        # Adenda G-sin-candados: todo opencode que lanza el host lleva los shims de candados
+        # al frente del PATH, lo arranque quien lo arranque el host.
+        env["PATH"] = shims
     if spec.config is not None:
         # Medición del 2026-10-15 (SUA-03-mediciones.md, nota del punto b): la variable deja fuera
         # ~/.agents/skills y ~/.claude/skills a la vez, y con skills.paths del paquete quedan solo

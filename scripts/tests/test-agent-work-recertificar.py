@@ -13,6 +13,14 @@ sys.path.insert(0, str(ROOT / "scripts" / "agent-work"))
 import recertificar  # noqa: E402
 import sesion  # noqa: E402
 
+
+def sin_env_path(texto: str) -> str:
+    """El shebang deja de buscar en el PATH (adenda G-sin-candados): el entorno de la sonda lleva
+    los shims de candados al frente, y su python3 es un script de sh que reinicia PWD al exec del
+    intérprete real. El doble emula al binario de opencode, que no pasa por ningún shim."""
+    return texto.replace("#!/usr/bin/env python3", f"#!{sys.executable}", 1)
+
+
 DOBLE_OPENCODE = r'''#!/usr/bin/env python3
 import json, os, sys
 from pathlib import Path
@@ -134,16 +142,16 @@ class Sondas(unittest.TestCase):
 
     def doble(self, texto, modo):
         ruta = self.raiz / f"doble-{modo}-{abs(hash(texto)) % 10000}.py"
-        ruta.write_text(texto % modo, encoding="utf-8")
+        ruta.write_text(sin_env_path(texto % modo), encoding="utf-8")
         ruta.chmod(ruta.stat().st_mode | stat.S_IEXEC)
         return ruta
 
     def test_m1_rechaza_update_available_aunque_salga_solo_por_stderr(self):
         doble = self.raiz / "doble-stderr.py"
-        doble.write_text(
+        doble.write_text(sin_env_path(
             "#!/usr/bin/env python3\nimport json, sys\n"
             "sys.stderr.write('Update Available 1.19.4\\n')\n"
-            "print(json.dumps({'type': 'text', 'text': 'hola'}))\n",
+            "print(json.dumps({'type': 'text', 'text': 'hola'}))\n"),
             encoding="utf-8")
         doble.chmod(doble.stat().st_mode | stat.S_IEXEC)
         veredicto = recertificar.correr_sonda(
@@ -172,7 +180,7 @@ class Sondas(unittest.TestCase):
         """La 2 no escribe `message=created` en stderr (G-opencode2-r1): la sonda lee la carpeta de
         la db del servicio, por el mismo camino que la lee el host."""
         doble = self.raiz / "doble-v2.py"
-        doble.write_text(
+        doble.write_text(sin_env_path(
             "#!/usr/bin/env python3\n"
             "import json, os, sqlite3\n"
             "sesion = 'ses_' + os.path.basename(os.environ.get('PWD', ''))\n"
@@ -183,7 +191,7 @@ class Sondas(unittest.TestCase):
             "con.commit()\n"
             "con.close()\n"
             "print(json.dumps({'type': 'text', 'timestamp': 1, 'sessionID': sesion,\n"
-            "                  'part': {'type': 'text', 'text': 'hola'}}))\n",
+            "                  'part': {'type': 'text', 'text': 'hola'}}))\n"),
             encoding="utf-8")
         doble.chmod(doble.stat().st_mode | stat.S_IEXEC)
         db = self.raiz / "opencode" / "opencode.db"
@@ -194,12 +202,12 @@ class Sondas(unittest.TestCase):
 
     def test_consultar_la_version_no_deja_actualizar_el_cli(self):
         doble = self.raiz / "doble-version.py"
-        doble.write_text(
+        doble.write_text(sin_env_path(
             "#!/usr/bin/env python3\n"
             "import os\n"
             "with open(os.environ['SONDA_MARCA'], 'w', encoding='utf-8') as out:\n"
             "    out.write(os.environ.get('OPENCODE_DISABLE_AUTOUPDATE') or '')\n"
-            "print('opencode v2.0.29')\n",
+            "print('opencode v2.0.29')\n"),
             encoding="utf-8")
         doble.chmod(doble.stat().st_mode | stat.S_IEXEC)
         marca = self.raiz / "marca"

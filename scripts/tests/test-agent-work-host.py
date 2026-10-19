@@ -641,9 +641,11 @@ class HostReceipts(unittest.TestCase):
         self.assertEqual([result["taskId"] for result in restarted.pending("mac-test")], ["task-1"])
         self.assertEqual(restarted.inbox_errors("mac-test"), [])
 
-    def watch(self, now):
+    def watch(self, now, result_deadline_seconds=30):
+        """El tope de resultado explícito es lo que pide quien lo quiere (el banco): el default del
+        host ya no tiene ninguno, y los relojes aquí son los de cada prueba."""
         return self.host.detect_run_failures("mac-test", lambda key: None, now=now, accept_deadline_seconds=30,
-                                             result_deadline_seconds=30)
+                                             result_deadline_seconds=result_deadline_seconds)
 
     def uncertain_adapter_delivery(self):
         def lost(*_):
@@ -653,11 +655,42 @@ class HostReceipts(unittest.TestCase):
         self.assertEqual(self.apply(self.key, operation, lost).status, "uncertain")
         return operation, operation_id(self.key)
 
+    def accepted_run(self):
+        """Una corrida entregada y aceptada, con su proceso vivo (el doble nunca contesta salida)."""
+        operation = replace(self.operation, adapter_id="fixture-cli-a")  # id de juguete (SUA-04, 4.6)
+        observation = self.apply(self.key, operation, lambda *_: None)
+        assignment = json.loads(Path(observation.assignment_ref).read_text())
+        Path(assignment["acceptRef"]).write_text(json.dumps(assignment["protocol"]["accept"]))
+        self.assertTrue(self.take())
+        return operation
+
+    def test_an_encargo_alive_past_the_old_hour_is_not_killed(self):
+        # G-sin-candados (David, 2026-10-19): un encargo vivo corre lo que necesite. Sin tope
+        # explícito, un entregado cuyo proceso vive sigue esperando su resultado a los 4000 s,
+        # que antes del cambio ya era incidente deadline-missed.
+        self.accepted_run()
+        delivered = self.host.spool.delivered_at(operation_id(self.key))
+        self.assertIsNotNone(delivered)
+        self.assertEqual(self.watch(delivered + 4000, result_deadline_seconds=None), [])
+        self.assertEqual(self.host.spool.get(operation_id(self.key))["status"], "delivered")
+
+    def test_an_explicit_result_deadline_still_ends_a_late_silent_run(self):
+        # El tope explícito sigue en pie para quien lo pasa (el banco de medición cuelga su
+        # experimento con él); lo que se quitó es el tope por omisión del host.
+        self.accepted_run()
+        delivered = self.host.spool.delivered_at(operation_id(self.key))
+        self.assertEqual(self.watch(delivered + 60), ["host:2:deadline-missed:deadline"])
+
+    def take(self):
+        return self.host.take_acceptance("mac-test", self.key)
+
     def test_operator_verdict_settles_an_uncertain_delivery_without_typing_again(self):
         operation, op_id = self.uncertain_adapter_delivery()
         attempted = self.host.spool.attempted_at(op_id)
-        self.assertEqual(self.watch(attempted + 60), ["host:2:transport-unavailable:delivery-unaccepted"])
-        self.assertEqual(self.host.spool.get(op_id)["status"], "uncertain")
+        # G-sin-candados: un proceso vivo que no ha acusado recibo ya no termina como
+        # delivery-unaccepted por el reloj; queda attempted y lo resuelve el operador.
+        self.assertEqual(self.watch(attempted + 60), [])
+        self.assertEqual(self.host.spool.get(op_id)["status"], "attempted")
         state = str(self.root / "host")
         self.assertEqual(uncertain_operations([state]), ["task-1"])
 
@@ -673,7 +706,7 @@ class HostReceipts(unittest.TestCase):
         with self.host.spool.connection() as db:
             self.assertEqual([tuple(row) for row in db.execute(
                 "SELECT previous_status, verdict, reason FROM delivery_verdicts WHERE operation_id=?", (op_id,))],
-                [("uncertain", "abandoned", reason)])
+                [("attempted", "abandoned", reason)])
         retyped = []
         self.assertEqual(self.apply(self.key, operation, lambda *args: retyped.append(args)).status, "abandoned")
         self.assertEqual(retyped, [], "an abandoned delivery was typed again")
@@ -681,7 +714,7 @@ class HostReceipts(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "not attempted or uncertain"):
             self.host.resolve_delivery("mac-test", self.key, "delivered", "otra vez")
 
-    def test_operator_verdict_delivered_starts_the_silent_failure_clock(self):
+    def test_operator_verdict_delivered_starts_the_explicit_silent_failure_clock(self):
         _, op_id = self.uncertain_adapter_delivery()
         self.assertEqual(uncertain_operations([str(self.root / "host")]), ["task-1"])
         self.assertEqual(self.host.resolve_delivery("mac-test", self.key, "delivered",
