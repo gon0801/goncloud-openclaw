@@ -23,11 +23,12 @@ Por qué "Review rate limited" de CodeRabbit pasa con aviso: decisión de David 
 
 Por qué la revisión incompleta del bot ya no frena (David, orden
 G-sin-candados 2026-10-19): el gate solo niega un hallazgo BLOQUEANTE sin
-adjudicar — High/Critical, o uno marcado de seguridad, datos o credenciales por
-su título — y el CI rojo. Un Medium/Low abierto sin adjudicar y la
-"revision-parcial" del bot (sin completion, parcial, o sin bloque legible) son
-avisos que no frenan: un candado solo se queda si protege dinero, datos,
-credenciales o una decisión explícita de David, y una revisión parcial no lo es.
+adjudicar — High/Critical, o uno marcado de seguridad, datos, credenciales o
+pérdida de datos por su título — y el CI rojo. Un Medium/Low abierto sin
+adjudicar y la "revision-parcial" del bot (sin completion, parcial, o sin bloque
+legible) son avisos que no frenan: un candado solo se queda si protege dinero,
+datos, credenciales o una decisión explícita de David, y una revisión parcial no
+lo es.
 
 Solo biblioteca estándar; standalone como avisar.py y reporte.py.
 """
@@ -66,13 +67,15 @@ a avisos: ver compuerta_hallazgos."""
 SEVERIDADES_BOT_MENORES = frozenset({"Medium", "Low"})
 MARCA_BLOQUEANTE = re.compile(
     r"seguridad|security|credencial|credential|contrase[ñn]a|password|secreto|secret|"
-    r"token|api[ -]?key|inyecci[óo]n|datos personales|datos sensibles|pii",
+    r"token|api[ -]?key|inyecci[óo]n|datos personales|datos sensibles|pii|"
+    r"p[ée]rdida de datos|se pierden|data loss|corrupt|corrupci[óo]n|overwrite",
     re.IGNORECASE,
 )
 """Lo que vuelve BLOQUEANTE a un hallazgo de severidad menor: marcado de seguridad, datos o
-credenciales en su título (G-sin-candados). El título es lo único que el hallazgos.v1 del bot
-trae para marcarlo; la tabla vive aquí arriba con el resto de los datos, que otro repo decide
-distinto."""
+credenciales en su título (G-sin-candados), y también la pérdida, corrupción o pisado de datos,
+en español y en inglés (r2, cr:4311182158 — un Medium «Pérdida de datos al guardar sesiones» no
+podía quedar en aviso). El título es lo único que el hallazgos.v1 del bot trae para marcarlo; la
+tabla vive aquí arriba con el resto de los datos, que otro repo decide distinto."""
 SEVERIDADES_CR_QUE_FRENAN = frozenset({"Major", "Critical"})
 SEVERIDADES_CR_MENORES = frozenset({"Minor", "Low"})
 MARCAS_CR = (("🔴 Critical", "Critical"), ("🟠 Major", "Major"), ("🟡 Minor", "Minor"))

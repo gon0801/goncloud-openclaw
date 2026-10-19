@@ -137,6 +137,12 @@ def native_patch(entry, config, limits):
         raise CutoverRefused("managedTasks.runTimeoutSeconds has no value in the Gateway config and G no longer "
                              f"imposes one: set it in R's config (its schema accepts 1..3600) or relax R; "
                              f"refusing to open {entry['id']} with a cap this repo chose")
+    # cr:4311182127 (CodeRabbit): el None ya negó arriba, pero un 0, un negativo, un no-entero o un
+    # bool pasaban el preflight y llegaban al config.patch con el cron viejo ya suspendido. No se
+    # impone el tope superior de 1..3600: lo que R ya tenga se conserva tal cual (G-sin-candados),
+    # y un valor que R ya tiene su propio schema se lo acepta.
+    if type(run_timeout) is not int or run_timeout < 1:
+        raise CutoverRefused("managedTasks.runTimeoutSeconds must be a positive integer")
     return {"managedTasks": {
         "enabled": True, "instructionRoot": root, "profile": values,
         # R hands the requester tools only to these agents; an operator's list keeps its entries.

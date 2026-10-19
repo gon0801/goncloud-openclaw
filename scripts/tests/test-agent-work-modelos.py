@@ -596,12 +596,12 @@ class Explicar(Policies):
                          "Ruta certificada para 1.18.35, la Mac tiene opencode 1.18.36.")
         self.assertEqual(explicar(modelos.RouteNotCertified("1.18.35", ())).frase,
                          "La ruta de encargos por opencode todavía no está certificada. La Mac tiene opencode 1.18.35.")
+        # Orden r2: la generación avisa y el encargo corre; explicar nombra con las mismas
+        # palabras que el aviso, por si algo todavía se lo pasa.
         self.assertEqual(explicar(modelos.GenerationNotCertified(2, (1,))).frase,
-                         "El paquete de poteto de la generación 2 no está certificado para encargos; "
-                         "certificadas: 1.")
+                         "generación del paquete no certificada: 2 (certificadas: 1); el encargo corre.")
         self.assertEqual(explicar(modelos.GenerationNotCertified(2, ())).frase,
-                         "El paquete de poteto de la generación 2 no está certificado para encargos; "
-                         "certificadas: ninguna.")
+                         "generación del paquete no certificada: 2 (certificadas: ninguna); el encargo corre.")
         self.assertEqual(explicar(modelos.ContextoIncompleto("skills/how/SKILL.md no coincide con el "
                                                              "manifiesto")).frase,
                          "El paquete de poteto no coincide con su manifiesto: skills/how/SKILL.md no coincide con "
@@ -791,6 +791,32 @@ class Routes(unittest.TestCase):
         self.assertIsNone(route.open_for("1.18.35", 2, canary=False))
         self.assertEqual(route.open_for("1.18.35", 3, canary=False), modelos.GenerationNotCertified(3, (1, 2)))
         self.assertIsNone(route.open_for("1.18.35", 3, canary=True))
+
+    def test_la_generacion_y_la_version_sin_certificar_corren_con_los_dos_avisos_juntos(self):
+        # G-sin-candados r2 (David, 2026-10-19, cr:4311182166): la certificación de la generación
+        # del paquete también pasa a solo aviso; con versión y generación sin certificar, open_for
+        # junta los dos avisos en un solo resultado y el encargo corre.
+        def con_generaciones(generations, versions=("1.18.35",)):
+            return sesion.Route("mac-local", "opencode", "run-per-task", "certified", frozenset(versions),
+                                frozenset(generations))
+        caso = con_generaciones({"1": "M-13"}).open_for("1.18.36", 2, canary=False)
+        self.assertEqual(caso, modelos.VersionSinCertificar(
+            "1.18.36", ("1.18.35",), "opencode", modelos.GenerationNotCertified(2, (1,))))
+        self.assertEqual(
+            modelos.frase_version_sin_certificar(caso),
+            "versión no certificada: 1.18.36 (certificadas: 1.18.35); el encargo corre. "
+            "generación del paquete no certificada: 2 (certificadas: 1); el encargo corre.")
+        # La generación sola también es solo aviso, con sus palabras propias.
+        self.assertEqual(con_generaciones({"1": "M-13"}).open_for("1.18.35", 2, canary=False),
+                         modelos.GenerationNotCertified(2, (1,)))
+        self.assertEqual(modelos.frase_avisos_de_ruta(modelos.GenerationNotCertified(2, (1,))),
+                         "generación del paquete no certificada: 2 (certificadas: 1); el encargo corre.")
+        # Un canario no ve ninguno de los dos avisos; una ruta sin certificar sí frena igual que
+        # siempre, y la puerta de avisos no la confunde con un aviso.
+        self.assertIsNone(con_generaciones({"1": "M-13"}).open_for("1.18.36", 2, canary=True))
+        cerrada = sesion.Route("mac-local", "opencode", "run-per-task", "absent", frozenset())
+        self.assertIsInstance(cerrada.open_for("1.18.36", 2, canary=False), modelos.RouteNotCertified)
+        self.assertIsNone(modelos.frase_avisos_de_ruta(cerrada.open_for("1.18.36", 2, canary=False)))
 
     def coverage_certified(self, status="certified"):
         return {"hostAdapterCoverage": {"mac-local": {"opencode": status, "claude": status}},

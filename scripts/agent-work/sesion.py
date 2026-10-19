@@ -23,7 +23,7 @@ from contracts import RunDir, SessionRecord
 from host import delivery_line
 from modelos import (CLAUDE_ALIASES, Catalog, DefaultModel, ExactModel, GenerationNotCertified, MalformedHeader,
                      ModelId, PerfilRechazado, PermittedModel, ProviderPolicy, Refusal, RouteNotCertified,
-                     VersionSinCertificar, WorkspaceRefused, authorize, frase_version_sin_certificar)
+                     VersionSinCertificar, WorkspaceRefused, authorize, frase_avisos_de_ruta)
 from resources import BoundaryBusy, TmuxBackend, _ps
 from spool import atomic_json
 
@@ -186,25 +186,31 @@ class Route:
 
     def open_for(self, cli_version: str, generation: int | None = None, *, canary: bool
                  ) -> "None | RouteNotCertified | GenerationNotCertified | VersionSinCertificar":
-        """Abierta si el estado es `certified` y, cuando la corrida lleva paquete, su generación está
-        certificada. Con canary también abre para una versión nueva, un estado
+        """Abierta si el estado es `certified`; la versión y la generación del paquete viajan como
+        avisos. Con canary también abre para una versión nueva, un estado
         `sandbox-tested-uncertified` o una generación sin certificar: así se recertifica la ruta.
 
-        Una versión fuera de certifiedCliVersions ya no cierra (David, orden G-sin-candados
-        2026-10-19: "que solo AVISE"): contesta VersionSinCertificar y el encargo corre con su
-        aviso. Lo que sigue cerrando: un estado que no es `certified` (la ruta no existe o no
-        pasó su banco) y una generación del paquete sin certificar (protege el paquete, datos)."""
+        Una versión fuera de certifiedCliVersions no cierra (David, orden G-sin-candados
+        2026-10-19: "que solo AVISE") y una generación del paquete sin certificar tampoco (David,
+        orden r2 del mismo día, cr:4311182166): el resultado trae los avisos, juntos cuando
+        aplican los dos (VersionSinCertificar lleva la generación en `generacion`), y el encargo
+        corre. Lo que sigue cerrando: un estado que no es `certified` (la ruta no existe o no
+        pasó su banco) y el rojo terminal de una medición, que lo niegan _freno y preparar
+        (protegen datos)."""
         if canary and self.status in ("certified", "sandbox-tested-uncertified"):
             return None
         if self.status != "certified":
             # Las versiones medidas de una ruta sin certificar todavía no certifican nada.
             return RouteNotCertified(cli_version, (), self.adapter_id)
-        if cli_version not in self.certified_cli_versions:
-            return VersionSinCertificar(cli_version, tuple(sorted(self.certified_cli_versions)), self.adapter_id)
+        generacion = None
         if generation is not None and str(generation) not in self.certified_context_generations:
             certified = tuple(sorted(int(key) for key in self.certified_context_generations if key.isdigit()))
-            return GenerationNotCertified(generation, certified)
-        return None
+            generacion = GenerationNotCertified(generation, certified)
+        if cli_version not in self.certified_cli_versions:
+            # Los dos avisos viajan juntos cuando aplican los dos (orden r2).
+            return VersionSinCertificar(cli_version, tuple(sorted(self.certified_cli_versions)),
+                                        self.adapter_id, generacion)
+        return generacion
 
 
 def _versiones_verdes(medidas: object, host_id: str, adapter_id: str) -> frozenset[str]:
@@ -381,8 +387,9 @@ def plan_launch(assignment: object, brief: bytes, *, policy: ProviderPolicy, cat
     if package is not None and now is None:
         raise TypeError("un plan con paquete exige el reloj del host (now)")
     closed = route.open_for(cli_version, package.manifest["generation"] if package else None, canary=canary)
-    # Una versión sin certificar ya no cierra la ruta: corre con su aviso (G-sin-candados).
-    aviso = frase_version_sin_certificar(closed) if isinstance(closed, VersionSinCertificar) else None
+    # Versión y generación sin certificar ya no cierran la ruta: corren con sus avisos, juntos
+    # cuando aplican los dos (G-sin-candados y r2).
+    aviso = frase_avisos_de_ruta(closed)
     if closed is not None and aviso is None:
         return closed
     header = LaunchHeader.parse(brief)

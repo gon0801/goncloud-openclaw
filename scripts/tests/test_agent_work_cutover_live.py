@@ -102,6 +102,37 @@ def job(name="vigia-viejo", job_id="j1"):
     return {"id": job_id, "name": name, "enabled": True, "state": {"nextRunAtMs": NOW + 120_000}}
 
 
+class NativePatchRunTimeout(unittest.TestCase):
+    """native_patch valida runTimeoutSeconds antes de devolver el parche (cr:4311182127): el None ya
+    negaba arriba, pero un 0, un no-entero o un fuera del schema de R llegaban al config.patch con el
+    cron viejo ya suspendido, y si R lo rechazaba el cron quedaba descolgado."""
+
+    def setUp(self):
+        self.entry = {"id": "loop:x", "host": "mini", "adapter": "fixture-cli-a"}
+        self.managed = {"hosts": {"mini": {"deviceId": "device"}}, "instructionRoot": "/root",
+                        "requesters": ["main"], "runTimeoutSeconds": 3600}
+        self.config = {"resolved": {"managedTasks": self.managed}}
+        self.limits = {"productionProfile": {"values": {field: 1 for field in cutover_live.PROFILE_FIELDS}}}
+
+    def patch(self):
+        return cutover_live.native_patch(self.entry, self.config, self.limits)
+
+    def test_un_valor_que_r_rechazaria_se_niega_antes_de_devolver_el_parche(self):
+        for mal in (0, -1, "3600", 1.5, True, [3600]):
+            with self.subTest(mal=mal):
+                self.managed["runTimeoutSeconds"] = mal
+                with self.assertRaises(cutover_live.CutoverRefused):
+                    self.patch()
+
+    def test_un_valor_valido_sigue_armando_el_parche_con_lo_que_r_ya_tenga(self):
+        # Sin tope superior: lo que R ya tenga se conserva tal cual (G-sin-candados), también un
+        # 5400 de un schema de R relajado.
+        for bien in (1, 3600, 5400):
+            with self.subTest(bien=bien):
+                self.managed["runTimeoutSeconds"] = bien
+                self.assertEqual(self.patch()["managedTasks"]["runTimeoutSeconds"], bien)
+
+
 class CutoverLiveTest(unittest.TestCase):
     def setUp(self):
         temp = tempfile.TemporaryDirectory()

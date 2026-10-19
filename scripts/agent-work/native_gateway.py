@@ -734,6 +734,12 @@ class RunHost:
             return package
         if adapter_id == "claude":
             catalog = self.catalogo_para("claude")
+            if self._version_claude is None:
+                # CodeRabbit #349 (hilo 4311182166): igual que opencode arriba, un claude que no
+                # contesta su versión no planea con el aviso de "no certificada" — la versión
+                # desconocida no tiene medición que la respalde ni banco que la haya pasado.
+                return RouteNotCertified("sin contestar su versión",
+                                         tuple(sorted(route.certified_cli_versions)), "claude")
             freno = self._freno(adapter_id, catalog.cli_version)
             if freno is not None:
                 return freno

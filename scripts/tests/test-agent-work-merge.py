@@ -404,6 +404,35 @@ class MergeConToy(unittest.TestCase):
         self.assertEqual(codigo, 1)
         self.assertEqual(json.loads(salida)["faltan"], ["hallazgo-sin-adjudicar:F4"])
 
+    def test_un_medium_de_perdida_de_datos_sigue_negando(self):
+        # cr:4311182158 (CodeRabbit, r2): el título exacto del hilo — un Medium «Pérdida de datos
+        # al guardar sesiones» no puede quedar en aviso; frena igual que seguridad o credenciales.
+        pr = self.titulo_del_hallazgo(
+            self.escenario_verde(), "F4", "Pérdida de datos al guardar sesiones"
+        )
+        self.guardar(321, pr)
+        codigo, salida, _ = self.listo(321, HEAD321)
+        self.assertEqual(codigo, 1)
+        self.assertEqual(json.loads(salida)["faltan"], ["hallazgo-sin-adjudicar:F4"])
+
+    def test_la_marca_bloqueante_cubre_perdida_corrupcion_y_pisado_en_es_y_en(self):
+        # La tabla completa del encargo r2: pérdida, corrupción y pisado de datos, es/en.
+        for titulo in (
+            "Pérdida de datos al guardar sesiones",
+            "perdida de datos al exportar",
+            "se pierden los mensajes en cola",
+            "Data loss when saving sessions",
+            "corrupted session store",
+            "Corrupción del almacén de sesiones",
+            "overwrites the session file on save",
+        ):
+            with self.subTest(titulo=titulo):
+                self.assertIsNotNone(merge.MARCA_BLOQUEANTE.search(titulo), titulo)
+        # Y lo que no es nada de eso sigue sin frenar por marca.
+        for titulo in ("refactor del módulo de sesiones", "rename the sessions module"):
+            with self.subTest(titulo=titulo):
+                self.assertIsNone(merge.MARCA_BLOQUEANTE.search(titulo), titulo)
+
     # --- compuerta 5: hallazgos y adjudicaciones ------------------------------
 
     def test_adjudicacion_de_head_viejo_no_vale(self):

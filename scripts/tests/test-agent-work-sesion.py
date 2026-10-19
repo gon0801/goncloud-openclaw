@@ -1654,6 +1654,25 @@ class Decisions(Slot):
                                          "el encargo corre."})
         self.assertIn("versión no certificada: 1.18.36", self.beat()["aviso"])
 
+    @unittest.skipUnless(PSTACK.is_dir(), "pide pstack 0.9.84 instalado en esta Mac")
+    def test_version_y_generacion_sin_certificar_corren_con_los_dos_avisos(self):
+        # G-sin-candados r2 (David, 2026-10-19, cr:4311182166): la generación del paquete también
+        # pasa a solo aviso; con versión y generación sin certificar, el encargo corre y los dos
+        # avisos viajan juntos en el registro de la corrida.
+        self.checkout_contexto()
+        coverage_path = self.checkout / EVIDENCE / "coverage.json"
+        coverage = json.loads(coverage_path.read_text())
+        coverage["hostAdapterRoute"]["mac-local"]["opencode"]["contextGenerations"] = {"1": "M-16"}
+        coverage_path.write_text(json.dumps(coverage))
+        (self.bin / "version").write_text("1.18.36\n")
+        self.start(self.backend)
+        self.r.offer("task-1", b"agent-work.launch.v1\nprofile: ingenieria\n---\nhaz el saludo\n", self.revision)
+        self.launched()
+        self.assertEqual(self.held(), ("attempted", "Running", ""))
+        aviso = json.loads(self.record().aviso.read_text())["frase"]
+        self.assertIn("versión no certificada: 1.18.36", aviso)
+        self.assertIn("generación del paquete no certificada: 2", aviso)
+
     def test_a_canary_host_launches_with_an_opencode_version_the_route_does_not_have_yet(self):
         (self.bin / "version").write_text("1.18.36\n")
         self.start(self.backend, canary=True)

@@ -668,12 +668,17 @@ class VersionSinCertificar:
     """Aviso, no rechazo (David, orden G-sin-candados 2026-10-19: "que solo AVISE"): la ruta está
     certificada pero esta versión del CLI no está en certifiedCliVersions todavía. El encargo
     corre, y el aviso viaja al resultado de pedirlo y al estado del host hasta que la medición la
-    certifique. Un rojo de la medición sí cierra (ruta_roja): eso ya midió y falló."""
+    certifique. Un rojo de la medición sí cierra (ruta_roja): eso ya midió y falló.
+
+    Si la generación del paquete tampoco está certificada, su aviso viaja aquí dentro (David,
+    orden r2 del mismo día: la certificación de la generación también es solo aviso), para que
+    el resultado traiga los dos avisos juntos y no se pierda el segundo tras el primero."""
 
     cli_version: str
     certified_versions: tuple[str, ...]
     cli: str = "opencode"
     """El CLI de la ruta: la frase lo nombra (opencode o claude)."""
+    generacion: "GenerationNotCertified | None" = None
 
 
 @dataclass(frozen=True)
@@ -694,8 +699,11 @@ def ruta_roja(entry: dict, cli: str, version: str) -> RutaRoja:
 
 @dataclass(frozen=True)
 class GenerationNotCertified:
-    """La ruta está abierta para opencode, pero no para el paquete de poteto de esa generación (SUA-03,
-    4.5): coverage.json no la certifica todavía."""
+    """Aviso, no rechazo (David, orden G-sin-candados r2 2026-10-19, cr:4311182166): la ruta está
+    abierta para el CLI, pero coverage.json no certifica el paquete de poteto de esa generación
+    (SUA-03, 4.5). Antes frenaba; ahora el encargo corre y el aviso viaja solo, o junto al de la
+    versión dentro de VersionSinCertificar. Lo que sigue frenando protege datos: la ruta sin
+    certificar y el rojo terminal de la medición."""
     generation: int
     certified: tuple[int, ...]
 
@@ -967,16 +975,39 @@ def _frase_ruta(caso: RouteNotCertified) -> tuple[str, tuple[str, ...]]:
 
 def frase_version_sin_certificar(caso: VersionSinCertificar) -> str:
     """El aviso que viaja al resultado y al estado del host, con las palabras de David:
-    "versión no certificada: X"."""
+    "versión no certificada: X". Con la generación del paquete tampoco certificada, los dos
+    avisos van juntos en la misma frase (orden r2)."""
     certificadas = _lista(caso.certified_versions) or "ninguna"
-    return (f"versión no certificada: {caso.cli_version} (certificadas: {certificadas}); "
+    frase = (f"versión no certificada: {caso.cli_version} (certificadas: {certificadas}); "
+             "el encargo corre.")
+    if caso.generacion is not None:
+        frase += " " + frase_generacion_sin_certificar(caso.generacion)
+    return frase
+
+
+def frase_generacion_sin_certificar(caso: GenerationNotCertified) -> str:
+    """El aviso de la generación del paquete (David, orden r2: solo aviso y el encargo corre)."""
+    certificadas = _lista([str(generation) for generation in caso.certified]) or "ninguna"
+    return (f"generación del paquete no certificada: {caso.generation} (certificadas: {certificadas}); "
             "el encargo corre.")
 
 
+def frase_avisos_de_ruta(caso) -> "str | None":
+    """Los avisos que no frenan de la ruta de encargos — versión, generación, o los dos juntos —
+    o None si `caso` es un rechazo que sí frena (David, órdenes G-sin-candados y r2, 2026-10-19).
+    Es la única puerta que distingue aviso de rechazo para open_for: quien la llama no repite los
+    isinstance."""
+    if isinstance(caso, VersionSinCertificar):
+        return frase_version_sin_certificar(caso)
+    if isinstance(caso, GenerationNotCertified):
+        return frase_generacion_sin_certificar(caso)
+    return None
+
+
 def _frase_generacion(caso: GenerationNotCertified) -> tuple[str, tuple[str, ...]]:
-    certificadas = _lista([str(generation) for generation in caso.certified]) or "ninguna"
-    return (f"El paquete de poteto de la generación {caso.generation} no está certificado para encargos; "
-            f"certificadas: {certificadas}."), ()
+    # Ya no es un rechazo (orden r2: la generación avisa y el encargo corre), pero explicar sigue
+    # sabiendo nombrarlo por si algo se lo pasa: mismas palabras que el aviso.
+    return (frase_generacion_sin_certificar(caso), ())
 
 
 def _frase_sin_host(caso: HostDown) -> tuple[str, tuple[str, ...]]:

@@ -432,6 +432,23 @@ class HostClaude(unittest.TestCase):
         run_host.claude_bin = bueno
         self.assertEqual(run_host.catalogo_para("claude").cli_version, "2.1.301")
 
+    def test_un_claude_que_no_contesta_su_version_no_planea_con_el_aviso(self):
+        # CodeRabbit #349 (hilo 4311182166): la versión desconocida no es "no certificada" (aviso):
+        # sin versión no hay medición que la respalde. Igual que opencode, el plan se niega.
+        run_host = self.run_host()
+        run_host.claude_bin = self.tmp / "no-existe"
+        (self.tmp / "run").mkdir(exist_ok=True)
+        plan = run_host.plan(
+            {"inputRevision": {"kind": "artifact"}, "resultContract": "ready.v1"},
+            b"agent-work.launch.v1\nmodel: anthropic/opus\n---\nhaz\n",
+            run=RunDir(self.tmp / "run"),
+            record=self.tmp / "record",
+            operation="a" * 64,
+            adapter_id="claude",
+        )
+        self.assertIsInstance(plan, modelos.RouteNotCertified, plan)
+        self.assertEqual(plan.cli_version, "sin contestar su versión")
+
     def test_la_version_de_claude_se_relee_pasada_la_ventana(self):
         # DeepSeek F7 en #324: el host es un demonio; un `claude update` cambia la versión.
         import native_gateway

@@ -48,10 +48,9 @@ from modelos import opencode_por_omision as modelos_opencode_por_omision
 from modelos import (MODEL_PATTERN, POLICY_FILE, PROVIDER, Billing, Catalog, CatalogStore, CatalogUnavailable,
                      ContextoIncompleto, Explicacion, HostDown, HostMismatch, ModelFilter, ModelId, ModelNotListed,
                      OperatorCitation, PerfilRechazado, PermittedModel, PolicyUnreadable, ProviderClosure,
-                     ProviderGrant, ProviderId, ProviderNotConfigured, ProviderPolicy, SlotBlocked, UNVERIFIED_REF,
-                     VersionSinCertificar, WorkspaceRefused, authorize, catalogo_claude, explicar,
-                     frase_version_sin_certificar, pedido, policy_document, ruta_roja,
-                     succession_actual)
+                     ProviderGrant, ProviderId, ProviderNotConfigured, ProviderPolicy, RouteNotCertified,
+                     SlotBlocked, UNVERIFIED_REF, WorkspaceRefused, authorize, catalogo_claude, explicar,
+                     frase_avisos_de_ruta, pedido, policy_document, ruta_roja, succession_actual)
 from sesion import (ALLOWED_ROOT, COVERAGE_FILE, EXIT_NO_SCRATCH, EXIT_NO_WORKSPACE, EXIT_OUTSIDE_GROUP, PROFILE_ID,
                     MEDIDAS_FILE, Route, Workspace, adaptador, cargar_ruta, entrada_medida,
                     infraestructura_en_espera, medicion_terminal, model_in_use, read_events)
@@ -296,18 +295,25 @@ def preparar(repo: Path | None, modelo: str | None, *, perfil: str | None = None
         return explicar(model)
     adapter_id = adaptador_para(str(model.model.provider))
     version_cli = _version_claude(claude_bin) if adapter_id == "claude" else catalog.cli_version
+    ruta = cargar_ruta(checkout, state_root, HOST_ID, adapter_id)
+    if version_cli == "sin contestar su versión":
+        # CodeRabbit #349 (hilo 4311182166): una versión que no contestó no es "no certificada"
+        # (aviso) — es desconocida, y sin ella no hay medición que la respalde ni banco que la
+        # haya pasado. Niega igual que el host (RunHost.plan), aunque la ruta esté certificada.
+        return explicar(RouteNotCertified(version_cli, tuple(sorted(ruta.certified_cli_versions)),
+                                          adapter_id))
     beat = latido(state_root, now)
     # Un host canario vivo corre también una ruta todavía sin certificar: su canario es un pedido real.
     # Una versión que la ruta ya abre (coverage o canario) no queda tapada por el registro.
     canary = isinstance(beat, HostBeat) and beat.canary
-    closed = cargar_ruta(checkout, state_root, HOST_ID, adapter_id).open_for(
-        version_cli, manifiesto["generation"] if manifiesto else None, canary=canary)
-    # Una versión fuera de certifiedCliVersions ya no niega el encargo (David, orden G-sin-candados
-    # 2026-10-19: "que solo AVISE"): corre, y los avisos viajan en la frase del Preparado. Lo que
-    # sigue negando aquí: un rojo terminal de la medición (esa versión ya falló su banco), un
-    # estado de ruta que no es certified y una generación del paquete sin certificar (protege el
-    # paquete).
-    avisos = [frase_version_sin_certificar(closed)] if isinstance(closed, VersionSinCertificar) else []
+    closed = ruta.open_for(version_cli, manifiesto["generation"] if manifiesto else None, canary=canary)
+    # Versión y generación fuera de lo certificado ya no niegan el encargo (David, órdenes
+    # G-sin-candados y r2 2026-10-19: "que solo AVISE"): corren, y los avisos — juntos cuando
+    # aplican los dos — viajan en la frase del Preparado. Lo que sigue negando aquí: un rojo
+    # terminal de la medición (esa versión ya falló su banco) y un estado de ruta que no es
+    # certified (protegen datos).
+    aviso = frase_avisos_de_ruta(closed)
+    avisos = [aviso] if aviso is not None else []
     aviso_ruta = avisos[0] if avisos else None
     medida = entrada_medida(state_root, HOST_ID, adapter_id, version_cli)
     head = _head(checkout)
