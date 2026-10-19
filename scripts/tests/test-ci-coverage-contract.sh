@@ -453,8 +453,8 @@ limpio "$sec_cc" | grep -q 'node-version' \
 sec_gate=$(seccion gate "$Y")
 [ -n "$sec_gate" ] || fail "(w) quality.yml no tiene la seccion gate"
 GL=$(limpio "$sec_gate")
-printf '%s\n' "$GL" | grep -qF 'needs: [clasificador, shards, ci-contract]' \
-  || fail "(w) el gate no depende de ci-contract:
+printf '%s\n' "$GL" | grep -qF 'needs: [clasificador, shards, ci-contract, reuso]' \
+  || fail "(w) el gate no depende de ci-contract (y del reuso por arbol):
 $GL"
 printf '%s\n' "$GL" | grep -qF 'R_CI_CONTRACT: ${{ needs.ci-contract.result }}' \
   || fail "(w) el gate no lee el resultado de ci-contract:
