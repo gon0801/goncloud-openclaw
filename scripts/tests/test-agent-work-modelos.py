@@ -12,6 +12,7 @@ import dataclasses
 from datetime import datetime, timezone
 import hashlib
 import json
+import os
 from pathlib import Path
 import sys
 import tempfile
@@ -1073,6 +1074,151 @@ class Plans(Policies):
 
     def now(self):
         return datetime(2026, 10, 15, tzinfo=timezone.utc)
+
+
+DOBLE_OPENCODE = r'''#!/usr/bin/env python3
+import json, sys
+from pathlib import Path
+argv = sys.argv[1:]
+raiz = Path(__file__).parent
+registro = raiz / "argv.log"
+registro.open("a").write(json.dumps(argv) + "\n")
+if argv[:1] == ["--version"]:
+    print((raiz / "version").read_text().strip())
+    raise SystemExit(0)
+if argv[:1] == ["models"]:
+    print((raiz / "listing").read_text().strip())
+    raise SystemExit(0)
+raise SystemExit(9)
+'''
+
+
+class VersionDeSalida(unittest.TestCase):
+    def test_la_salida_firmada_de_la_2_da_su_version_y_la_de_la_1x_sigue_valiendo(self):
+        self.assertEqual(modelos.version_de_salida("opencode v2.0.29"), "2.0.29")
+        self.assertEqual(modelos.version_de_salida("1.18.35"), "1.18.35")
+        self.assertEqual(modelos.version_de_salida("opencode v2.0.29-beta.1"), "2.0.29-beta.1")
+
+    def test_una_salida_sin_version_no_inventa_una(self):
+        for salida in ("", "opencode", "v", "opencode v", "no hay numeros aqui"):
+            with self.subTest(salida=salida):
+                self.assertIsNone(modelos.version_de_salida(salida))
+
+    def test_el_ultimo_token_de_version_gana(self):
+        self.assertEqual(modelos.version_de_salida("opencode v2.0.29 canal latest"), "2.0.29")
+        self.assertEqual(modelos.version_de_salida("build 7 v3.1.4"), "3.1.4")
+
+
+class OpencodePorOmision(unittest.TestCase):
+    def setUp(self):
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        self.raiz = Path(temp.name).resolve()
+        self._env = {clave: os.environ.get(clave) for clave in ("AGENT_WORK_OPENCODE", "HOME")}
+        self.addCleanup(self._restaurar)
+
+    def _restaurar(self):
+        for clave, valor in self._env.items():
+            if valor is None:
+                os.environ.pop(clave, None)
+            else:
+                os.environ[clave] = valor
+
+    def test_agent_work_opencode_manda_sobre_todo(self):
+        suyo = self.raiz / "suyo" / "opencode"
+        suyo.parent.mkdir(parents=True)
+        suyo.write_text("#!/bin/sh\n")
+        suyo.chmod(0o755)
+        os.environ["AGENT_WORK_OPENCODE"] = str(suyo)
+        self.assertEqual(modelos.opencode_por_omision(), suyo)
+
+    def test_el_opencode_local_de_la_2_antes_que_el_path(self):
+        local = self.raiz / "casa" / ".opencode" / "bin" / "opencode"
+        local.parent.mkdir(parents=True)
+        local.write_text("#!/bin/sh\n")
+        local.chmod(0o755)
+        en_path = self.raiz / "path" / "opencode"
+        en_path.parent.mkdir(parents=True)
+        en_path.write_text("#!/bin/sh\n")
+        en_path.chmod(0o755)
+        os.environ.pop("AGENT_WORK_OPENCODE", None)
+        os.environ["HOME"] = str(self.raiz / "casa")
+        with mock.patch("shutil.which", return_value=str(en_path)):
+            self.assertEqual(modelos.opencode_por_omision(), local)
+
+    def test_sin_local_el_path_responde(self):
+        en_path = self.raiz / "path" / "opencode"
+        en_path.parent.mkdir(parents=True)
+        en_path.write_text("#!/bin/sh\n")
+        en_path.chmod(0o755)
+        os.environ.pop("AGENT_WORK_OPENCODE", None)
+        os.environ["HOME"] = str(self.raiz / "casa-sin-opencode")
+        with mock.patch("shutil.which", return_value=str(en_path)):
+            self.assertEqual(modelos.opencode_por_omision(), en_path)
+
+    def test_un_local_sin_permiso_de_ejecucion_no_manda(self):
+        local = self.raiz / "casa" / ".opencode" / "bin" / "opencode"
+        local.parent.mkdir(parents=True)
+        local.write_text("#!/bin/sh\n")
+        en_path = self.raiz / "path" / "opencode"
+        en_path.parent.mkdir(parents=True)
+        en_path.write_text("#!/bin/sh\n")
+        en_path.chmod(0o755)
+        os.environ.pop("AGENT_WORK_OPENCODE", None)
+        os.environ["HOME"] = str(self.raiz / "casa")
+        with mock.patch("shutil.which", return_value=str(en_path)):
+            self.assertEqual(modelos.opencode_por_omision(), en_path)
+
+    def test_sin_nada_queda_el_de_homebrew_de_la_1x(self):
+        os.environ.pop("AGENT_WORK_OPENCODE", None)
+        os.environ["HOME"] = str(self.raiz / "casa-vacia")
+        with mock.patch("shutil.which", return_value=None):
+            self.assertEqual(modelos.opencode_por_omision(), Path("/opt/homebrew/bin/opencode"))
+
+
+class CatalogoV2(unittest.TestCase):
+    """El catálogo contra un doble que firma como la 2: `--version` contesta "opencode v2.0.29"
+    (medido, G-opencode2-r1) y cada argv que recibe queda en argv.log."""
+
+    def setUp(self):
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        self.raiz = Path(temp.name).resolve()
+        self.bin = self.raiz / "bin"
+        self.bin.mkdir()
+        (self.bin / "opencode").write_text(DOBLE_OPENCODE)
+        (self.bin / "opencode").chmod(0o755)
+        (self.bin / "listing").write_text(LISTING)
+
+    def argv(self):
+        lineas = (self.bin / "argv.log").read_text().splitlines()
+        return [json.loads(linea) for linea in lineas]
+
+    def store(self):
+        return modelos.CatalogStore(self.bin / "opencode", self.raiz / "state")
+
+    def test_la_version_firmada_por_la_2_se_guarda_sin_su_firma(self):
+        (self.bin / "version").write_text("opencode v2.0.29\n")
+        catalog = self.store().refresh()
+        self.assertEqual(catalog.cli_version, "2.0.29")
+        self.assertEqual((self.raiz / "state" / "catalogo.json").exists(), True)
+        guardado = json.loads((self.raiz / "state" / "catalogo.json").read_text())
+        self.assertEqual(guardado["cliVersion"], "2.0.29")
+
+    def test_la_2_no_recibe_refresh_porque_su_models_no_lo_tiene(self):
+        (self.bin / "version").write_text("opencode v2.0.29\n")
+        self.store().refresh(upstream=True)
+        self.assertIn(["models"], self.argv())
+
+    def test_la_1x_sigue_pidiendo_refresh(self):
+        (self.bin / "version").write_text("1.18.35\n")
+        self.store().refresh(upstream=True)
+        self.assertIn(["models", "--refresh"], self.argv())
+
+    def test_una_version_sin_firma_valida_no_abre_el_catalogo(self):
+        (self.bin / "version").write_text("opencode sin numero\n")
+        with self.assertRaises(modelos.CatalogUnavailable):
+            self.store().refresh()
 
 
 if __name__ == "__main__":

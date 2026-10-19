@@ -35,6 +35,7 @@ sys.path.insert(0, str(ROOT / "scripts" / "agent-work"))
 sys.path.insert(0, str(ROOT / "scripts"))
 import contexto  # noqa: E402
 import encargo  # noqa: E402
+import recertificar  # noqa: E402
 import host as host_mod  # noqa: E402
 import sesion  # noqa: E402
 from contracts import HostBeat, OperationKey, RunDir, SessionRecord, operation_id  # noqa: E402
@@ -594,6 +595,88 @@ class Launch(Slot):
                          "Unexpected server error. Check server logs for details.")
         self.assertIsNone(read_events(self.spool / "sessions" / ("0" * 64)))
         self.assertIsNone(sesion.session_directory(self.spool / "sessions" / ("0" * 64)))
+
+    # Shapes measured on opencode 2.0.29 (G-opencode2-r1): the deny text names the permission, the
+    # unanswered "ask" does not, and neither ends the session.
+    DENIED_V2 = "Permission denied: external_directory"
+    ASK_V2 = ("This non-interactive run cannot ask the user for permission, so the request was rejected. "
+              "Continue without this action.")
+
+    def test_the_v2_denial_texts_name_the_permission_and_stay_in_the_flow(self):
+        events = "".join(json.dumps(event) + "\n" for event in (
+            {"type": "tool_use", "timestamp": STAMP, "sessionID": "ses_v2", "part": {
+                "type": "tool", "tool": "read", "id": "call_1", "state": {"status": "error",
+                                                                          "error": self.DENIED_V2}}},
+            {"type": "tool_use", "timestamp": STAMP + 5, "sessionID": "ses_v2", "part": {
+                "type": "tool", "tool": "bash", "id": "call_2", "state": {"status": "error",
+                                                                          "error": self.ASK_V2}}},
+            {"type": "text", "timestamp": STAMP + 9, "sessionID": "ses_v2", "part": {"type": "text", "text": "sigue"}}))
+        said = read_events(self.write_run(events, ""))
+        self.assertEqual(said.denied, (PermissionDenied("external_directory", ""), PermissionDenied("tool:bash", "")))
+        self.assertEqual(said.evaluations, ("external_directory:deny", "tool:bash:ask"))
+        # The same flow through the recertificar probe: a denial it can see, and the model went on.
+        self.assertTrue(recertificar._tool_negado(json.loads(events.splitlines()[0])))
+        self.assertTrue(recertificar._tool_negado(json.loads(events.splitlines()[1])))
+        self.assertFalse(recertificar._tool_negado(json.loads(events.splitlines()[2])))
+
+    def test_the_v2_logs_say_nothing_and_the_db_says_the_rest(self):
+        """Con la 2 el stderr del proceso propio no trae sesión ni llamadas (G-opencode2-r1): cae a
+        su db. Sin db (o sin esa sesión), lo que hay es lo que hay y no falla."""
+        events = json.dumps({"type": "text", "timestamp": STAMP, "sessionID": "ses_db",
+                             "part": {"type": "text", "text": "hola"}}) + "\n"
+        record = self.write_run(events, "")
+        sin_db = read_events(record)
+        self.assertEqual((sin_db.session_directory, sin_db.calls, sin_db.providers_called), (None, (), ()))
+        db = self.root / "opencode" / "opencode.db"
+        db.parent.mkdir(parents=True)
+        con = sqlite3.connect(db)
+        con.executescript(
+            "CREATE TABLE session_v2 (id text PRIMARY KEY, directory text);"
+            "CREATE TABLE session_message (session_id text, type text, seq integer, data text);"
+            "INSERT INTO session_v2 VALUES ('ses_db', '/Users/dn/dev/demo');"
+            "INSERT INTO session_message VALUES ('ses_db', 'user', 0, '{}');")
+        con.execute("INSERT INTO session_message VALUES ('ses_db', 'assistant', 1, ?)",
+                    (json.dumps({"agent": "build", "model": {"id": "glm-5.3-flash",
+                                                             "providerID": "zai-coding-plan"}}),))
+        con.execute("INSERT INTO session_message VALUES ('ses_db', 'assistant', 2, '{roto}')")
+        con.commit()
+        con.close()
+        with mock.patch.object(sesion, "OPENCODE_DB", db):
+            said = read_events(record)
+            # El adaptador, que es lo que lee el host para juzgar una sesión perdida, cae igual a
+            # la db: el stderr de la 2 no dice la carpeta.
+            carpeta_del_adaptador = sesion.adaptador("opencode").directorio_sesion(record)
+        self.assertEqual(said.session_directory, "/Users/dn/dev/demo")
+        self.assertEqual(carpeta_del_adaptador, "/Users/dn/dev/demo")
+        self.assertEqual(said.calls, (ModelCall("build", "zai-coding-plan/glm-5.3-flash", False),))
+        self.assertEqual(said.providers_called, ("zai-coding-plan",))
+        self.assertEqual(sesion.model_in_use(said, "zai-coding-plan/glm-5.3-flash"),
+                         ("zai-coding-plan/glm-5.3-flash", None))
+        # Los logs de la 1.x mandan: con stderr que dice sesión y llamadas, la db no se mira.
+        con_1x = read_events(self.write_run(events, CREATED.format("/Users/dn/dev/otra")
+                                            + STREAM.format("zai-coding-plan", "glm-5.3", "false", "build")))
+        self.assertEqual((con_1x.session_directory, con_1x.calls),
+                         ("/Users/dn/dev/otra", (ModelCall("build", "zai-coding-plan/glm-5.3", False),)))
+
+    def test_the_v2_argv_runs_its_own_server_with_lowercase_log_level(self):
+        spec = self.spec()
+        fabricado = object.__new__(type(spec.model))
+        for name, value in (("model", spec.model.model), ("billing", spec.model.billing),
+                            ("policy_digest", spec.model.policy_digest), ("cli_version", "2.0.29")):
+            object.__setattr__(fabricado, name, value)
+        argv = opencode_argv(replace(spec, model=fabricado), Path("/Users/dn/.opencode/bin/opencode"), task_id="task-1")
+        self.assertEqual(argv, ("/Users/dn/.opencode/bin/opencode", "run", "--standalone", "-m", str(spec.model.model),
+                                "--format", "json", "--print-logs", "--log-level", "info", "--title", "task-1",
+                                LINE.format(self.spool / "runs" / self.operation() / "assignment.json")))
+        for approving in ("--auto", "-i"):
+            self.assertNotIn(approving, argv)
+        # La 1.x queda exacta como estaba: sin --standalone y con INFO.
+        viejo = opencode_argv(spec, Path("/opt/homebrew/bin/opencode"), task_id="task-1")
+        self.assertNotIn("--standalone", viejo)
+        self.assertIn("INFO", viejo)
+        self.assertEqual((sesion.lanzamiento_con_servicio_propio("2.0.29"),
+                          sesion.lanzamiento_con_servicio_propio("1.18.35"),
+                          sesion.lanzamiento_con_servicio_propio("sonda")), (True, False, False))
 
 
 TABLE = """\
@@ -1366,6 +1449,29 @@ class Decisions(Slot):
         code, answer = self.estado()
         self.assertEqual((answer["carpetaDeSesion"], answer["explicacion"]["frase"]),
                          ("/otra/carpeta", "opencode salió sin acusar recibo. La sesión abrió en /otra/carpeta."))
+
+    def test_a_v2_session_the_db_places_outside_the_task_folder_is_stopped(self):
+        """La 2 no dice la carpeta en stderr (G-opencode2-r1): la trae la db del servicio, y leída
+        de ahí el host para igual la sesión que abrió fuera de workspaceRef."""
+        self.launched()
+        self.record().events.write_text(json.dumps(
+            {"type": "step_start", "timestamp": STAMP, "sessionID": "ses_db",
+             "part": {"type": "step-start"}}) + "\n")
+        self.record().stderr.write_text("")
+        db = self.root / "opencode" / "opencode.db"
+        db.parent.mkdir(parents=True)
+        con = sqlite3.connect(db)
+        con.executescript("CREATE TABLE session_v2 (id text PRIMARY KEY, directory text);"
+                          "CREATE TABLE session_message (session_id text, type text, seq integer, data text);")
+        con.execute("INSERT INTO session_v2 VALUES ('ses_db', '/otra/en-la-db')")
+        con.commit()
+        con.close()
+        with mock.patch.object(sesion, "OPENCODE_DB", db):
+            self.assertEqual((self.one_pass()["detected"], self.backend.stops), (1, [self.session()]))
+            self.assertEqual(self.incidents(), ["host:1:transport-unavailable:launch-failed"])
+            code, answer = self.estado()
+        self.assertEqual((answer["carpetaDeSesion"], answer["explicacion"]["frase"]),
+                         ("/otra/en-la-db", "opencode salió sin acusar recibo. La sesión abrió en /otra/en-la-db."))
 
     def test_a_session_in_the_task_folder_is_left_alone(self):
         self.launched()

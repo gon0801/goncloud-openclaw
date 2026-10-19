@@ -15,7 +15,16 @@ set -euo pipefail
 
 tmux_bin=${AGENT_WORK_TMUX:-/opt/homebrew/bin/tmux}
 socket=${AGENT_WORK_TMUX_SOCKET:-agent-work}
-opencode_bin=${AGENT_WORK_OPENCODE:-/opt/homebrew/bin/opencode}
+opencode_bin=${AGENT_WORK_OPENCODE:-$HOME/.opencode/bin/opencode}
+# G-opencode2-r1: la 2 vive en ~/.opencode/bin y la 1.x de Homebrew ya no existe en esta Mac.
+# Un PATH recortado no encuentra ~/.opencode/bin, así que la ruta fija manda y el PATH es el
+# segundo intento, para una Mac que aún tenga la 1.x en otro sitio. Los respaldos valen solo
+# sin override: una AGENT_WORK_OPENCODE puesta y rota manda su error con esa ruta, y el host
+# corre el binario pedido o ninguno, nunca otro (modelos.opencode_por_omision la trata igual).
+if [ -z "${AGENT_WORK_OPENCODE:-}" ]; then
+  [ -x "$opencode_bin" ] || opencode_bin=$(command -v opencode 2>/dev/null || true)
+  [ -x "$opencode_bin" ] || opencode_bin=/opt/homebrew/bin/opencode
+fi
 state_root=${AGENT_WORK_STATE_ROOT:-$HOME/.local/state/agent-work-host}
 progress_dir=${AGENT_WORK_PROGRESS_DIR:-$HOME/.local/state/runbook-progress-events}
 progress_client=${AGENT_WORK_PROGRESS_CLIENT:-$HOME/bin/progress-events.py}
@@ -47,7 +56,7 @@ done
 user=$(id -un)
 id -Gn | tr ' ' '\n' | grep -qxF -- "$group" || codigo=2 falla "el grupo $group no existe o $user no pertenece a él. \
 Lo crea un administrador, una vez: sudo dseditgroup -o create $group && sudo dseditgroup -o edit -a $user -t user $group"
-[ -x "$opencode_bin" ] || codigo=2 falla "no existe $opencode_bin"
+[ -x "$opencode_bin" ] || codigo=2 falla "no es ejecutable $opencode_bin"
 [ -d "$workspace_root" ] || codigo=2 falla "no existe la raíz de repos $workspace_root"
 workspace_root=$(cd "$workspace_root" && pwd -P)
 

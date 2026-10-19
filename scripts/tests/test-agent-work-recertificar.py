@@ -6,10 +6,12 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts" / "agent-work"))
 import recertificar  # noqa: E402
+import sesion  # noqa: E402
 
 DOBLE_OPENCODE = r'''#!/usr/bin/env python3
 import json, os, sys
@@ -165,6 +167,47 @@ class Sondas(unittest.TestCase):
             if anterior is not None:
                 os.environ["RECERT_FUERA"] = anterior
         self.assertIn("RECERT_FUERA", str(ctx.exception))
+
+    def test_pwd_con_la_forma_de_la_2_la_carpeta_sale_de_la_db(self):
+        """La 2 no escribe `message=created` en stderr (G-opencode2-r1): la sonda lee la carpeta de
+        la db del servicio, por el mismo camino que la lee el host."""
+        doble = self.raiz / "doble-v2.py"
+        doble.write_text(
+            "#!/usr/bin/env python3\n"
+            "import json, os, sqlite3\n"
+            "sesion = 'ses_' + os.path.basename(os.environ.get('PWD', ''))\n"
+            "con = sqlite3.connect(os.environ['SONDA_DB'])\n"
+            "con.execute('CREATE TABLE IF NOT EXISTS session_v2 (id text PRIMARY KEY, directory text)')\n"
+            "con.execute('CREATE TABLE IF NOT EXISTS session_message (session_id text, type text, seq integer, data text)')\n"
+            "con.execute('INSERT OR REPLACE INTO session_v2 VALUES (?, ?)', (sesion, os.environ.get('PWD', '')))\n"
+            "con.commit()\n"
+            "con.close()\n"
+            "print(json.dumps({'type': 'text', 'timestamp': 1, 'sessionID': sesion,\n"
+            "                  'part': {'type': 'text', 'text': 'hola'}}))\n",
+            encoding="utf-8")
+        doble.chmod(doble.stat().st_mode | stat.S_IEXEC)
+        db = self.raiz / "opencode" / "opencode.db"
+        db.parent.mkdir(parents=True)
+        with mock.patch.object(sesion, "OPENCODE_DB", db), mock.patch.dict(os.environ, {"SONDA_DB": str(db)}):
+            veredicto = recertificar.correr_sonda("pwd", doble, checkout=ROOT, raiz=self.raiz / "pwd-v2")
+        self.assertEqual(veredicto.estado, "pasa", veredicto.detalle)
+
+    def test_consultar_la_version_no_deja_actualizar_el_cli(self):
+        doble = self.raiz / "doble-version.py"
+        doble.write_text(
+            "#!/usr/bin/env python3\n"
+            "import os\n"
+            "with open(os.environ['SONDA_MARCA'], 'w', encoding='utf-8') as out:\n"
+            "    out.write(os.environ.get('OPENCODE_DISABLE_AUTOUPDATE') or '')\n"
+            "print('opencode v2.0.29')\n",
+            encoding="utf-8")
+        doble.chmod(doble.stat().st_mode | stat.S_IEXEC)
+        marca = self.raiz / "marca"
+        with mock.patch.dict(os.environ):
+            os.environ.pop("OPENCODE_DISABLE_AUTOUPDATE", None)
+            os.environ["SONDA_MARCA"] = str(marca)
+            self.assertEqual(recertificar._version_del_binario(doble), "2.0.29")
+        self.assertEqual(marca.read_text(encoding="utf-8"), "1")
 
     def test_m7_pasa_con_solo_texto_y_no_si_termina_en_el_deny_o_borra_el_archivo(self):
         casos = {

@@ -44,6 +44,7 @@ import hashlib
 import lineas
 from spool import SETTLED as OPERACIONES_CERRADAS
 from modelos import claude_por_omision
+from modelos import opencode_por_omision as modelos_opencode_por_omision
 from modelos import (MODEL_PATTERN, POLICY_FILE, PROVIDER, Billing, Catalog, CatalogStore, CatalogUnavailable,
                      ContextoIncompleto, Explicacion, HostDown, HostMismatch, ModelFilter, ModelId, ModelNotListed,
                      OperatorCitation, PerfilRechazado, PermittedModel, PolicyUnreadable, ProviderClosure,
@@ -104,7 +105,9 @@ MINI_SSH = os.environ.get("AGENT_WORK_MINI_SSH", "gon@100.73.187.5")
 SSH_OPCIONES = ("-o", "BatchMode=yes", "-o", "ConnectTimeout=15", "-o", "ServerAliveInterval=15")
 OPENCLAW_BIN = Path(os.environ.get("AGENT_WORK_OPENCLAW_BIN", str(Path.home() / ".openclaw-r" / "openclaw")))
 """El openclaw de la Mac, el que manda el aviso a David."""
-OPENCODE_BIN = Path(os.environ.get("AGENT_WORK_OPENCODE", "/opt/homebrew/bin/opencode"))
+OPENCODE_BIN = Path(os.environ.get("AGENT_WORK_OPENCODE", str(modelos_opencode_por_omision())))
+"""El opencode de la Mac, resuelto por `opencode_por_omision` (G-opencode2-r1): AGENT_WORK_OPENCODE,
+~/.opencode/bin (la 2), el PATH y, por último, Homebrew (1.x)."""
 STATE_ROOT = Path(os.environ.get("AGENT_WORK_STATE_ROOT", str(Path.home() / ".local/state/agent-work-host")))
 PROMPTS_DB = Path.home() / ".claude-mem/claude-mem.db"
 CHECKOUT = Path(__file__).resolve().parents[2]

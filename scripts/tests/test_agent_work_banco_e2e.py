@@ -38,12 +38,13 @@ import encargo  # noqa: E402
 import flota  # noqa: E402
 from contracts import OperationKey, RunDir, SessionRecord, operation_id  # noqa: E402
 from host import repo_photo  # noqa: E402
+from modelos import opencode_por_omision  # noqa: E402
 from sesion import GroupBoundaryBackend  # noqa: E402
 from spool import canonical  # noqa: E402
 
 REAL = os.environ.get("AGENT_WORK_BANCO_REAL") == "1"
 TMUX = shutil.which("tmux") or "/opt/homebrew/bin/tmux"
-OPENCODE = os.environ.get("AGENT_WORK_OPENCODE", "/opt/homebrew/bin/opencode")
+OPENCODE = os.environ.get("AGENT_WORK_OPENCODE") or str(opencode_por_omision())
 ADAPTER = os.environ.get("AGENT_WORK_BANCO_ADAPTER", "opencode")
 """El adaptador del banco (SUA-04, 4.7): opencode como siempre, o claude con
 AGENT_WORK_BANCO_ADAPTER=claude. Los casos de claude solo corren con ese valor."""

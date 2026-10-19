@@ -10,6 +10,7 @@ import pwd
 import re
 import shlex
 import signal
+import sqlite3
 import time
 from collections import deque
 from dataclasses import dataclass
@@ -443,15 +444,29 @@ va a negar. opencode 1.18.35 negó `rm /tmp/x` y dejó pasar `cat > /tmp/x` y `p
 cubre las herramientas de archivo y las rutas que reconoce en un comando, no confina el shell."""
 
 
+def lanzamiento_con_servicio_propio(cli_version: str) -> bool:
+    """La 2 corre con un servicio de fondo compartido que ignora el OPENCODE_CONFIG_CONTENT del
+    proceso: medido en 2.0.29 (G-opencode2-r1), un `permission.bash: "deny"` del entorno no le
+    quitó el shell al modelo. Con `--standalone` el servidor es privado, hereda el entorno y el
+    deny se respetó: la herramienta desapareció y una lectura externa negó con error al modelo.
+    La 1.x no tiene la bandera y su proceso sí respetaba la configuración."""
+    mayor = cli_version.split(".", 1)[0]
+    return mayor.isdigit() and int(mayor) >= 2
+
+
 def opencode_argv(spec: LaunchSpec, opencode_bin: Path, *, task_id: str) -> tuple[str, ...]:
     """El encargo viaja como un argumento, con stdin en /dev/null: no existe un teclado por el que alguien
     apruebe un permiso. Nunca lleva `--auto` ni `-i`: medido en opencode 1.18.35 (B22-fase0.md, M2 y M6),
     sin `--auto` niega cada permiso "ask" y termina. `--print-logs` manda a stderr la causa de un error, la
-    carpeta de la sesión y el proveedor de cada llamada, que el flujo JSON no trae (M3)."""
+    carpeta de la sesión y el proveedor de cada llamada, que el flujo JSON no trae (M3) — en la 2 solo los
+    del proceso propio, que es por lo que la corrida va con `--standalone`; su `--log-level` ya no acepta
+    mayúsculas: `INFO` salía con 1 sin correr nada (medido en 2.0.29, G-opencode2-r1)."""
     if task_id.startswith("-"):
         raise ValueError(f"un taskId no empieza con guion: {task_id!r}")
-    return (str(opencode_bin), "run", "-m", str(spec.model.model), "--format", "json", "--print-logs",
-            "--log-level", "INFO", "--title", task_id, delivery_line(str(spec.run.assignment)) + SCRATCH_RULE)
+    propia = lanzamiento_con_servicio_propio(spec.model.cli_version)
+    return (str(opencode_bin), "run", *(("--standalone",) if propia else ()), "-m", str(spec.model.model),
+            "--format", "json", "--print-logs", "--log-level", "info" if propia else "INFO",
+            "--title", task_id, delivery_line(str(spec.run.assignment)) + SCRATCH_RULE)
 
 
 def opencode_env(spec: LaunchSpec) -> dict[str, str]:
@@ -694,11 +709,40 @@ def launch_script(spec: LaunchSpec, argv: tuple[str, ...], env: "dict[str, str |
 
 REJECTED_TOOL_CALL = "The user rejected permission to use this specific tool call."
 DENIED_BY_RULE = "The user has specified a rule which prevents you from using this specific tool call."
+DENIED_PERMISSION = "Permission denied: "
+ASK_UNANSWERED = "This non-interactive run cannot ask the user for permission"
+"""Los cuatro textos con que un `tool_use` negado llega en el flujo. Los dos primeros son de la
+1.x (B22-fase0.md, M2 y M6); los dos últimos, de la 2 (medido en 2.0.29, G-opencode2-r1): el deny
+le dice al modelo "Permission denied: <permiso>" y sigue, y un "ask" sin nadie que conteste ya no
+termina la sesión, le dice que no puede preguntar y sigue."""
 DENIED_LINE = re.compile(r"permission requested: (\S+) \((.*)\); auto-rejecting")
 LOG_FIELD = re.compile(r'([A-Za-z_][\w.]*)=("(?:[^"\\]|\\.)*"|\S*)')
 COLOUR = re.compile(r"\x1b\[[0-9;]*m")
 TAIL_LINES = 40
 SESSION_HEAD_LINES = 400
+
+OPENCODE_DB = Path(os.environ.get("AGENT_WORK_OPENCODE_DB", "~/.local/share/opencode/opencode.db")).expanduser()
+"""La db de la 2 (medido en 2.0.29, G-opencode2-r1): sus logs de proceso ya no dicen qué sesión
+abrió, a qué proveedor llamó ni qué modelo corrió (`message=created`, `message=stream`); eso vive
+en session_v2 y session_message de esta db, que el proceso escribe también con --standalone."""
+
+
+def negacion_de_flujo(error: object, herramienta: str) -> "tuple[PermissionDenied, str] | None":
+    """El permiso que ese error de `state.error` negó y su acción ("deny" o "ask"), o None si el
+    error no es una negación. La 1.x no deja rastro de evaluación en el flujo (la leían sus logs),
+    así que sus dos textos vuelven sin acción. La 2 firma el permiso en el texto del deny
+    ("Permission denied: external_directory"); el "ask" que nadie contestó no nombra el permiso y
+    queda como la herramienta que lo pidió."""
+    if not isinstance(error, str):
+        return None
+    if error.startswith((REJECTED_TOOL_CALL, DENIED_BY_RULE)):
+        return PermissionDenied(f"tool:{herramienta}", ""), ""
+    if error.startswith(DENIED_PERMISSION):
+        nombre = error[len(DENIED_PERMISSION):].split()
+        return PermissionDenied(nombre[0] if nombre else "", ""), "deny"
+    if error.startswith(ASK_UNANSWERED):
+        return PermissionDenied(f"tool:{herramienta}", ""), "ask"
+    return None
 
 
 @dataclass(frozen=True)
@@ -777,15 +821,52 @@ def session_directory(record: Path) -> str | None:
     return None
 
 
+def _session_en_db(session_id: str, db: Path) -> "tuple[str | None, tuple[ModelCall, ...]] | None":
+    """(carpeta, llamadas) de una sesión de la 2, leídas de su db en solo lectura, o None si la db
+    no se puede leer o no conoce la sesión. El `agent` y el `model.id`+`model.providerID` de cada
+    mensaje `assistant` son las llamadas que la 1.x escribía en sus logs (`message=stream`); la
+    2 no las escribe allí (medido en 2.0.29, G-opencode2-r1). Una llamada sin providerID o sin id
+    de modelo no aporta."""
+    try:
+        conexion = sqlite3.connect(f"{Path(db).resolve().as_uri()}?mode=ro", uri=True)
+        try:
+            fila = conexion.execute("SELECT directory FROM session_v2 WHERE id = ?", (session_id,)).fetchone()
+            mensajes = conexion.execute(
+                "SELECT data FROM session_message WHERE session_id = ? AND type = 'assistant' ORDER BY seq",
+                (session_id,)).fetchall()
+        finally:
+            conexion.close()
+    except (sqlite3.Error, OSError):
+        return None
+    carpeta = fila[0] if fila and isinstance(fila[0], str) else None
+    llamadas: list[ModelCall] = []
+    for (datos,) in mensajes:
+        try:
+            mensaje = json.loads(datos)
+        except ValueError:
+            continue
+        if not isinstance(mensaje, dict):
+            continue
+        modelo = mensaje.get("model") if isinstance(mensaje.get("model"), dict) else {}
+        nombre, proveedor = modelo.get("id"), modelo.get("providerID")
+        if isinstance(nombre, str) and isinstance(proveedor, str):
+            agente = mensaje.get("agent") if isinstance(mensaje.get("agent"), str) else "build"
+            llamadas.append(ModelCall(agente, f"{proveedor}/{nombre}", False))
+    return carpeta, tuple(llamadas)
+
+
 def read_events(record: Path) -> RunEvents | None:
     """Frontera con lo que escribe opencode. None si los archivos no se pueden leer. Una línea que no es
     JSON, un evento desconocido o una línea de log con otra forma no fallan: no aportan y ya. Las formas
-    son las medidas en opencode 1.18.35 (B22-fase0.md); una versión nueva cierra la ruta antes."""
+    de la 1.x son las medidas en B22-fase0.md; las de la 2, en G-opencode2-r1: su flujo trae las
+    negaciones con su texto nuevo, y lo que sus logs ya no dicen (sesión, proveedor, modelo) cae a su db
+    cuando el proceso la escribió y los logs no dijeron nada. Una versión nueva cierra la ruta antes."""
     files = SessionRecord(record)
     first_at, flow_error, rejected, tail = None, None, [], deque(maxlen=TAIL_LINES)
     denied, log_error, log_cause, opened, providers = [], None, None, None, []
-    calls, evaluations = [], []
+    calls, evaluations, negadas_de_flujo = [], [], []
     log_errors = deque(maxlen=TAIL_LINES)
+    session_id = None
     try:
         with files.events.open(encoding="utf-8", errors="replace") as flow:
             for line in flow:
@@ -799,15 +880,24 @@ def read_events(record: Path) -> RunEvents | None:
                 stamp = event.get("timestamp")
                 if first_at is None and isinstance(stamp, (int, float)) and not isinstance(stamp, bool):
                     first_at = stamp / 1000
+                if session_id is None and isinstance(event.get("sessionID"), str) and event["sessionID"]:
+                    session_id = event["sessionID"]
                 part = event.get("part") if isinstance(event.get("part"), dict) else {}
                 state = part.get("state") if isinstance(part.get("state"), dict) else {}
-                if event.get("type") == "tool_use" and str(state.get("error")).startswith(
-                        (REJECTED_TOOL_CALL, DENIED_BY_RULE)):
-                    rejected.append(PermissionDenied(f"tool:{part.get('tool')}", ""))
+                if event.get("type") == "tool_use":
+                    negada = negacion_de_flujo(state.get("error"), str(part.get("tool")))
+                    if negada is not None:
+                        negadas_de_flujo.append(negada)
                 failure = event.get("error") if event.get("type") == "error" else None
                 if isinstance(failure, dict):
                     data = failure.get("data") if isinstance(failure.get("data"), dict) else {}
                     flow_error = str(data.get("message") or failure.get("name") or flow_error)
+        for negada, accion in negadas_de_flujo:
+            # En la 1.x la negación del flujo no deja evaluación (estaba en sus logs); la 2 no
+            # escribe esas líneas, así que la evaluación es lo único que queda.
+            if accion:
+                evaluations.append(f"{negada.permission}:{accion}")
+            rejected.append(negada)
         with files.stderr.open(encoding="utf-8", errors="replace") as log:
             for line in log:
                 line = COLOUR.sub("", line)
@@ -834,6 +924,16 @@ def read_events(record: Path) -> RunEvents | None:
                     log_cause = log_cause or fields.get("cause") or fields.get("message")
     except OSError:
         return None
+    if session_id is not None and (not calls or opened is None):
+        # La 2: sus logs de proceso no dicen la carpeta ni las llamadas. La db del servicio las
+        # trae; se mira solo si los logs no dijeron nada, para que una 1.x quede medida por donde
+        # siempre. Una db ausente, a medio escribir o de otra versión no aporta y no falla.
+        caida = _session_en_db(session_id, OPENCODE_DB)
+        if caida is not None:
+            opened = opened or caida[0]
+            if not calls:
+                calls = list(caida[1])
+                providers = [llamada.model.partition("/")[0] for llamada in caida[1]]
     return RunEvents(first_at, tuple(dict.fromkeys(denied or rejected)), log_error or log_cause or flow_error, opened,
                      tuple(dict.fromkeys(providers)), tuple(tail), tuple(log_errors), tuple(calls),
                      tuple(dict.fromkeys(evaluations)))
@@ -896,8 +996,8 @@ class AdaptadorOpencode(Adaptador):
     def leer_eventos(self, record):
         return read_events(record)
 
-    def directorio_sesion(self, record):
-        return session_directory(record)
+    # `directorio_sesion` queda como la base: la carpeta sale del flujo y de los logs y, en la 2,
+    # de la db (`read_events`), que es donde la 2 la escribe (G-opencode2-r1).
 
     def modelo_en_uso(self, events, requested):
         return model_in_use(events, requested)

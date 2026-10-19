@@ -145,6 +145,20 @@ class LanzarEncargos(unittest.TestCase):
                           ([], {"AGENT_WORK_WORKSPACE_ROOT": str(self.root / "no-existe")})):
             self.assertEqual((self.launch(*args, **env).returncode, self.sessions()), (2, []))
 
+    def test_an_agent_work_opencode_that_cannot_run_names_its_path_and_starts_nothing(self):
+        """An explicit override never gets swapped for another binary: it is launched or its path
+        is named, so a typo cannot quietly run a different opencode (CodeRabbit 4309456561)."""
+        falso = self.bin / "path-falso"
+        falso.mkdir()
+        (falso / "opencode").write_text("#!/bin/sh\nexit 0\n")
+        (falso / "opencode").chmod(0o755)
+        roto = self.bin / "opencode-roto"
+        roto.write_text("#!/bin/sh\nexit 0\n")
+        refused = self.launch(PATH=f"{falso}:/usr/bin:/bin", AGENT_WORK_OPENCODE=str(roto))
+        self.assertEqual((refused.returncode, refused.stderr),
+                         (2, f"lanzar-encargos: no es ejecutable {roto}\n"))
+        self.assertEqual(self.sessions(), [])
+
     def test_pasa_el_r_de_sucesion_por_flag_o_por_ambiente(self):
         por_flag = self.root / "runtime-flag"
         por_ambiente = self.root / "runtime-ambiente"
