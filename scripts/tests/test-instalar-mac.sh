@@ -97,7 +97,7 @@ done
 # El host instalado lee los datos de su carpeta: las adaptaciones que el manifiesto fija.
 (cd / && python3 -I -c "import sys; sys.path.insert(0, sys.argv[1]); import contexto; adaptaciones = contexto.leer_adaptaciones(); assert set(adaptaciones) == {\"opencode-run\", \"openclaw\"}, adaptaciones" "$HOME/bin/agent-work") >/dev/null 2>&1 \
   || fail "agent-work/contexto.py instalado no lee contexto/ instalado"
-# routing.py importa brief.py: cada modulo instalado tiene que importar solo con lo instalado.
+# cada modulo instalado tiene que importar solo con lo instalado.
 for f in "$HOME"/bin/agent-work/*.py; do
   m="$(basename "$f" .py)"
   (cd / && python3 -I -c "import sys; sys.path.insert(0, sys.argv[1]); import $m" "$HOME/bin/agent-work") >/dev/null 2>&1 \

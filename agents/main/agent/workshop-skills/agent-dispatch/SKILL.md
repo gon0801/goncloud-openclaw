@@ -1,55 +1,15 @@
 ---
 name: agent-dispatch
-description: Dispatch work through the legacy implementer-verifier-reviewer chain and external Claude review loop, collect results, and complete merge and deployment without per-operation owner permission. Also when a child stops mid-change (stopReason length) or a sessions_send only queued: the change is not done until a completion with evidence. For a "por CLI" order see encargo-cli.
+description: Dispatch work through the legacy implementer-verifier-reviewer chain and external Claude review loop, collect results, and complete merge and deployment without per-operation owner permission. Also when a child stops mid-change (stopReason length) or a sessions_send only queued: the change is not done until a completion with evidence. For a "por CLI" order, dispatch the chain below (there are no CLI encargos since 2026-10-19).
 ---
 
 # Agent / Subagent Dispatch
 
 Route work to this Gateway's agents and collect complete results. Main orchestrates the team; `ingenieria` is a peer worker, not the orchestrator. Verified 2026-09-10: a full lane ran implementer -> verifier -> reviewer on the Mac repo, each role fed the previous role's commit and evidence paths; the same day a chain failed on rate-limited models and was re-dispatched on an alternate one.
 
-## Ruteo nativo vs. legado
-
-Las rutas marcadas expresamente como encargos gestionados de ingeniería a
-adversary y de operaciones a ingeniería usan el preparador
-`scripts/agent-work/routing.py` y las tools nativas `managed_tasks_submit`,
-`managed_tasks_admit`, `managed_tasks_inspect` y `managed_tasks_resolve`.
-Cada solicitante conserva su identidad y recibe el resultado en su propia
-sesión. Consulta las skills `managed-task-routing` de esos agentes. Si la
-tool o la combinación host/adaptador no está habilitada, el encargo queda
-bloqueado; no uses el despacho legado para un encargo gestionado. Los pedidos
-fuera de ese perímetro conservan el flujo de esta skill.
-
-La ruta de `main` a un CLI de la Mac (`mac-local`) entra solo cuando David
-dice "por CLI". Sin esas palabras, un pedido de trabajo en un repo de la Mac
-conserva el flujo de esta skill, aunque nombre un modelo. Con ellas, `main`
-sigue la skill `encargo-cli`: el brief se escribe con
-`~/.local/share/agent-work/brief.py` en la Mini (`routing.py` no corre ahí) y
-sigue `managed_tasks_submit` →
-`managed_tasks_admit` → `managed_tasks_inspect` → `managed_tasks_resolve`.
-`main` pide desde su sesión durable, nunca desde un turno `isolated` de cron,
-y R lo rechaza. El CLI entrega `agent-work.result.v1` por referencia, en lugar
-de los archivos `LISTO` y `VEREDICTO`, y el informe despierta solo a la sesión
-que hizo `submit`. El host da el encargo por entregado solo cuando el CLI
-escribe su aceptación (`agent-work.accept.v1` en `acceptRef`); teclearlo o
-verlo en pantalla no cuenta. Si la aceptación no llega en el plazo, llega una
-incidencia `transport-unavailable` con `delivery-unaccepted`: no lo vuelvas a
-teclear ni a pedir a ciegas; revisa con `managed_tasks_inspect` y decide. El
-host lanza un proceso de opencode por encargo y lo cierra él mismo al terminar
-o al cancelar. Qué modelos se pueden pedir lo contesta `encargo.py preparar`.
-
-## Encargo nativo a un agente (tarea gestionada)
-
-Cuando David pide un encargo a otro agente de esta Mini como tarea gestionada (no un trabajo por CLI), escríbelo con `brief.py` así, en la Mini:
-
-```bash
-python3 ~/.local/share/agent-work/brief.py --root <managedTasks.instructionRoot> --perfil <perfil> --perfiles <perfiles.v1.json> --agente <agentId> --contrato <ready.v1|review.v1> --file <brief>
-```
-
-`brief.py` contesta una línea JSON con `instructionRef`, `target` (`{"kind": "agent", "agentId": <id>}`) e `inputRevision`. Pega los tres fragmentos tal cual en `managed_tasks_submit`, junto con el `resultContract` que diste en `--contrato`, y después llama `managed_tasks_admit`. El agente reporta su resultado con `reporte.py`, como le dice la sección de protocolo de su brief: no le pidas que arme el resultado a mano. Cuando David no pide un encargo gestionado, `sessions_spawn` sigue siendo la forma normal de delegar a los agentes de esta skill.
-
 ## Chain dispatch (brief / "-saikit" lane)
 
-Legacy route (T9 `:265`): this chain (`sessions_spawn` to implementer, verifier and reviewer) stays outside the managed perimeter until its adoption (T12). Inside a managed run the runtime rejects `sessions_spawn` and `sessions_send`; only the requester-target pairs listed in "Ruteo nativo vs. legado" use the guarded route, and none of them goes from `main` to implementer, verifier or reviewer.
+This chain (`sessions_spawn` to implementer, verifier and reviewer) is how work is dispatched; it runs on this Mini.
 
 0. Multi-PR rounds need delivery sequencing: an external reviewer re-reading an OLD brief can race the implementer's push (it re-read the unchanged brief file, saw old PR heads, and re-stamped its previous verdict instead of reviewing the fixes — verified 2026-09-13). Write the brief file pointing at the NEW head SHAs, list the per-finding commits, and only then deliver; if a reviewer reports "nothing new", compare the PR heads it cites against the actual pushed heads before dispatching fixes.
 
@@ -88,7 +48,7 @@ Legacy route (T9 `:265`): this chain (`sessions_spawn` to implementer, verifier 
 
 ## External review loop (Claude on the Mac)
 
-Legacy route (T9 `:265`): this loop (tmux delivery, `OPENCLAW_WATCH`, `VEREDICTO` files) stays outside the managed perimeter until its adoption (T12). The managed `main` to Mac CLI route is the one in "Ruteo nativo vs. legado", driven by the `encargo-cli` skill.
+This loop (tmux delivery, `OPENCLAW_WATCH`, `VEREDICTO` files) is the external review route.
 
 David repeatedly orders a fix-then-review loop against the Claude Code tab in the Mac project ("revisa y haz el loop hasta que Claude apruebe"; asked 2026-09-11 and 2026-09-13 for different lanes). Verified full cycle 2026-09-13 (bloque 6: ronda 1 `VEREDICTO: CAMBIOS` with 8 findings, then fixes pushed → ronda 2 `VEREDICTO: APROBADO`):
 

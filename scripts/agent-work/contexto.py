@@ -57,7 +57,7 @@ class GeneracionSinSubir(ValueError):
 
 
 def canonico(documento: object) -> bytes:
-    """La forma canónica de un documento: la misma en `brief.py`, que no puede importar esto."""
+    """La forma canónica de un documento, compartida por los escritores del paquete."""
     return json.dumps(documento, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()
 
 

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Arma el resultado de un encargo nativo para managed_tasks_report (SUA-04, 4.5b).
+"""Arma el resultado con la forma que el runtime exige a un trabajador (SUA-04, 4.5b).
 
-R exige un result con su forma ({kind: produced, payload, artifactRef, digest,
+El resultado lleva su forma ({kind: produced, payload, artifactRef, digest,
 observedRevision}) y un digest que es el sha256 del canónico del payload: un modelo no lo
-arma a mano. Este archivo va junto a brief.py en la Mini y solo usa la biblioteca estándar.
+arma a mano. Este archivo solo usa la biblioteca estándar.
 El canónico es el de spool.py: json.dumps con sort_keys, separators (",", ":") y
 ensure_ascii=False, que es lo que hace stableStringify de R.
 """
