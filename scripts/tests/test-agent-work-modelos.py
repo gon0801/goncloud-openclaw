@@ -1156,6 +1156,19 @@ class OpencodePorOmision(unittest.TestCase):
         with mock.patch("shutil.which", return_value=str(en_path)):
             self.assertEqual(modelos.opencode_por_omision(), en_path)
 
+    def test_un_local_sin_permiso_de_ejecucion_no_manda(self):
+        local = self.raiz / "casa" / ".opencode" / "bin" / "opencode"
+        local.parent.mkdir(parents=True)
+        local.write_text("#!/bin/sh\n")
+        en_path = self.raiz / "path" / "opencode"
+        en_path.parent.mkdir(parents=True)
+        en_path.write_text("#!/bin/sh\n")
+        en_path.chmod(0o755)
+        os.environ.pop("AGENT_WORK_OPENCODE", None)
+        os.environ["HOME"] = str(self.raiz / "casa")
+        with mock.patch("shutil.which", return_value=str(en_path)):
+            self.assertEqual(modelos.opencode_por_omision(), en_path)
+
     def test_sin_nada_queda_el_de_homebrew_de_la_1x(self):
         os.environ.pop("AGENT_WORK_OPENCODE", None)
         os.environ["HOME"] = str(self.raiz / "casa-vacia")

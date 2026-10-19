@@ -37,7 +37,6 @@ from sesion import (
     negacion_de_flujo,
     opencode_env,
     read_events,
-    session_directory,
 )
 
 MODELO = "zai-coding-plan/glm-5.3-flash"
@@ -231,10 +230,10 @@ def _version_del_binario(binario: Path) -> str | None:
     """La versión que ese binario firma en `--version` ("opencode v2.0.29" en la 2, "1.18.35" en
     la 1.x), con el parser del catálogo. Un doble de prueba que no contesta una versión, un binario
     ausente o un --version colgado vuelven None: la sonda lanza con la forma de la 1.x, la que los
-    dobles emulan."""
+    dobles emulan. Consultar no debe actualizar el CLI: igual que `CatalogStore._run` (modelos.py)."""
     try:
         hecho = subprocess.run([str(binario), "--version"], capture_output=True, text=True, timeout=20,
-                               stdin=subprocess.DEVNULL)
+                               stdin=subprocess.DEVNULL, env={**os.environ, "OPENCODE_DISABLE_AUTOUPDATE": "1"})
     except (OSError, subprocess.TimeoutExpired):
         return None
     return version_de_salida(hecho.stdout.strip())
@@ -264,6 +263,13 @@ def _mismo(visto: str | None, esperado: Path) -> bool:
         return Path(visto).resolve() == esperado.resolve()
     except OSError:
         return visto == str(esperado)
+
+
+def _carpeta_de_sesion(record: Path) -> str | None:
+    """La carpeta en que abrió la sesión el CLI de esa corrida, leída como la lee el host: su flujo
+    y sus logs y, cuando no la dicen (la 2), la db del servicio (`read_events`, G-opencode2-r1)."""
+    eventos = read_events(record)
+    return eventos.session_directory if eventos else None
 
 
 def _m1(binario, checkout, base):
@@ -374,8 +380,8 @@ def _pwd(binario, checkout, base):
     _lanzar(
         _argv_opencode(binario, MODELO, "di hola", logs=True), entorno, repo, TOPES["pwd"], segundo
     )
-    visto_ajeno = session_directory(primero.path)
-    visto_repo = session_directory(segundo.path)
+    visto_ajeno = _carpeta_de_sesion(primero.path)
+    visto_repo = _carpeta_de_sesion(segundo.path)
     if _mismo(visto_ajeno, otra) and _mismo(visto_repo, repo):
         return _veredicto("pwd", "pasa", "la sesión abre en PWD, no en el cwd")
     if visto_ajeno is None or visto_repo is None:

@@ -624,7 +624,8 @@ class Launch(Slot):
         su db. Sin db (o sin esa sesión), lo que hay es lo que hay y no falla."""
         events = json.dumps({"type": "text", "timestamp": STAMP, "sessionID": "ses_db",
                              "part": {"type": "text", "text": "hola"}}) + "\n"
-        sin_db = read_events(self.write_run(events, ""))
+        record = self.write_run(events, "")
+        sin_db = read_events(record)
         self.assertEqual((sin_db.session_directory, sin_db.calls, sin_db.providers_called), (None, (), ()))
         db = self.root / "opencode" / "opencode.db"
         db.parent.mkdir(parents=True)
@@ -641,8 +642,12 @@ class Launch(Slot):
         con.commit()
         con.close()
         with mock.patch.object(sesion, "OPENCODE_DB", db):
-            said = read_events(self.write_run(events, ""))
+            said = read_events(record)
+            # El adaptador, que es lo que lee el host para juzgar una sesión perdida, cae igual a
+            # la db: el stderr de la 2 no dice la carpeta.
+            carpeta_del_adaptador = sesion.adaptador("opencode").directorio_sesion(record)
         self.assertEqual(said.session_directory, "/Users/dn/dev/demo")
+        self.assertEqual(carpeta_del_adaptador, "/Users/dn/dev/demo")
         self.assertEqual(said.calls, (ModelCall("build", "zai-coding-plan/glm-5.3-flash", False),))
         self.assertEqual(said.providers_called, ("zai-coding-plan",))
         self.assertEqual(sesion.model_in_use(said, "zai-coding-plan/glm-5.3-flash"),
@@ -1444,6 +1449,29 @@ class Decisions(Slot):
         code, answer = self.estado()
         self.assertEqual((answer["carpetaDeSesion"], answer["explicacion"]["frase"]),
                          ("/otra/carpeta", "opencode salió sin acusar recibo. La sesión abrió en /otra/carpeta."))
+
+    def test_a_v2_session_the_db_places_outside_the_task_folder_is_stopped(self):
+        """La 2 no dice la carpeta en stderr (G-opencode2-r1): la trae la db del servicio, y leída
+        de ahí el host para igual la sesión que abrió fuera de workspaceRef."""
+        self.launched()
+        self.record().events.write_text(json.dumps(
+            {"type": "step_start", "timestamp": STAMP, "sessionID": "ses_db",
+             "part": {"type": "step-start"}}) + "\n")
+        self.record().stderr.write_text("")
+        db = self.root / "opencode" / "opencode.db"
+        db.parent.mkdir(parents=True)
+        con = sqlite3.connect(db)
+        con.executescript("CREATE TABLE session_v2 (id text PRIMARY KEY, directory text);"
+                          "CREATE TABLE session_message (session_id text, type text, seq integer, data text);")
+        con.execute("INSERT INTO session_v2 VALUES ('ses_db', '/otra/en-la-db')")
+        con.commit()
+        con.close()
+        with mock.patch.object(sesion, "OPENCODE_DB", db):
+            self.assertEqual((self.one_pass()["detected"], self.backend.stops), (1, [self.session()]))
+            self.assertEqual(self.incidents(), ["host:1:transport-unavailable:launch-failed"])
+            code, answer = self.estado()
+        self.assertEqual((answer["carpetaDeSesion"], answer["explicacion"]["frase"]),
+                         ("/otra/en-la-db", "opencode salió sin acusar recibo. La sesión abrió en /otra/en-la-db."))
 
     def test_a_session_in_the_task_folder_is_left_alone(self):
         self.launched()

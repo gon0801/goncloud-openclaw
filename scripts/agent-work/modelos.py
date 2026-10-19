@@ -634,7 +634,7 @@ def opencode_por_omision() -> Path:
     if os.environ.get("AGENT_WORK_OPENCODE"):
         return Path(os.environ["AGENT_WORK_OPENCODE"])
     local = Path(os.environ.get("HOME") or Path.home()) / ".opencode/bin/opencode"
-    if local.is_file():
+    if local.is_file() and os.access(local, os.X_OK):
         return local
     en_path = shutil.which("opencode")
     if en_path:

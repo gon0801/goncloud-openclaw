@@ -996,8 +996,8 @@ class AdaptadorOpencode(Adaptador):
     def leer_eventos(self, record):
         return read_events(record)
 
-    def directorio_sesion(self, record):
-        return session_directory(record)
+    # `directorio_sesion` queda como la base: la carpeta sale del flujo y de los logs y, en la 2,
+    # de la db (`read_events`), que es donde la 2 la escribe (G-opencode2-r1).
 
     def modelo_en_uso(self, events, requested):
         return model_in_use(events, requested)
