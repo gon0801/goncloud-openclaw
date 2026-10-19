@@ -101,18 +101,27 @@ printf '%s\n' "$gate" | grep -qF '[ "$REUSO" = "true" ]' \
   || fail "el reuso debe autorizar shards=skipped en push (veredicto reusado)"
 printf '%s\n' "$gate" | grep -qF 'success:fast' \
   || fail "la omision autorizada por fast debe seguir viva (carril de docs, no se duplica ni se quita)"
-echo "ok (2): gate exige shards=success en PR no draft con carril completo; draft, fast y reuso autorizan la omision"
+# F5 (r3): el gate audita la union de shards contra el inventario de
+# scripts/tests/ de SU checkout; con el merge ref por defecto y la base
+# avanzada, ese inventario diverge del arbol que los shards probaron y el
+# gate da falso rojo. Mismo literal que el ref exigido para los shards en (1):
+# fijar los DOS a la misma linea es lo que impide que vuelvan a divergir.
+printf '%s\n' "$gate" | grep -qF 'ref: ${{ github.event.pull_request.head.sha || github.sha }}' \
+  || fail "el gate debe hacer checkout del MISMO ref que los shards (head.sha || github.sha): su inventario de union sale de scripts/tests/ de ese arbol y desde el merge ref una base avanzada da falso rojo (F5)"
+echo "ok (2): gate exige shards=success en PR no draft con carril completo; draft, fast y reuso autorizan la omision; gate y shards comparten ref de checkout"
 
 # ── (3) El script de reuso, fijado en su texto ─────────────────────────────
 grep -qF 'reusar=false' "$SCRIPT" \
   || fail "el default del reuso es NO reusar: sin veredicto confirmado se corre la bateria"
 grep -qF 'se corre la bateria completa' "$SCRIPT" \
   || fail "el fallback del reuso es CORRER, jamas saltar (fail-closed hacia correr)"
-grep -qF 'startswith("shards")' "$SCRIPT" \
-  || fail "el reuso debe leer las patas de shards de la cabeza del PR (la bateria vive en la matriz)"
+grep -qF 'shards (5/5, 5)' "$SCRIPT" \
+  || fail "el reuso debe leer las patas EXACTAS de la matriz (shards (1/5, 1) ... shards (5/5, 5), verificadas en los runs reales): un startswith(shards) suelto contaria check runs ajenos como patas (CR 4310797683)"
+grep -qF '[ "$cuantas" -eq 5 ]' "$SCRIPT" \
+  || fail "el reuso exige LAS CINCO patas de la matriz presentes: con una faltante no hay bateria completa validada que reusar (F3)"
 grep -qF 'select(.conclusion != "success")' "$SCRIPT" \
   || fail "el reuso exige TODAS las patas de shards en success"
-echo "ok (3): script de reuso con default reusar=false y fallback hacia correr"
+echo "ok (3): script de reuso con default reusar=false, fallback hacia correr, cinco patas EXACTAS de la matriz y todas en success"
 
 # ── (4) Permisos minimos de lectura, sin tokens nuevos ─────────────────────
 perms=$(awk '/^permissions:/{f=1; next} f && /^[A-Za-z_][A-Za-z0-9_-]*:/{f=0} f' "$WF")
@@ -194,8 +203,12 @@ chmod +x "$repo/doble/gh"
 
 sha=$(git_limpio "$repo" rev-parse HEAD)
 arbol=$(git_limpio "$repo" rev-parse 'HEAD^{tree}')
-patas=$(jq -cn '[range(1; 6) | {name: ("shards (\(.)/5)"), conclusion: "success", html_url: ("https://ci/run/\(.)")}]') \
+patas=$(jq -cn '[range(1; 6) | {name: ("shards (\(.)/5, \(.))"), conclusion: "success", html_url: ("https://ci/run/\(.)")}]') \
   || fail "no se pudo armar el payload de patas"
+# Nombres REALES de las patas en GitHub Actions (job + los dos valores de la
+# matriz): los confirmo contra los jobs de un run vivo del repo antes de
+# fijarlos aca. Un fixture con `shards (1/5)` a secas NO existe en el check
+# run y validaria un selector que en produccion no encuentra nada.
 pulls_ok=$(jq -cn --arg sha "$sha" '[{number: 7, head: {sha: $sha}}]')
 arbol_ok=$(jq -cn --arg arbol "$arbol" '{commit: {tree: {sha: $arbol}}}')
 arbol_malo='{"commit":{"tree":{"sha":"0000000000000000000000000000000000000000"}}}'
@@ -238,6 +251,39 @@ salida="$TMP/salida-5e.txt"; : >"$salida"
 correr_reuso "$repo" "$salida" "$escena" >/dev/null || fail "5e: el script de reuso jamas debe fallar"
 grep -q 'reusar=false' "$salida" || fail "5e: un PR fast no deja bateria que reusar (salida: $(cat "$salida"))"
 echo "ok (5e): patas de shards en skipped (PR fast de docs) -> reusar=false (corre)"
+
+# 5f) Cuatro patas en success y UNA en failure -> CORRE (F3; CR 4310797704).
+patas_fallo=$(printf '%s' "$patas" | jq 'map(if .name == "shards (5/5, 5)" then .conclusion = "failure" else . end)') \
+  || fail "no se pudo armar el payload de 5f"
+checks_fallo=$(jq -cn --argjson p "$patas_fallo" '{check_runs: $p}')
+escena=$(jq -cn --argjson p "$pulls_ok" --argjson a "$arbol_ok" --argjson c "$checks_fallo" '{pulls: $p, arbol: $a, "check-runs": $c}')
+salida="$TMP/salida-5f.txt"; : >"$salida"
+correr_reuso "$repo" "$salida" "$escena" >/dev/null || fail "5f: el script de reuso jamas debe fallar"
+grep -q 'reusar=false' "$salida" || fail "5f: una pata de shards en failure no deja veredicto que reusar (salida: $(cat "$salida"))"
+echo "ok (5f): 4 patas en success y 1 en failure -> reusar=false (corre)"
+
+# 5g) Una pata FALTANTE (solo cuatro, todas verdes) -> CORRE (F3; CR 4310797704).
+patas_cortas=$(printf '%s' "$patas" | jq '[.[] | select(.name != "shards (5/5, 5)")]') \
+  || fail "no se pudo armar el payload de 5g"
+checks_cortas=$(jq -cn --argjson p "$patas_cortas" '{check_runs: $p}')
+escena=$(jq -cn --argjson p "$pulls_ok" --argjson a "$arbol_ok" --argjson c "$checks_cortas" '{pulls: $p, arbol: $a, "check-runs": $c}')
+salida="$TMP/salida-5g.txt"; : >"$salida"
+correr_reuso "$repo" "$salida" "$escena" >/dev/null || fail "5g: el script de reuso jamas debe fallar"
+grep -q 'reusar=false' "$salida" || fail "5g: con una pata faltante no hay bateria COMPLETA validada (salida: $(cat "$salida"))"
+echo "ok (5g): solo cuatro patas de la matriz (una faltante) -> reusar=false (corre)"
+
+# 5h) Un check run AJENO con nombre shards-* NO suple la pata faltante: el
+# selector es por nombre EXACTO de la matriz (CR 4310797683). Con un
+# startswith suelto y contar >= 1 (o == 5), este impostor completaria las
+# cinco y daria falso reuso.
+patas_impostor=$(printf '%s' "$patas_cortas" | jq '. + [{name: "shards (6/6, impostor)", conclusion: "success", html_url: "https://ci/run/x"}]') \
+  || fail "no se pudo armar el payload de 5h"
+checks_impostor=$(jq -cn --argjson p "$patas_impostor" '{check_runs: $p}')
+escena=$(jq -cn --argjson p "$pulls_ok" --argjson a "$arbol_ok" --argjson c "$checks_impostor" '{pulls: $p, arbol: $a, "check-runs": $c}')
+salida="$TMP/salida-5h.txt"; : >"$salida"
+correr_reuso "$repo" "$salida" "$escena" >/dev/null || fail "5h: el script de reuso jamas debe fallar"
+grep -q 'reusar=false' "$salida" || fail "5h: un check run ajeno no cuenta como pata de la matriz (salida: $(cat "$salida"))"
+echo "ok (5h): check run ajeno shards-* no suple una pata faltante -> reusar=false (corre)"
 
 # ── (6) Regresion GIT_*: el entorno hostil de un hook no pega al repo real ─
 centinela="$TMP/centinela"

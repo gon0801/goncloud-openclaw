@@ -411,6 +411,16 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
+          # MISMO ref que la matriz de shards (F5, r3): en pull_request el
+          # default seria refs/pull/N/merge (el arbol MEZCLADO con la base), y
+          # de este checkout sale el inventario de scripts/tests/*.sh que la
+          # auditoria de union exige abajo. Si la base avanzo mientras el PR
+          # estaba abierto (agrego o quito pruebas en scripts/tests/), el
+          # merge tree y el head tree difieren: valida-union-shards veria
+          # entradas que NINGUN shard corrio y daria falso rojo en un PR
+          # atrasado. En push no hay PR y `||` cae al SHA del evento, igual
+          # que el checkout de los shards.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - name: Checkers sobre docs o ledger reales
         run: |
           set -e

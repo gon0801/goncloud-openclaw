@@ -2,8 +2,10 @@
 # Reuso de la bateria (matriz de shards) por arbol de git -- una sola vez por
 # bloque. Patron portado de goncloud-Orbit (PR 477); la diferencia local: aca
 # la bateria vive en la matriz de CINCO shards de quality.yml, no en un job
-# `completa` monolitico, asi que el veredicto se lee de las patas del check
-# run `shards (i/5)` de la cabeza del PR y exige que esten TODAS en success.
+# `completa` monolitico, asi que el veredicto se lee de las patas de la
+# matriz de la cabeza del PR -- los check runs se llaman EXACTAMENTE
+# `shards (1/5, 1)` ... `shards (5/5, 5)`, nombre del job mas los DOS valores
+# de la matriz -- y exige que esten LAS CINCO presentes y TODAS en success.
 #
 # En push a main/master: si el ARBOL del commit empujado (`git rev-parse
 # HEAD^{tree}`) es identico al arbol de la cabeza del PR que lo produjo y en
@@ -67,15 +69,23 @@ fi
 if ! cuerpo="$(gh api "repos/$repo/commits/$cabeza/check-runs" 2>/dev/null)"; then
   terminar "la consulta de check runs fallo"
 fi
-# Patas de shards de la cabeza (los check runs se llaman `shards (1/5)` ...
-# `shards (5/5)`). Exigir: al menos una pata y TODAS en success. Sin patas
-# (PR fast de docs) o con cualquier pata que no sea success, no hay bateria
-# validada que reusar.
-patas="$(printf '%s' "$cuerpo" | jq -c '[.check_runs[]? | select(.name | startswith("shards"))]' 2>/dev/null)" \
+# Patas EXACTAS de la matriz de shards de la cabeza. Seleccionar por nombre
+# EXACTO de las cinco entradas de la matriz (un `startswith("shards")` suelto
+# contaria como patas check runs ajenos, de este u otro workflow) y exigir
+# LAS CINCO presentes y TODAS en success: sin alguna pata (PR fast de docs,
+# corrida en curso o matriz incompleta) o con cualquier pata que no sea
+# success, no hay bateria completa validada que reusar. El endpoint de check
+# runs lista con filter=latest por defecto: por nombre devuelve el check run
+# MAS RECIENTE, asi que un verde viejo no tapa un rojo mas nuevo, y una pata
+# en curso (conclusion null) no reusa.
+patas="$(printf '%s' "$cuerpo" | jq -c '
+  ["shards (1/5, 1)", "shards (2/5, 2)", "shards (3/5, 3)", "shards (4/5, 4)", "shards (5/5, 5)"] as $matriz
+  | [.check_runs[]? | select(.name as $n | $matriz | index($n))]' 2>/dev/null)" \
   || terminar "la respuesta de check runs no se pudo leer"
-cuantas="$(printf '%s' "$patas" | jq 'length' 2>/dev/null)" \
+cuantas="$(printf '%s' "$patas" | jq '[.[].name] | unique | length' 2>/dev/null)" \
   || terminar "la respuesta de check runs no se pudo contar"
-[ "$cuantas" -ge 1 ] 2>/dev/null || terminar "la cabeza $cabeza no tiene patas de shards (PR fast de docs o sin bateria)"
+[ "$cuantas" -eq 5 ] 2>/dev/null \
+  || terminar "la cabeza $cabeza no tiene las CINCO patas de shards (encontradas: $cuantas): PR fast de docs, corrida en curso o matriz incompleta"
 malas="$(printf '%s' "$patas" | jq '[.[] | select(.conclusion != "success")] | length' 2>/dev/null)" \
   || terminar "la respuesta de check runs no se pudo leer"
 [ "$malas" -eq 0 ] 2>/dev/null || terminar "la cabeza $cabeza tiene patas de shards sin success (malas: $malas)"
