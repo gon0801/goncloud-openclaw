@@ -724,15 +724,15 @@ test("sinSecretos no confunde banderas cortas dentro de otra palabra o bandera l
 const PARAMS_LARGOS = { consulta: "listar las sesiones abiertas de esta prueba larga" };
 const CTX_EXTERNO = { agentId: "main", sessionKey: "agent:main:main" };
 
-async function dosSessionsList(toolCallId, ctx) {
+async function dosSessionsList(toolCallId, ctx, extraEvent = {}) {
   let calls = 0;
   const { handlers, dir } = makePlugin(async () => {
     calls++;
     return { ok: true, status: "ok", result: { model: "jev", answers: { q: { probabilityTrue: 0.95 } } } };
   });
   const handler = handlers.get("before_tool_call");
-  await handler({ toolName: "sessions_list", toolCallId: `${toolCallId}-1`, params: PARAMS_LARGOS }, ctx);
-  await handler({ toolName: "sessions_list", toolCallId: `${toolCallId}-2`, params: PARAMS_LARGOS }, ctx);
+  await handler({ toolName: "sessions_list", toolCallId: `${toolCallId}-1`, params: PARAMS_LARGOS, ...extraEvent }, ctx);
+  await handler({ toolName: "sessions_list", toolCallId: `${toolCallId}-2`, params: PARAMS_LARGOS, ...extraEvent }, ctx);
   await new Promise((r) => setTimeout(r, 50));
   let texto = "";
   try { texto = readFileSync(join(dir, "log.jsonl"), "utf8"); } catch { texto = ""; }
@@ -780,6 +780,16 @@ test("e) exec externo http- con comando riesgoso sigue pasando por comandoRiesgo
   assert.equal(calls, 1);
   assert.equal(injections.length, 1);
   assert.match(injections[0].text, /Jev: comando riesgoso/);
+});
+
+test("f) runId en ctx con toolCallId http- de turno si consulta a Jev", async () => {
+  const r = await dosSessionsList("http-turno", { ...CTX_EXTERNO, runId: "run-turno" });
+  assert.equal(r.calls, 1);
+});
+
+test("g) runId solo en el event con toolCallId rpc- de turno si consulta a Jev", async () => {
+  const r = await dosSessionsList("rpc-turno", CTX_EXTERNO, { runId: "run-turno" });
+  assert.equal(r.calls, 1);
 });
 
 test("herramienta: comillas en el comando no filtran el secreto a Jev ni al log (F15)", async () => {
