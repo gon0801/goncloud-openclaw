@@ -644,3 +644,62 @@ test("soloLectura acepta opciones largas inocuas y cortas (F2 r5)", () => {
     assert.equal(soloLectura(cmd), true, cmd);
   }
 });
+
+test("sinSecretos tapa cookie/proxy-user/-U y login -p (F13)", () => {
+  for (const [cmd, secreto] of [
+    ['curl -b "PHPSESSID=abc123F13" https://example.com', "abc123F13"],
+    ["curl --cookie 'sid=abc123F13' https://example.com", "abc123F13"],
+    ["curl -U userF13:passF13 https://example.com", "passF13"],
+    ["curl --proxy-user userF13:passF13 https://example.com", "passF13"],
+    ["docker login -p ClaveF13 registry.example.com", "ClaveF13"],
+  ]) {
+    const limpio = sinSecretos(cmd);
+    assert.ok(!limpio.includes(secreto), `${cmd} -> ${limpio}`);
+    assert.ok(limpio.includes("***"), `${cmd} -> ${limpio}`);
+  }
+  const proxy = sinSecretos("curl --proxy-user userF13:passF13 https://example.com");
+  assert.ok(proxy.includes("--proxy-user"), proxy);
+  assert.ok(proxy.includes("***"), proxy);
+  assert.ok(!proxy.includes("userF13"), proxy);
+});
+
+test("sinSecretos tapa -b/-U pegados, con espacio y entrecomillados (F13)", () => {
+  for (const [cmd, secreto] of [
+    ["curl -bPHPSESSID=pegadaF13 https://example.com", "pegadaF13"],
+    ["curl -b PHPSESSID=pegadaF13 https://example.com", "pegadaF13"],
+    ["curl -b 'PHPSESSID=pegadaF13' https://example.com", "pegadaF13"],
+    ['curl -b "PHPSESSID=pegadaF13" https://example.com', "pegadaF13"],
+    ["curl -UpegadoF13:claveF13 https://example.com", "claveF13"],
+    ["curl -U pegadoF13:claveF13 https://example.com", "claveF13"],
+    ["curl -U 'pegadoF13:claveF13' https://example.com", "claveF13"],
+    ['curl -U "pegadoF13:claveF13" https://example.com', "claveF13"],
+    ["podman login -p ClaveF13 registry.example.com", "ClaveF13"],
+    ["helm login -p ClaveF13 registry.example.com", "ClaveF13"],
+    ["nerdctl login -p ClaveF13 registry.example.com", "ClaveF13"],
+    ["docker login -pClavePegadaF13 registry.example.com", "ClavePegadaF13"],
+    ['docker login -p "ClaveF13" registry.example.com', "ClaveF13"],
+  ]) {
+    const limpio = sinSecretos(cmd);
+    assert.ok(!limpio.includes(secreto), `${cmd} -> ${limpio}`);
+    assert.ok(limpio.includes("***"), `${cmd} -> ${limpio}`);
+  }
+});
+
+test("sinSecretos: opciones largas user/cookie/session/login/credential tapan valor completo (F13)", () => {
+  for (const [cmd, secreto] of [
+    ["curl --cookie=sidF13=valorF13 https://example.com", "valorF13"],
+    ['curl --session "sesion con espaciosF13" https://example.com', "espaciosF13"],
+    ["curl --credential 'cred con espaciosF13' https://example.com", "espaciosF13"],
+    ["tool --login usuarioF13 --otro 1", "usuarioF13"],
+    ["tool --user=usuarioF13:claveF13", "claveF13"],
+  ]) {
+    const limpio = sinSecretos(cmd);
+    assert.ok(!limpio.includes(secreto), `${cmd} -> ${limpio}`);
+    assert.ok(limpio.includes("***"), `${cmd} -> ${limpio}`);
+  }
+});
+
+test("sinSecretos no tapa --password-stdin ni comandos sin secretos (F13)", () => {
+  assert.equal(sinSecretos("docker login --password-stdin registry.example.com"), "docker login --password-stdin registry.example.com");
+  assert.equal(sinSecretos("curl -s https://example.com/api"), "curl -s https://example.com/api");
+});

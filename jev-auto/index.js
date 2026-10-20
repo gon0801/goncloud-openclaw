@@ -142,7 +142,7 @@ export function sinSecretos(cmd) {
     .replace(/((?:"|')(?:password|passwd|pass|pwd|token|secret|api_key|apikey|access_token|auth)(?:"|')\s*:\s*)("[^"]*"|'[^']*'|[^\s,}\]]+)/gi, "$1***")
     .replace(/(\bredis-cli\b[^|;&\n]*?)(-a\s+|-a|--pass(?:=|\s+))("[^"]*"|'[^']*'|[^\s"']+)/g, "$1$2***")
     .replace(/\b([A-Z0-9_]*(TOKEN|KEY|SECRET|PASS(WORD)?|AUTH)[A-Z0-9_]*)=\S+/gi, "$1=***")
-    .replace(/(--?[\w-]*(token|key|secret|pass(word)?|auth)[\w-]*[=\s]+)\S+/gi, "$1***")
+    .replace(/(--?[\w-]*(?:token|key|secret|pass(?:word)?|auth|user|cookie|session|login|credential)[\w-]*[=\s]+)("[^"]*"|'[^']*'|[^\s]+)/gi, (m, p) => (/stdin/i.test(p) ? m : `${p}***`))
     .replace(/((?:-H|--header)(?:=|\s+))(["'])([^"']*)(\2)/g, (m, p, q, inner) => {
       const i = inner.indexOf(":");
       if (i < 0 || !HEADER_SENSIBLE.test(inner.slice(0, i))) return m;
@@ -150,7 +150,10 @@ export function sinSecretos(cmd) {
     })
     .replace(/((?:-H|--header)(?:=|\s+))([A-Za-z0-9_-]+)(\s*:\s*)\S+/g, (m, p, name, colon) =>
       HEADER_SENSIBLE.test(name) ? `${p}${name}${colon}***` : m)
-    .replace(/(\bcurl\b[^|;&\n]*?)(--user(?:=|\s+)|-u\s+|-u)("[^"]*"|'[^']*'|[^\s"']*(?:"[^"]*"|'[^']*')[^\s"']*|[^\s"']+)/g, "$1$2***")
+    .replace(/(\bcurl\b[^|;&\n]*?)(--user(?:=|\s+)|(?<![\w-])-u\s+|(?<![\w-])-u)("[^"]*"|'[^']*'|[^\s"']*(?:"[^"]*"|'[^']*')[^\s"']*|[^\s"']+)/g, "$1$2***")
+    .replace(/(\bcurl\b[^|;&\n]*?)((?<![\w-])-b(?:\s+|=)?)("[^"]*"|'[^']*'|[^\s"']*(?:"[^"]*"|'[^']*')[^\s"']*|[^\s"']+)/g, "$1$2***")
+    .replace(/(\bcurl\b[^|;&\n]*?)((?<![\w-])-U(?:\s+|=)?)("[^"]*"|'[^']*'|[^\s"']*(?:"[^"]*"|'[^']*')[^\s"']*|[^\s"']+)/g, "$1$2***")
+    .replace(/(\b(?:docker|podman|helm|nerdctl)\b[^|;&\n]*?\blogin\b[^|;&\n]*?)((?<![\w-])-p(?:\s+|=)?)("[^"]*"|'[^']*'|[^\s"']*(?:"[^"]*"|'[^']*')[^\s"']*|[^\s"']+)/g, "$1$2***")
     .replace(/(\b(?:mysql|mysqldump|mariadb-dump|psql)\b[^|;&\n]*?)(-p)("[^"]*"|'[^']*'|[^\s"'-][^\s"']*)/g, "$1$2***")
     .replace(/(\b(?:mysql|mysqldump|mariadb-dump|psql)\b[^|;&\n]*?)(-p\s+)("[^"]*"|'[^']*')/g, "$1$2***")
     .replace(/(\bsshpass\b[^|;&\n]*?)(-p\s+|-p)("[^"]*"|'[^']*'|[^\s"']+)/g, "$1$2***")
