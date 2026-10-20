@@ -1,0 +1,3 @@
+{"id":"2d763be5-6390-4ccf-a3a4-621c91c41e94","agentId":"main","enabled":true,
+ "schedule":{"kind":"cron","expr":"40 */2 * * *"},
+ "payload":{"message":"LOG=old","toolsAllow":["exec"]}}
