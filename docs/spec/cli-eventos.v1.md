@@ -1,6 +1,6 @@
 # Avisos de CLI a main sin vigilancia con modelos
 
-Fecha: 2026-09-28. Estado: diseño para revisión. No hay implementación ni despliegue.
+Fecha: 2026-09-28. Estado: histórico, no adoptado. La ruta de corrida que cita (`scripts/mac/corrida/`) se retiró el 2026-10-13; no ejecutar este plan sin rehacerlo.
 
 ## Problema y decisión
 

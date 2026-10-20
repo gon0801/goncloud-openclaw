@@ -1,5 +1,7 @@
 # Plan de implementación: avisos de CLI sin vigías de agente
 
+> Histórico (2026-10-19): plan no adoptado; la ruta de corrida que usa (`scripts/mac/corrida/`) se retiró el 2026-10-13. No ejecutar sin rehacerlo.
+
 > Para el ejecutor: sigue estas tareas en orden. Este archivo autoriza preparar y probar el cambio cuando David pida ejecutarlo. La solicitud que produjo este plan fue solo de documentación; ninguna tarea se ejecutó al escribirlo.
 
 **Objetivo.** Mientras zcode, Codex, Grok, Claude u otro CLI trabaja sin novedades, la vigilancia de U3 y del loop revisor consume cero tokens. Una entrega, un bloqueo o una terminación inesperada llega a la sesión solicitante de `main` en cuanto los equipos están disponibles.
