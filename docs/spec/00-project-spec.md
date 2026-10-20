@@ -53,7 +53,7 @@ Decisiones del dueño (2026-09-15), fila 6.8 de Plans.md:
 
 1. main coordina y le reporta a David; puede mergear y desplegar igual que cualquier agente.
 2. Los roles organizan el trabajo de calidad, no conceden permisos exclusivos de merge o deploy.
-3. Cualquier agente Claw o CLI puede mergear y desplegar sin autorización adicional por operación. El PR sigue el flujo normal de GitHub con CI verde y la revisión del bot ai-review (DeepSeek) sobre el head, sin bloqueantes abiertos. CodeRabbit, si comenta, se lee y sus hilos Major/Critical se adjudican; si no comenta o está sin cuota, no frena ni se espera. No se exige orden fechada, recibo del lead ni `authorization_ref` para merge o deploy. Mergear no publica automáticamente el runtime Windows; cualquier agente puede ejecutar su procedimiento de publicación y verificar el resultado.
+3. Cualquier agente Claw o CLI puede mergear y desplegar sin autorización adicional por operación. El PR sigue el flujo normal de GitHub con CI verde y la revisión del bot ai-review (DeepSeek) sobre el head, sin bloqueantes abiertos. CodeRabbit, si comenta, se lee y sus hilos Major/Critical se adjudican; si no comenta o está sin cuota, no frena ni se espera, pero un hilo Major/Critical suyo sin adjudicar frena hasta adjudicarse. No se exige orden fechada, recibo del lead ni `authorization_ref` para merge o deploy. Mergear no publica automáticamente el runtime Windows; cualquier agente puede ejecutar su procedimiento de publicación y verificar el resultado.
 4. Nada se reporta como "listo" sin haberse verificado antes con la prueba del repo (`verify/`) cuando existe.
 
 ## Propiedad del runtime Windows

@@ -192,7 +192,7 @@ printf '%s' "$s5" | grep -qF 'cero bloqueantes adjudicados abiertos' \
 viejo=$(printf '%s' "$s5" | grep -inE 'con comentarios accionables no es' || true)
 [ -z "$viejo" ] || fail "$DOC: la seccion 5 volvio a tratar cualquier comentario como revision no aprobada: $viejo"
 s6=$(seccion 6)
-for regla in 'Revisión: el bot ai-review (DeepSeek) sobre el head, sin bloqueantes abiertos' 'CodeRabbit es opcional: si comenta, se lee y sus hilos Major/Critical se adjudican; si no comenta o está sin cuota, no frena ni se espera' 'cualquier agente Claw o CLI ejecuta `python3 /Users/dn/dev/wt/agent-work-host/scripts/agent-work/merge.py mergear <PR> --sha <head> --repo <owner/repo>`' 'devuelve el faltan y no mergea' 'No se requiere orden adicional, recibo del lead ni tabla de preaprobaciones'; do
+for regla in 'Revisión: el bot ai-review (DeepSeek) sobre el head, sin bloqueantes abiertos' 'CodeRabbit es opcional: si comenta, se lee y sus hilos Major/Critical se adjudican; si no comenta o está sin cuota, no frena ni se espera, pero un hilo Major/Critical suyo sin adjudicar frena hasta adjudicarse' 'cualquier agente Claw o CLI ejecuta `python3 /Users/dn/dev/wt/agent-work-host/scripts/agent-work/merge.py mergear <PR> --sha <head> --repo <owner/repo>`' 'devuelve el faltan y no mergea' 'No se requiere orden adicional, recibo del lead ni tabla de preaprobaciones'; do
   printf '%s' "$s6" | grep -qF "$regla" || fail "$DOC: falta la regla de merge: $regla"
 done
 viejo=$(printf '%s' "$s6" | grep -F 'Con CI y CodeRabbit aprobados' || true)
