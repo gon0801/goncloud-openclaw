@@ -555,3 +555,92 @@ test("herramienta no manda ni guarda el secreto en claro (F10 r4)", async () => 
   assert.ok(sombraTexto.length > 0, "el log sombra debio escribirse");
   assert.ok(!sombraTexto.includes("ClaveSegura9"), sombraTexto);
 });
+
+test("F12: exec que solo difieren en ruta/sha larga no consultan a Jev por bucle", async () => {
+  let consultasHerramienta = 0;
+  const fake = async (payload) => {
+    if (payload.questions.q) {
+      consultasHerramienta++;
+      return { ok: true, status: "ok", result: { model: "jev", answers: { q: { probabilityTrue: 0.95 } } } };
+    }
+    return {
+      ok: true,
+      status: "ok",
+      result: {
+        model: "jev",
+        answers: {
+          tipo: { choice: "solo-lectura", probabilities: { "solo-lectura": 0.9 } },
+          borra: { probabilityTrue: 0.1 },
+          git: { probabilityTrue: 0.1 },
+          prod: { probabilityTrue: 0.1 },
+          envia: { probabilityTrue: 0.1 },
+        },
+      },
+    };
+  };
+  const pares = [
+    ["cat /una/ruta/bastante/larga/para/la/prueba/archivo-a.txt", "cat /una/ruta/bastante/larga/para/la/prueba/archivo-b.txt"],
+    [`git show ${"a".repeat(40)}`, `git show ${"b".repeat(40)}`],
+  ];
+  for (const [i, [c1, c2]] of pares.entries()) {
+    const { handlers, injections } = makePlugin(fake);
+    const ctx = ctxTool(`f12-distintos-${i}`);
+    await handlers.get("before_tool_call")({ toolName: "exec", params: { command: c1 } }, ctx);
+    await handlers.get("before_tool_call")({ toolName: "exec", params: { command: c2 } }, ctx);
+    assert.equal(injections.length, 0, `${c1} vs ${c2}`);
+  }
+  assert.equal(consultasHerramienta, 0);
+});
+
+test("F12: exec identicos con secreto consultan a Jev sin filtrar el secreto", async () => {
+  const estados = [];
+  const fake = async (payload) => {
+    estados.push(payload.state);
+    if (payload.questions.q) {
+      return { ok: true, status: "ok", result: { model: "jev", answers: { q: { probabilityTrue: 0.95 } } } };
+    }
+    return {
+      ok: true,
+      status: "ok",
+      result: {
+        model: "jev",
+        answers: {
+          tipo: { choice: "reversible", probabilities: { reversible: 0.8 } },
+          borra: { probabilityTrue: 0.1 },
+          git: { probabilityTrue: 0.1 },
+          prod: { probabilityTrue: 0.1 },
+          envia: { probabilityTrue: 0.1 },
+        },
+      },
+    };
+  };
+  const { handlers, injections, dir } = makePlugin(fake);
+  const comando = 'mysql -pClaveSegura9 -e "select 1" --consulta-larga-de-prueba';
+  const ctx = ctxTool("f12-identicos");
+  await handlers.get("before_tool_call")({ toolName: "exec", params: { command: comando } }, ctx);
+  await handlers.get("before_tool_call")({ toolName: "exec", params: { command: comando } }, ctx);
+  const estadoHerramienta = estados.find((s) => typeof s?.message === "string" && s.message.includes("anterior:"));
+  assert.ok(estadoHerramienta, "Jev debio recibir el estado de herramienta");
+  assert.equal(injections.length, 1);
+  assert.ok(!JSON.stringify(estados).includes("ClaveSegura9"), JSON.stringify(estados));
+  const sombraTexto = await leerSombraTexto(join(dir, "log.jsonl"));
+  assert.ok(sombraTexto.length > 0, "el log sombra debio escribirse");
+  assert.ok(!sombraTexto.includes("ClaveSegura9"), sombraTexto);
+  assert.ok(!JSON.stringify([...globalThis.__jevAuto.lastCall.values()]).includes("ClaveSegura9"));
+  assert.ok(!JSON.stringify([...globalThis.__jevAuto.asked.keys()]).includes("ClaveSegura9"));
+});
+
+test("soloLectura rechaza abreviaturas de opciones largas peligrosas (F2 r5)", () => {
+  for (const cmd of [
+    "sort --out=x datos.txt", "sort --out x datos.txt", "sort --comp=gzip datos.txt",
+    "date --se=20250101", "tail --fol app.log", "git diff --outp=x",
+  ]) {
+    assert.equal(soloLectura(cmd), false, cmd);
+  }
+});
+
+test("soloLectura acepta opciones largas inocuas y cortas (F2 r5)", () => {
+  for (const cmd of ["git log --oneline", "sort -n datos.txt", "tail -n 5 app.log", "ls --all"]) {
+    assert.equal(soloLectura(cmd), true, cmd);
+  }
+});

@@ -76,15 +76,23 @@ const EXEC_TOOLS = new Set(["exec", "bash", "Bash", "shell"]);
 // Fuera de la lista: env (ejecuta el comando que le sigue) y less (puede ejecutar y cuelga esperando teclas).
 const RO_CMDS = /^(ls|cat|head|tail|grep|rg|wc|pwd|echo|which|whoami|date|stat|du|df|ps|uname|id|jq|sort|uniq|cut|tr|diff|find|git (status|log|diff|show|branch|remote|rev-parse|blame)|openclaw (cron list|status)|gh (pr|run) (view|list|checks))(\s|$)/;
 // Banderas que escriben, ejecutan o leen archivos extra pase lo que pase el comando: nunca es solo lectura.
-const WRITE_FLAGS = /^(--output(?:=.*)?|-fprint0?|-fprintf|-fls|-execdir|-exec|-okdir|-ok|-delete|--rawfile(?:=.*)?|--slurpfile(?:=.*)?|--argfile(?:=.*)?|--pre(?:=.*)?|--compress-program(?:=.*)?|--ext-diff|--textconv|--hostname-bin(?:=.*)?)$/;
+const WRITE_FLAGS = /^(-fprint0?|-fprintf|-fls|-execdir|-exec|-okdir|-ok|-delete)$/;
+// Opciones largas peligrosas: getopt_long y git aceptan prefijos unicos, asi que --out vale --output.
+// Se rechaza todo --nombre[=...] cuyo nombre sea prefijo de alguna de estas.
+const LONG_PELIGROSAS = ["output", "set", "follow", "compress-program", "rawfile", "slurpfile", "argfile", "pre", "pre-glob", "ext-diff", "textconv", "hostname-bin", "search-zip", "watch", "web"];
+const esLargaPeligrosa = (t) => {
+  if (!t.startsWith("--")) return false;
+  const nombre = t.slice(2).split("=")[0];
+  return nombre.length >= 1 && LONG_PELIGROSAS.some((d) => d.startsWith(nombre));
+};
 // Chequeos por comando sobre los argumentos de un tramo ya aceptado por RO_CMDS.
 function tramoSeguro(tokens) {
   const [cmd, sub] = tokens;
-  if (tokens.some((t) => WRITE_FLAGS.test(t))) return false;
-  if (cmd === "tail" && tokens.some((t) => /^--follow(?:=.*)?$/.test(t) || /^-[^-]*[fF]/.test(t))) return false;
-  if (cmd === "sort" && tokens.some((t) => t === "-o" || /^-[^-]*o/.test(t) && !t.startsWith("--") || t.startsWith("--output"))) return false;
+  if (tokens.some((t) => WRITE_FLAGS.test(t) || esLargaPeligrosa(t))) return false;
+  if (cmd === "tail" && tokens.some((t) => /^-[^-]*[fF]/.test(t))) return false;
+  if (cmd === "sort" && tokens.some((t) => t === "-o" || /^-[^-]*o/.test(t) && !t.startsWith("--"))) return false;
   if (cmd === "date") {
-    if (tokens.some((t) => t === "-s" || t.startsWith("--set") || /^-[a-z]*s/.test(t))) return false;
+    if (tokens.some((t) => t === "-s" || /^-[a-z]*s/.test(t))) return false;
     for (let i = 1; i < tokens.length; i++) {
       const t = tokens[i];
       if (t.startsWith("-") || t.startsWith("+") || t.startsWith("--")) continue;
@@ -105,8 +113,7 @@ function tramoSeguro(tokens) {
   if (cmd === "git" && sub === "remote") {
     return tokens.length === 2 || (tokens.length === 3 && tokens[2] === "-v");
   }
-  if (cmd === "rg" && tokens.some((t) => t === "-z" || /^-[^-]*z/.test(t) && !t.startsWith("--") || t.startsWith("--search-zip") || t.startsWith("--pre-glob"))) return false;
-  if (cmd === "gh" && tokens.some((t) => t === "--watch" || t === "--web" || t.startsWith("--watch=") || t.startsWith("--web="))) return false;
+  if (cmd === "rg" && tokens.some((t) => t === "-z" || /^-[^-]*z/.test(t) && !t.startsWith("--"))) return false;
   if (cmd === "git" && sub === "branch") {
     const rest = tokens.slice(2);
     const SAFE = new Set(["-a", "--all", "-r", "--remotes", "-v", "-vv", "--verbose", "-l", "--list", "--show-current", "-q", "--quiet"]);
@@ -225,9 +232,9 @@ export default definePluginEntry({
     const asked = new Map();
     const DEDUP_MS = 10 * 60_000;
 
-    async function ask(kind, state, question, ctx) {
+    async function ask(kind, state, question, ctx, dedupSalt) {
       const agentId = ctx.agentId ?? agentOf(ctx.sessionKey);
-      const dkey = `${kind}|${ctx.sessionKey}|${ctx.runId ?? ""}|${JSON.stringify(state)}`;
+      const dkey = `${kind}|${ctx.sessionKey}|${ctx.runId ?? ""}|${dedupSalt ?? JSON.stringify(state)}`;
       const now = Date.now();
       for (const [k, v] of asked) if (now - v.at > DEDUP_MS) asked.delete(k);
       const prev = asked.get(dkey);
@@ -585,16 +592,21 @@ export default definePluginEntry({
         const host = event.params.host ?? event.params.node;
         await comandoRiesgo(event.params.command, host ? String(host) : undefined, { ...ctx, agentId, sessionKey, runId: ctx?.runId ?? event?.runId });
       }
-      const cur = { tool: event.toolName, params: sinSecretos(JSON.stringify(event.params ?? {})).slice(0, 1500) };
+      // Comparar y deduplicar con el crudo (su sha256, sin guardarlo en claro): sinSecretos puede
+      // dejar iguales dos llamadas distintas (rutas o sha largos -> ***) y eso daba falsos bucles.
+      // sinSecretos solo se aplica al message que recibe Jev (y de ahi al registro sombra).
+      const crudo = JSON.stringify(event.params ?? {});
+      const cur = { tool: event.toolName, params: sinSecretos(crudo).slice(0, 1500), hash: createHash("sha256").update(crudo).digest("hex") };
       const prev = lastCall.get(sessionKey);
       lastCall.set(sessionKey, cur);
       if (lastCall.size > 500) lastCall.delete(lastCall.keys().next().value);
-      // Filtro barato por codigo: otra herramienta o una llamada corta no se consultan.
+      // Filtro barato por codigo: otra herramienta, una llamada corta o una que difiere en el crudo no se consultan.
       if (!prev || prev.tool !== cur.tool || cur.params.length < MIN_LEN) return;
+      if (prev.hash !== cur.hash) return;
       const r = await ask("herramienta", { message: `anterior: ${prev.tool} ${prev.params}\nactual: ${cur.tool} ${cur.params}` }, {
         type: "boolean",
         instructions: "¿La llamada actual repite la anterior solo para esperar a que algo cambie (bucle de espera: sleep, volver a mirar el mismo estado, el mismo ls/cat/checks)?",
-      }, { ...ctx, agentId, sessionKey, runId: ctx?.runId ?? event?.runId });
+      }, { ...ctx, agentId, sessionKey, runId: ctx?.runId ?? event?.runId }, `${prev.hash}|${cur.hash}`);
       if (!(r?.pTrue >= 0.9)) return;
       const text = `Jev advierte: tu llamada a ${cur.tool} repite la anterior (${r.pTrue}). No esperes en bucle: si lo que esperas no esta listo, cierra con PENDIENTE.`;
       log({ kind: "herramienta", agentId, sessionKey, accion: "advertencia", tool: cur.tool });
