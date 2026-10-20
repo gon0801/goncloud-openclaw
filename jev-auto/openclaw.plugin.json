@@ -1,0 +1,32 @@
+{
+  "id": "jev-auto",
+  "name": "Jev auto",
+  "description": "Ruteo y cierre de ayudantes con Jev (decisionModel) inyectado en el contexto de main; registro en jev-sombra/decisiones.jsonl.",
+  "activation": {
+    "onStartup": true
+  },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "agentId": {
+        "type": "string"
+      },
+      "timeoutMs": {
+        "type": "integer",
+        "minimum": 200,
+        "maximum": 10000
+      },
+      "logPath": {
+        "type": "string"
+      },
+      "notifyTo": {
+        "type": "string"
+      },
+      "vigilanteIntervalMs": {
+        "type": "integer",
+        "minimum": 60000
+      }
+    }
+  }
+}
