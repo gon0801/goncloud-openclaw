@@ -110,3 +110,6 @@ tablero-runbook/*.log
 
 # respaldos que dejan las ediciones de emergencia en el host del gateway
 *.plugin.json.bak
+
+# Salidas generadas (snapshot HTML del harness ya desinstalado)
+out/
