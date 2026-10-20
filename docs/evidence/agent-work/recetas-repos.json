@@ -5,7 +5,7 @@
       "base": "main",
       "metodo": "squash",
       "checks": ["clasificador", "ci-contract", "gate", "reconcile"],
-      "bots": ["coderabbit", "ai-review"],
+      "bots": ["ai-review"],
       "naceDraft": false,
       "traerBase": "merge",
       "firmasInfra": ["timed out after", "ECONNRESET", "rate limit"],
@@ -36,7 +36,7 @@
         "test (shard 1/2)",
         "reconcile"
       ],
-      "bots": ["coderabbit", "ai-review"],
+      "bots": ["ai-review"],
       "naceDraft": false,
       "traerBase": "merge",
       "firmasInfra": ["timed out after", "ECONNRESET", "rate limit"],
@@ -65,7 +65,7 @@
       "base": "feat/hermes-team",
       "metodo": "squash",
       "checks": [],
-      "bots": ["coderabbit", "ai-review"],
+      "bots": ["ai-review"],
       "naceDraft": false,
       "traerBase": "merge",
       "firmasInfra": ["timed out after", "ECONNRESET", "rate limit"]

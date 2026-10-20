@@ -18,8 +18,8 @@ Por qué el tope del reintento es run_attempt y no un ledger local: GitHub ya
 mantiene ese estado en el run; anotarlo en un archivo sería una copia que miente
 si la máquina cambia.
 
-Por qué "Review rate limited" de CodeRabbit pasa con aviso: decisión de David del
-2026-09-25 (#173 a #175) — con CodeRabbit en su límite, la revisión del bot basta.
+Desde 2026-10-20 CodeRabbit no es obligatorio (decisión de David): la compuerta
+solo corre si la receta lo lista; si comenta, sus hilos Major se adjudican igual.
 
 Por qué la revisión incompleta del bot ya no frena (David, orden
 G-sin-candados 2026-10-19): el gate solo niega un hallazgo BLOQUEANTE sin

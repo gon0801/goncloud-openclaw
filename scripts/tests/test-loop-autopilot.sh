@@ -188,13 +188,15 @@ viejo=$(printf '%s' "$s3" | grep -inE 'no deja nada nuevo|Lo accionable se corri
 [ -z "$viejo" ] || fail "$DOC: el paso 7 volvio a exigir cero comentarios de CodeRabbit: $viejo"
 s5=$(seccion 5)
 printf '%s' "$s5" | grep -qF 'cero bloqueantes adjudicados abiertos' \
-  || fail "$DOC: la seccion 5 no declara la compuerta de CodeRabbit (cero bloqueantes adjudicados abiertos)"
+  || fail "$DOC: la seccion 5 no declara la compuerta de revision (cero bloqueantes adjudicados abiertos)"
 viejo=$(printf '%s' "$s5" | grep -inE 'con comentarios accionables no es' || true)
 [ -z "$viejo" ] || fail "$DOC: la seccion 5 volvio a tratar cualquier comentario como revision no aprobada: $viejo"
 s6=$(seccion 6)
-for regla in 'Con CI y CodeRabbit aprobados y los bloqueantes resueltos' 'cualquier agente Claw o CLI ejecuta `python3 /Users/dn/dev/wt/agent-work-host/scripts/agent-work/merge.py mergear <PR> --sha <head> --repo <owner/repo>`' 'devuelve el faltan y no mergea' 'No se requiere orden adicional, recibo del lead ni tabla de preaprobaciones'; do
+for regla in 'Revisión: el bot ai-review (DeepSeek) sobre el head, sin bloqueantes abiertos' 'CodeRabbit es opcional: si comenta, se lee y sus hilos Major/Critical se adjudican; si no comenta o está sin cuota, no frena ni se espera, pero un hilo Major/Critical suyo sin adjudicar frena hasta adjudicarse' 'cualquier agente Claw o CLI ejecuta `python3 /Users/dn/dev/wt/agent-work-host/scripts/agent-work/merge.py mergear <PR> --sha <head> --repo <owner/repo>`' 'devuelve el faltan y no mergea' 'No se requiere orden adicional, recibo del lead ni tabla de preaprobaciones'; do
   printf '%s' "$s6" | grep -qF "$regla" || fail "$DOC: falta la regla de merge: $regla"
 done
+viejo=$(printf '%s' "$s6" | grep -F 'Con CI y CodeRabbit aprobados' || true)
+[ -z "$viejo" ] || fail "$DOC: la seccion 6 volvio a exigir CodeRabbit aprobado: $viejo"
 s7=$(seccion 7)
 printf '%s' "$s7" | grep -qF 'sin permiso adicional ni ventana de cron' \
   || fail "$DOC: despliegue requiere permiso adicional"
@@ -208,17 +210,17 @@ printf '%s' "$s10" | grep -qF 'No hay una revisión de código nueva al cierre' 
 s10_manda=$(printf '%s' "$s10" | grep -v 'No hay una revisión' | grep -v '^Medido:')
 viejo=$(printf '%s' "$s10_manda" | grep -inE 'revisión completa|muta|mutar' || true)
 [ -z "$viejo" ] || fail "$DOC: la seccion 10 volvio a mandar una revision completa de cierre: $viejo"
-echo "ok (3c): CodeRabbit por adjudicacion, merge libre y cierre sin revision repetida"
+echo "ok (3c): revision ai-review por adjudicacion, CodeRabbit opcional, merge libre y cierre sin revision repetida"
 
 for file in "$DOC" "$BASE" docs/runbooks/base-summonaikit.md; do
-  grep -q 'CodeRabbit' "$file" || fail "$file: falta la compuerta de CodeRabbit"
+  grep -q 'CodeRabbit' "$file" || fail "$file: falta la mencion de CodeRabbit opcional"
   stale=$(grep -nEi 'sin cuota no bloquea|sin cuota no se espera|CodeRabbit sin cuota[^|]*\|[^|]*no bloquea|re-APPROVE|sha aprobado|Mergeado por David|No mergea ni despliega' "$file" || true)
   [ -z "$stale" ] || fail "$file: volvió un veto o una excepción obsoleta: $stale"
 done
 printf '%s' "$s3" | grep -qF 'El PR espera hasta tener su aprobación' \
   || fail "$DOC: CodeRabbit sin respuesta no puede habilitar el merge"
-printf '%s' "$s6" | grep -qF 'Con CI y CodeRabbit aprobados' \
-  || fail "$DOC: falta la aprobación de CodeRabbit antes del merge"
+printf '%s' "$s6" | grep -qF 'Revisión: el bot ai-review (DeepSeek) sobre el head, sin bloqueantes abiertos' \
+  || fail "$DOC: falta la revisión del bot ai-review (DeepSeek) antes del merge"
 grep -qF 'los otros carriles continúan' "$BASE" \
   || fail "$BASE: la espera de CodeRabbit detiene otros carriles"
 grep -qF 'los demás carriles continúan' docs/runbooks/base-summonaikit.md \
@@ -232,7 +234,7 @@ grep -qF 'confirmed from the PR API' agents/main/agent/workshop-skills/post-merg
 stale=$(grep -nE 'one PR open, nothing merged by you|owner.s to merge|Mergeado por David|Recibo de entrega.*APPROVE lead' \
   agents/main/agent/workshop-skills/post-merge-closure/SKILL.md "$BASE" docs/runbooks/base-summonaikit.md || true)
 [ -z "$stale" ] || fail "volvió el veto de cierre o el recibo obligatorio: $stale"
-echo "ok (3c-gate): CodeRabbit obligatorio para el PR, sin veto de rol ni recibo"
+echo "ok (3c-gate): CodeRabbit opcional para el PR, sin veto de rol ni recibo"
 
 # (3e) La auditoria del lead precede al primer push y al primer PR; la correccion
 # tras la revision se hace en local y se publica en el mismo PR. Si el orden se

@@ -143,10 +143,25 @@ class MergeConToy(unittest.TestCase):
             codigo = merge.main([*argumentos, "--gh", str(self.bin)])
         return codigo, salida.getvalue(), error.getvalue()
 
-    def listo(self, numero, sha, repo=REPO):
+    def listo(self, numero, sha, repo=REPO, receta=None):
         return self.correr(
-            "listo", str(numero), "--sha", sha, "--repo", repo, "--receta", str(RECETA)
+            "listo",
+            str(numero),
+            "--sha",
+            sha,
+            "--repo",
+            repo,
+            "--receta",
+            str(receta or RECETA),
         )
+
+    def receta_con_coderabbit(self):
+        """Receta de prueba derivada de la real con CodeRabbit obligatorio."""
+        datos = json.loads(RECETA.read_text())
+        datos["repos"][REPO]["bots"] = ["coderabbit", "ai-review"]
+        ruta = self.tmp / "receta-con-coderabbit.json"
+        ruta.write_text(json.dumps(datos))
+        return ruta
 
     def lineas_de_log(self):
         return (self.tmp / "argv.log").read_text().splitlines()
@@ -182,8 +197,7 @@ class MergeConToy(unittest.TestCase):
         self.assertEqual(codigo, 0)
         self.assertEqual(
             salida,
-            '{"avisos":["coderabbit-rate-limited","hallazgo-menor-sin-adjudicar:F4"],'
-            '"faltan":[],"listo":true}\n',
+            '{"avisos":["hallazgo-menor-sin-adjudicar:F4"],"faltan":[],"listo":true}\n',
         )
 
     def test_pr322_tal_cual_niega_por_los_dos_mayores_y_avisa_el_f1(self):
@@ -199,7 +213,6 @@ class MergeConToy(unittest.TestCase):
                     "hallazgo-sin-adjudicar:cr:4293442176",
                 ],
                 "avisos": [
-                    "coderabbit-rate-limited",
                     "hallazgo-menor-sin-adjudicar:F1",
                     "hallazgo-menor-sin-adjudicar:F5",
                     "hallazgo-menor-sin-adjudicar:F6",
@@ -217,7 +230,7 @@ class MergeConToy(unittest.TestCase):
             {
                 "listo": False,
                 "faltan": ["hallazgo-sin-adjudicar:cr:4295315734"],
-                "avisos": ["coderabbit-rate-limited"],
+                "avisos": [],
             },
         )
 
@@ -232,7 +245,7 @@ class MergeConToy(unittest.TestCase):
             {
                 "listo": True,
                 "faltan": [],
-                "avisos": ["coderabbit-rate-limited", "hallazgo-menor-sin-adjudicar:F4"],
+                "avisos": ["hallazgo-menor-sin-adjudicar:F4"],
             },
         )
         # Los permisos se piden SOLO de los autores de líneas de adjudicación: sin adjudicaciones
@@ -302,7 +315,7 @@ class MergeConToy(unittest.TestCase):
         estado = json.loads((self.store / "status.json").read_text())
         estado["statuses"] = []
         (self.store / "status.json").write_text(json.dumps(estado))
-        codigo, salida, _ = self.listo(321, HEAD321)
+        codigo, salida, _ = self.listo(321, HEAD321, receta=self.receta_con_coderabbit())
         self.assertEqual(codigo, 1)
         self.assertEqual(json.loads(salida)["faltan"], ["coderabbit-ausente"])
 
@@ -311,17 +324,32 @@ class MergeConToy(unittest.TestCase):
         estado = json.loads((self.store / "status.json").read_text())
         estado["statuses"][0]["state"] = "failure"
         (self.store / "status.json").write_text(json.dumps(estado))
-        codigo, salida, _ = self.listo(321, HEAD321)
+        codigo, salida, _ = self.listo(321, HEAD321, receta=self.receta_con_coderabbit())
         self.assertEqual(codigo, 1)
         self.assertEqual(json.loads(salida)["faltan"], ["coderabbit-rojo:failure"])
 
     def test_rate_limited_pasa_con_aviso(self):
         # El fixture lo trae ya: success con description "Review rate limited"
-        # pasa y se avisa (decisión de David, 2026-09-25).
+        # pasa y se avisa; solo con CodeRabbit en la receta (receta de prueba).
         self.escenario_verde()
-        codigo, salida, _ = self.listo(321, HEAD321)
+        codigo, salida, _ = self.listo(321, HEAD321, receta=self.receta_con_coderabbit())
         self.assertEqual(codigo, 0)
         self.assertIn("coderabbit-rate-limited", json.loads(salida)["avisos"])
+
+    def test_receta_real_sin_coderabbit_esta_listo_sin_aviso(self):
+        # Receta real (sin coderabbit desde 2026-10-20): sin status de CodeRabbit
+        # no frena ni avisa.
+        self.escenario_verde()
+        estado = json.loads((self.store / "status.json").read_text())
+        estado["statuses"] = []
+        (self.store / "status.json").write_text(json.dumps(estado))
+        codigo, salida, _ = self.listo(321, HEAD321)
+        self.assertEqual(codigo, 0)
+        veredicto = json.loads(salida)
+        self.assertTrue(veredicto["listo"])
+        self.assertEqual(veredicto["faltan"], [])
+        self.assertNotIn("coderabbit-rate-limited", veredicto["avisos"])
+        self.assertFalse(any("coderabbit" in aviso for aviso in veredicto["avisos"]))
 
     def test_hilo_menor_sin_resolver_solo_avisa(self):
         pr = self.montar(328)
@@ -337,7 +365,7 @@ class MergeConToy(unittest.TestCase):
         self.assertEqual(codigo, 0)
         self.assertEqual(
             json.loads(salida)["avisos"],
-            ["coderabbit-rate-limited", "hilo-menor-sin-resolver:cr:4295315700"],
+            ["hilo-menor-sin-resolver:cr:4295315700"],
         )
 
     # --- compuerta 4: el bot --------------------------------------------------
@@ -369,7 +397,7 @@ class MergeConToy(unittest.TestCase):
         # El bloque legible sigue: su Medium abierto avisa aunque la marca esté a medias.
         self.assertEqual(
             json.loads(salida)["avisos"],
-            ["coderabbit-rate-limited", "revision-parcial", "hallazgo-menor-sin-adjudicar:F4"],
+            ["revision-parcial", "hallazgo-menor-sin-adjudicar:F4"],
         )
 
     def test_revision_parcial_por_forma_legada_sin_findings(self):
@@ -382,9 +410,7 @@ class MergeConToy(unittest.TestCase):
         codigo, salida, _ = self.listo(321, HEAD321)
         self.assertEqual(codigo, 0)
         # Sin bloque legible no hay hallazgos que avisar: solo la revisión a medias.
-        self.assertEqual(
-            json.loads(salida)["avisos"], ["coderabbit-rate-limited", "revision-parcial"]
-        )
+        self.assertEqual(json.loads(salida)["avisos"], ["revision-parcial"])
 
     def test_un_high_abierto_sin_adjudicar_sigue_negando(self):
         # Lo BLOQUEANTE se queda (David, orden G-sin-candados: High/Critical sin adjudicar frena).
@@ -556,7 +582,7 @@ class MergeConToy(unittest.TestCase):
                 "mergeado": True,
                 "mergeCommit": MERGE_COMMIT,
                 "adjudicaciones": [],
-                "avisos": ["coderabbit-rate-limited", "hallazgo-menor-sin-adjudicar:F4"],
+                "avisos": ["hallazgo-menor-sin-adjudicar:F4"],
             },
         )
         self.assertIn(
