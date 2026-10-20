@@ -122,7 +122,8 @@ export function soloLectura(cmd) {
   return s.split(/\|\||&&|[|;]/).map((p) => p.trim().replace(/^cd\s+\S+$/, "")).every((p) => {
     if (!p) return true;
     if (!RO_CMDS.test(p)) return false;
-    return tramoSeguro(p.split(/\s+/).filter(Boolean));
+    const tokens = p.split(/\s+/).filter(Boolean).map((t) => t.replace(/['"\\]/g, ""));
+    return tramoSeguro(tokens);
   });
 }
 // Tapa argumentos con pinta de secreto: VAR=valor de claves, flags de token/clave, Bearer, cadenas largas tipo token.
@@ -584,7 +585,7 @@ export default definePluginEntry({
         const host = event.params.host ?? event.params.node;
         await comandoRiesgo(event.params.command, host ? String(host) : undefined, { ...ctx, agentId, sessionKey, runId: ctx?.runId ?? event?.runId });
       }
-      const cur = { tool: event.toolName, params: JSON.stringify(event.params ?? {}).slice(0, 1500) };
+      const cur = { tool: event.toolName, params: sinSecretos(JSON.stringify(event.params ?? {})).slice(0, 1500) };
       const prev = lastCall.get(sessionKey);
       lastCall.set(sessionKey, cur);
       if (lastCall.size > 500) lastCall.delete(lastCall.keys().next().value);

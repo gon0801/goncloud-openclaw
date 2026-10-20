@@ -85,6 +85,28 @@ const leerDecisiones = async (decisionsPath, esperadas = 1) => {
   }
 };
 
+const leerSombra = async (logPath, esperadas = 1) => {
+  const tope = Date.now() + 2000;
+  let lineas = [];
+  for (;;) {
+    try {
+      lineas = readFileSync(logPath, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l));
+    } catch { lineas = []; }
+    if (lineas.length >= esperadas || Date.now() >= tope) return lineas;
+    await new Promise((r) => setTimeout(r, 10));
+  }
+};
+
+const leerSombraTexto = async (logPath) => {
+  const tope = Date.now() + 2000;
+  let texto = "";
+  for (;;) {
+    try { texto = readFileSync(logPath, "utf8"); } catch { texto = ""; }
+    if (texto.length > 0 || Date.now() >= tope) return texto;
+    await new Promise((r) => setTimeout(r, 10));
+  }
+};
+
 const EVENTO = { currentUserMessage: "Necesito revisar las ventas de Mercado Libre de esta semana" };
 const ctxDe = (runId) => ({
   agentId: "main",
@@ -114,8 +136,7 @@ test("ask: answers.q vacia no inyecta nada y marca respuesta_invalida (F7)", asy
     lines.some((l) => l.status === "failure" && l.error === "respuesta_invalida"),
     JSON.stringify(lines),
   );
-  const sombra = readFileSync(join(dir, "log.jsonl"), "utf8")
-    .split("\n").filter(Boolean).map((l) => JSON.parse(l));
+  const sombra = await leerSombra(join(dir, "log.jsonl"), 2);
   assert.ok(
     sombra.some((l) => l.kind === "ruteo" && l.ok === false),
     JSON.stringify(sombra),
@@ -183,6 +204,16 @@ test("soloLectura sigue aceptando lecturas evidentes con banderas inocuas (F2)",
   ]) {
     assert.equal(soloLectura(cmd), true, cmd);
   }
+});
+
+test("soloLectura rechaza banderas peligrosas entrecomilladas o escapadas (F2 r4)", () => {
+  assert.equal(soloLectura('find . "-delete"'), false);
+  assert.equal(soloLectura("find . \\-delete"), false);
+  assert.equal(soloLectura('sort "-o" salida.txt datos.txt'), false);
+  assert.equal(soloLectura("find . '-exec' rm {} ;"), false);
+  assert.equal(soloLectura('grep "foo bar" a.txt'), true);
+  assert.equal(soloLectura("find . -name '*.js'"), true);
+  assert.equal(soloLectura("git log --oneline"), true);
 });
 
 test("configSchema declara los umbrales que el codigo lee de cfg (F3)", () => {
@@ -465,7 +496,7 @@ test("comandoRiesgo no persiste texto del comando, solo hash (F6 cierre)", async
   assert.ok(lineas.every((l) => !("cmdPreview" in l)), JSON.stringify(lineas));
   assert.ok(lineas.every((l) => String(l.cmdHash ?? "").startsWith("sha256:")), JSON.stringify(lineas));
   assert.ok(!JSON.stringify(lineas).includes("hunter2") && !JSON.stringify(lineas).includes("--subir-datos"));
-  const sombra = readFileSync(join(dir, "log.jsonl"), "utf8");
+  const sombra = await leerSombraTexto(join(dir, "log.jsonl"));
   assert.ok(!sombra.includes("hunter2") && !sombra.includes("--subir-datos"), sombra);
   assert.ok(!sombra.includes("cmdPreview"), sombra);
 });
@@ -477,7 +508,7 @@ test("ask: answers.q solo con score no inyecta undefined (F7 cierre)", async () 
   assert.equal(r, undefined);
   const lines = await leerDecisiones(decisionsPath);
   assert.ok(lines.some((l) => l.status === "failure" && l.error === "respuesta_invalida"), JSON.stringify(lines));
-  const sombra = readFileSync(join(dir, "log.jsonl"), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l));
+  const sombra = await leerSombra(join(dir, "log.jsonl"), 2);
   assert.ok(sombra.some((l) => l.kind === "ruteo" && l.ok === false), JSON.stringify(sombra));
 });
 
@@ -486,6 +517,41 @@ test("ask: ok sin answers.q reporta 'sin respuesta', no 'ok' (F8)", async () => 
   const { handlers, dir } = makePlugin(fake);
   const r = await handlers.get("before_prompt_build")(EVENTO, ctxDe("sin-respuesta-f8"));
   assert.equal(r, undefined);
-  const sombra = readFileSync(join(dir, "log.jsonl"), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l));
+  const sombra = await leerSombra(join(dir, "log.jsonl"), 2);
   assert.ok(sombra.some((l) => l.kind === "ruteo" && l.ok === false && l.error === "sin respuesta"), JSON.stringify(sombra));
+});
+
+test("herramienta no manda ni guarda el secreto en claro (F10 r4)", async () => {
+  const estados = [];
+  const fake = async (payload) => {
+    estados.push(payload.state);
+    if (payload.questions.q) {
+      return { ok: true, status: "ok", result: { model: "jev", answers: { q: { probabilityTrue: 0.95 } } } };
+    }
+    return {
+      ok: true,
+      status: "ok",
+      result: {
+        model: "jev",
+        answers: {
+          tipo: { choice: "reversible", probabilities: { reversible: 0.8 } },
+          borra: { probabilityTrue: 0.1 },
+          git: { probabilityTrue: 0.1 },
+          prod: { probabilityTrue: 0.1 },
+          envia: { probabilityTrue: 0.1 },
+        },
+      },
+    };
+  };
+  const { handlers, dir } = makePlugin(fake);
+  const comando = 'mysql -pClaveSegura9 -e "select 1" --consulta-larga-de-prueba';
+  await handlers.get("before_tool_call")({ toolName: "exec", params: { command: comando } }, ctxTool("f10-r4"));
+  await handlers.get("before_tool_call")({ toolName: "exec", params: { command: comando } }, ctxTool("f10-r4"));
+  const estadoHerramienta = estados.find((s) => typeof s?.message === "string" && s.message.includes("anterior:"));
+  assert.ok(estadoHerramienta, "Jev debio recibir el estado de herramienta");
+  assert.ok(!JSON.stringify(estadoHerramienta).includes("ClaveSegura9"), JSON.stringify(estadoHerramienta));
+  assert.ok(!JSON.stringify(estados).includes("ClaveSegura9"), JSON.stringify(estados));
+  const sombraTexto = await leerSombraTexto(join(dir, "log.jsonl"));
+  assert.ok(sombraTexto.length > 0, "el log sombra debio escribirse");
+  assert.ok(!sombraTexto.includes("ClaveSegura9"), sombraTexto);
 });
