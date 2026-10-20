@@ -4,6 +4,7 @@
 import { definePluginEntry } from "openclaw/plugin-sdk/plugin-entry";
 import { appendFile } from "node:fs/promises";
 import { readFileSync, writeFileSync, renameSync } from "node:fs";
+import { createHash, randomUUID } from "node:crypto";
 import { dirname, join } from "node:path";
 
 const ROSTER = {
@@ -68,6 +69,26 @@ export function cleanPrompt(raw) {
   return out || String(raw ?? "").trim();
 }
 
+// Comandos de shell que se clasifican antes de correr.
+const EXEC_TOOLS = new Set(["exec", "bash", "Bash", "shell"]);
+// Solo lectura evidente: no se consulta. Cada tramo (separado por | ; && ||) debe empezar con uno de estos,
+// sin redirecciones ni sustituciones. Ante la duda, se consulta.
+const RO_CMDS = /^(ls|cat|head|tail|grep|rg|wc|pwd|echo|which|whoami|date|stat|file|du|df|ps|env|uname|id|less|jq|sort|uniq|cut|tr|diff|find(?!.*\s-(delete|exec|ok)\b)|git (status|log|diff|show|branch|remote -v|rev-parse|blame)|openclaw (cron list|status)|gh (pr|run) (view|list|checks))(\s|$)/;
+export function soloLectura(cmd) {
+  const s = String(cmd ?? "").trim();
+  if (!s || /[>`]|\$\(|<\(|\n/.test(s)) return false;
+  return s.split(/\|\||&&|[|;]/).map((p) => p.trim().replace(/^cd\s+\S+$/, "")).every((p) => !p || RO_CMDS.test(p));
+}
+// Tapa argumentos con pinta de secreto: VAR=valor de claves, flags de token/clave, Bearer, cadenas largas tipo token.
+export function sinSecretos(cmd) {
+  return String(cmd ?? "")
+    .replace(/\b([A-Z0-9_]*(TOKEN|KEY|SECRET|PASS(WORD)?|AUTH)[A-Z0-9_]*)=\S+/gi, "$1=***")
+    .replace(/(--?[\w-]*(token|key|secret|pass(word)?|auth)[\w-]*[=\s]+)\S+/gi, "$1***")
+    .replace(/\b(Bearer|Basic)\s+\S+/gi, "$1 ***")
+    .replace(/(\/\/[^\s:/@]+:)[^\s@]+@/g, "$1***@")
+    .replace(/\b[A-Za-z0-9_\-+/=]{32,}\b/g, "***");
+}
+
 const top = (a) => {
   if (a?.type === "boolean" || typeof a?.probabilityTrue === "number") {
     const p = Number(a.probabilityTrue ?? 0);
@@ -98,10 +119,42 @@ export default definePluginEntry({
     const TIMEOUT = cfg.timeoutMs ?? 2000;
     const LOG = cfg.logPath ?? "/Users/gon/.openclaw/workspace/jev-sombra/decisiones.jsonl";
 
-    const log = (rec) =>
-      appendFile(LOG, JSON.stringify({ ts: new Date().toISOString(), ...rec }) + "\n").catch((e) =>
+    // Registro sombra: nunca guarda texto del mensaje; `input` se reemplaza por su hash.
+    const log = ({ input, ...rec }) =>
+      appendFile(LOG, JSON.stringify({ ts: new Date().toISOString(), ...rec,
+        ...(input !== undefined ? { inputHash: "sha256:" + createHash("sha256").update(String(input)).digest("hex") } : {}) }) + "\n").catch((e) =>
         api.logger.warn(`jev-auto: no pude escribir registro: ${e}`),
       );
+
+    // Bitacora de decisiones: una linea por consulta real a Jev. Sin texto de entrada (solo hash) ni claves.
+    // Fire-and-forget: si escribir falla se ignora; nunca frena el turno.
+    const DECISIONS = cfg.decisionsPath ?? "/Users/gon/.openclaw/jev-auto/decisions.jsonl";
+    // Umbral que el codigo aplica de verdad por tipo de consulta; null = la sugerencia se usa siempre.
+    const THRESHOLD = { turno: 0.8, herramienta: 0.9, vigilante: 0.8 };
+    const bitacora = (kind, state, question, rec) => {
+      try {
+        const threshold = rec.threshold !== undefined ? rec.threshold : THRESHOLD[kind] ?? null;
+        const ans = rec.answer;
+        // boolean: la accion se decide con probabilityTrue; choice: con la probabilidad de la opcion elegida.
+        const score = typeof ans?.probabilityTrue === "number" ? ans.probabilityTrue : ans?.probabilities?.[ans?.choice];
+        // rec.below=true: el umbral es un tope (p <= threshold), no un piso.
+        const passes = typeof score === "number" && (rec.below ? score <= threshold : score >= threshold);
+        const line = {
+          ts: new Date().toISOString(), id: randomUUID(), kind, ...(rec.q ? { q: rec.q } : {}), agentId: rec.agentId,
+          type: ans?.type ?? question?.type ?? null, model: rec.model ?? null,
+          options: question?.criteria ? Object.keys(question.criteria) : null,
+          answer: ans ? (ans.choice ?? (typeof ans.probabilityTrue === "number" ? (ans.probabilityTrue >= 0.5) : null)) : null,
+          probabilities: ans?.probabilities ?? null, probabilityTrue: ans?.probabilityTrue ?? null,
+          confidence: ans?.confidence ?? null, threshold, ...(rec.below ? { thresholdDir: "<=" } : {}), ms: rec.ms,
+          status: rec.error ? "failure" : threshold == null ? "acted" : passes ? "acted" : "below_threshold",
+          error: rec.error ?? null,
+          inputHash: "sha256:" + createHash("sha256").update(JSON.stringify(state ?? null)).digest("hex"),
+          ...(rec.extra ?? {}),
+          outcome: null,
+        };
+        appendFile(DECISIONS, JSON.stringify(line) + "\n").catch(() => {});
+      } catch {}
+    };
 
     // Misma pregunta, misma sesion y mismo turno: se reusa la respuesta en vez de volver a pagarla.
     const asked = new Map();
@@ -137,20 +190,146 @@ export default definePluginEntry({
         const ms = Date.now() - t0;
         const ans = outcome?.result?.answers?.q;
         if (!ans) {
-          log({ kind, agentId, sessionKey: ctx.sessionKey, ok: false, ms, error: outcome?.reason ?? outcome?.status ?? outcome?.error ?? "sin respuesta" });
+          const error = outcome?.reason ?? outcome?.status ?? outcome?.error ?? "sin respuesta";
+          log({ kind, agentId, sessionKey: ctx.sessionKey, ok: false, ms, error });
+          bitacora(kind, state, question, { agentId, ms, model: outcome?.result?.model, error: String(error) });
           return null;
         }
         const r = top(ans);
+        const invalid = !ans || (ans.choice === undefined && typeof ans.probabilityTrue !== "number" && typeof ans.score !== "number");
+        bitacora(kind, state, question, { agentId, ms, model: outcome?.result?.model, answer: ans, error: invalid ? "respuesta_invalida" : undefined });
         log({ kind, agentId, sessionKey: ctx.sessionKey, ok: true, ms, decision: r.label, confidence: r.conf, pTrue: r.pTrue,
           probabilities: ans?.probabilities, model: outcome?.result?.model, input: String(state.message ?? "").slice(0, 300) });
         return r;
       } catch (e) {
-        log({ kind, agentId, sessionKey: ctx.sessionKey, ok: false, ms: Date.now() - t0, error: String(e?.message ?? e) });
+        const ms = Date.now() - t0;
+        log({ kind, agentId, sessionKey: ctx.sessionKey, ok: false, ms, error: String(e?.message ?? e) });
+        bitacora(kind, state, question, { agentId, ms, error: String(e?.message ?? e) });
         return null;
       } finally {
         clearTimeout(timer);
       }
     }
+
+    // Cierre de ayudante: una sola consulta con tres preguntas (estado, afirma algo hecho, trae prueba).
+    // Jev recibe solo el texto del reporte recortado. Booleans sin confianza: umbrales propios.
+    const AFIRMA_MIN = cfg.afirmaMin ?? 0.7, EVIDENCIA_MAX = cfg.evidenciaMax ?? 0.3;
+    const EVIDENCIA_AVISO = "Jev: afirma algo hecho sin prueba visible; verifícalo antes de decírselo a David";
+    async function cierreEvidencia(text, ctx) {
+      const agentId = ctx.agentId ?? agentOf(ctx.sessionKey);
+      const state = { message: text.slice(0, 6000) };
+      const questions = {
+        estado: { type: "choice", instructions: "Este es el reporte final de un agente ayudante. ¿Quedo, hay que corregir o esta bloqueado?", criteria: CLOSE },
+        afirma: { type: "boolean", instructions: "¿El reporte afirma que algo se envió, se desplegó o quedó hecho?" },
+        evidencia: { type: "boolean", instructions: "¿El reporte trae evidencia concreta de eso (id de mensaje, ok:true, resultado de prueba, salida de un comando)?" },
+      };
+      const dkey = `cierre-evidencia|${ctx.sessionKey}|${ctx.runId ?? ""}|${JSON.stringify(state)}`;
+      const prev = asked.get(dkey);
+      if (prev) return prev.p;
+      const p = (async () => {
+        const ac = new AbortController();
+        const t0 = Date.now();
+        let timer;
+        const fail = (error, ms, model) => {
+          log({ kind: "cierre-evidencia", agentId, sessionKey: ctx.sessionKey, ok: false, ms, error });
+          for (const q of Object.keys(questions)) bitacora("cierre-evidencia", state, questions[q], { q, agentId, ms, model, error: String(error) });
+          return null;
+        };
+        try {
+          const outcome = await Promise.race([
+            api.runtime.decisions.evaluate(
+              { state, questions },
+              { agentId: AGENT, purpose: "jev-auto.cierre-evidencia", rubricVersion: "1", timeoutMs: TIMEOUT, signal: ac.signal },
+            ),
+            new Promise((_, rej) => { timer = setTimeout(() => { ac.abort(); rej(new Error("timeout")); }, TIMEOUT); }),
+          ]);
+          const ms = Date.now() - t0;
+          const A = outcome?.result?.answers ?? {};
+          const model = outcome?.result?.model;
+          if (!outcome?.ok && outcome?.status !== "ok" && !A.estado) return fail(outcome?.reason ?? outcome?.status ?? outcome?.error ?? "sin respuesta", ms, model);
+          const valid = (a) => a && (a.choice !== undefined || typeof a.probabilityTrue === "number");
+          const meta = { estado: { threshold: null }, afirma: { threshold: AFIRMA_MIN }, evidencia: { threshold: EVIDENCIA_MAX, below: true } };
+          for (const q of Object.keys(questions))
+            bitacora("cierre-evidencia", state, questions[q], { q, agentId, ms, model, answer: A[q], ...meta[q], error: valid(A[q]) ? undefined : "respuesta_invalida" });
+          const estado = valid(A.estado) && A.estado.choice !== undefined ? top(A.estado) : null;
+          const pA = A.afirma?.probabilityTrue, pE = A.evidencia?.probabilityTrue;
+          const sinPrueba = typeof pA === "number" && typeof pE === "number" && pA >= AFIRMA_MIN && pE <= EVIDENCIA_MAX;
+          log({ kind: "cierre-evidencia", agentId, sessionKey: ctx.sessionKey, ok: true, ms, decision: estado?.label, confidence: estado?.conf,
+            pAfirma: pA ?? null, pEvidencia: pE ?? null, sinPrueba, model, input: state.message.slice(0, 300) });
+          return { estado, sinPrueba, pAfirma: pA, pEvidencia: pE };
+        } catch (e) {
+          return fail(e?.message ?? e, Date.now() - t0);
+        } finally {
+          clearTimeout(timer);
+        }
+      })();
+      asked.set(dkey, { at: Date.now(), p });
+      return p;
+    }
+
+    // Comando riesgoso: antes de exec, una consulta con cinco preguntas. Solo avisa; nunca bloquea ni da permiso.
+    // Jev recibe solo el comando (con secretos tapados) y el host. Si falla o tarda, el comando sigue.
+    const RIESGO_MIN = cfg.riesgoMin ?? 0.7;
+    const RIESGO_Q = {
+      tipo: { type: "choice", instructions: "Comando de shell que un agente va a correr. ¿Que efecto tiene?", criteria: {
+        "solo-lectura": "Solo lee o muestra informacion; no cambia nada",
+        reversible: "Cambia algo, pero se puede deshacer facil",
+        destructivo: "Borra, sobrescribe o cambia algo dificil de deshacer",
+      } },
+      borra: { type: "boolean", instructions: "¿El comando borra archivos o directorios?" },
+      git: { type: "boolean", instructions: "¿El comando reescribe historial de git o fuerza un push (push --force, reset --hard, rebase, filter-branch)?" },
+      prod: { type: "boolean", instructions: "¿El comando toca produccion (ssh a gonserver/goncloud, docker, systemctl, deploy)?" },
+      envia: { type: "boolean", instructions: "¿El comando envia algo fuera de la maquina (correo, mensajes, publicar)?" },
+    };
+    const MOTIVO = { borra: "borra archivos", git: "reescribe git o fuerza push", prod: "toca produccion", envia: "envia algo fuera" };
+    const comandoRiesgo = async (command, host, ctx) => {
+      if (soloLectura(command)) return null;
+      const agentId = ctx.agentId;
+      const clean = sinSecretos(command);
+      const state = { command: clean.slice(0, 2000), ...(host ? { host: host.slice(0, 100) } : {}) };
+      const extra = { cmdHash: "sha256:" + createHash("sha256").update(command).digest("hex"), cmdPreview: clean.slice(0, 80) };
+      const ac = new AbortController();
+      const t0 = Date.now();
+      let timer;
+      try {
+        const outcome = await Promise.race([
+          api.runtime.decisions.evaluate(
+            { state, questions: RIESGO_Q },
+            { agentId: AGENT, purpose: "jev-auto.comando-riesgo", rubricVersion: "1", timeoutMs: TIMEOUT, signal: ac.signal },
+          ),
+          new Promise((_, rej) => { timer = setTimeout(() => { ac.abort(); rej(new Error("timeout")); }, TIMEOUT); }),
+        ]);
+        const ms = Date.now() - t0;
+        const A = outcome?.result?.answers ?? {};
+        const model = outcome?.result?.model;
+        if (!outcome?.ok && outcome?.status !== "ok" && !A.tipo) throw Object.assign(new Error(String(outcome?.reason ?? outcome?.status ?? outcome?.error ?? "sin respuesta")), { ms, model });
+        const valid = (a) => a && (a.choice !== undefined || typeof a.probabilityTrue === "number");
+        for (const q of Object.keys(RIESGO_Q))
+          bitacora("comando-riesgo", state, RIESGO_Q[q], { q, agentId, ms, model, answer: A[q], extra,
+            threshold: q === "tipo" ? null : RIESGO_MIN, error: valid(A[q]) ? undefined : "respuesta_invalida" });
+        const motivos = [];
+        if (A.tipo?.choice === "destructivo") motivos.push("destructivo");
+        for (const q of Object.keys(MOTIVO)) if (A[q]?.probabilityTrue >= RIESGO_MIN) motivos.push(MOTIVO[q]);
+        log({ kind: "comando-riesgo", agentId, sessionKey: ctx.sessionKey, ok: true, ms, decision: A.tipo?.choice, motivos, model, input: extra.cmdPreview });
+        if (!motivos.length) return null;
+        const text = `Jev: comando riesgoso (${motivos.join(", ")}); confirma con David si no estaba autorizado`;
+        try {
+          const enq = api.session?.workflow?.enqueueNextTurnInjection ?? api.enqueueNextTurnInjection;
+          if (typeof enq !== "function") throw new Error("enqueueNextTurnInjection no disponible");
+          await enq({ sessionKey: ctx.sessionKey, agentId, text, idempotencyKey: `jev-riesgo:${extra.cmdHash}`, ttlMs: 30 * MIN });
+        } catch (e) {
+          log({ kind: "comando-riesgo", agentId, sessionKey: ctx.sessionKey, ok: false, error: `inyeccion: ${e?.message ?? e}` });
+        }
+        return text;
+      } catch (e) {
+        const ms = e?.ms ?? Date.now() - t0;
+        log({ kind: "comando-riesgo", agentId, sessionKey: ctx.sessionKey, ok: false, ms, error: String(e?.message ?? e), input: extra.cmdPreview });
+        for (const q of Object.keys(RIESGO_Q)) bitacora("comando-riesgo", state, RIESGO_Q[q], { q, agentId, ms, model: e?.model, extra, threshold: q === "tipo" ? null : RIESGO_MIN, error: String(e?.message ?? e) });
+        return null;
+      } finally {
+        clearTimeout(timer);
+      }
+    };
 
     api.on("before_prompt_build", async (event, ctx) => {
       const text = cleanPrompt(event.currentUserMessage ?? event.prompt ?? "");
@@ -174,13 +353,11 @@ export default definePluginEntry({
         // El resultado del ayudante ya llego a main: deja de vigilarlo.
         const src = prov?.sourceSessionKey ?? prov?.sourceSession ?? /sourceSession=(\S+)/.exec(text)?.[1];
         if (src) terminar(src, "reportado_a_main");
-        const r = await ask("cierre", { message: text.slice(0, 6000) }, {
-          type: "choice",
-          instructions: "Este es el reporte final de un agente ayudante. ¿Quedo, hay que corregir o esta bloqueado?",
-          criteria: CLOSE,
-        }, ctx);
-        if (r) return { prependContext: `Jev cierre: ${r.label} (${r.conf})` };
-        return;
+        const res = await cierreEvidencia(text, ctx);
+        if (!res?.estado) return;
+        const lines = [`Jev cierre: ${res.estado.label} (${res.estado.conf})`];
+        if (res.sinPrueba) lines.push(EVIDENCIA_AVISO);
+        return { prependContext: lines.join("\n") };
       }
       const isUser = prov ? prov.kind === "external_user" : ctx.trigger === "user";
       if (!isUser) return;
@@ -210,7 +387,7 @@ export default definePluginEntry({
       const rec = { texto: c.texto, sugerido: c.sugerido, correcto: c.correcto, ts: new Date().toISOString() };
       correcciones.push(rec);
       if (correcciones.length > MAX_EJEMPLOS) correcciones = correcciones.slice(-MAX_EJEMPLOS);
-      log({ kind: "correccion", sessionKey: c.sessionKey, sugerido: c.sugerido, correcto: c.correcto });
+      log({ kind: "correccion", agentId: AGENT, sessionKey: c.sessionKey, sugerido: c.sugerido, correcto: c.correcto });
       return appendFile(CORR, JSON.stringify(rec) + "\n").catch(() => {});
     }
     function cerrarTurno(sessionKey, runId) {
@@ -224,7 +401,7 @@ export default definePluginEntry({
     }
 
     api.on("subagent_ended", (event) => {
-      log({ kind: "subagent_ended", sessionKey: event.targetSessionKey, outcome: event.outcome, reason: event.reason, error: event.error });
+      log({ kind: "subagent_ended", agentId: agentOf(event.targetSessionKey), sessionKey: event.targetSessionKey, outcome: event.outcome, reason: event.reason, error: event.error });
       if (event.targetSessionKey) terminar(event.targetSessionKey, "subagent_ended");
     });
 
@@ -261,7 +438,7 @@ export default definePluginEntry({
       vig.terminados[key] = Date.now();
       for (const [k, t] of Object.entries(vig.terminados)) if (Date.now() - t > 24 * 60 * MIN) delete vig.terminados[k];
       saveVig();
-      if (habia) log({ kind: "vigilante", fase: "limpieza", sessionKey: key, motivo });
+      if (habia) log({ kind: "vigilante", agentId: AGENT, fase: "limpieza", sessionKey: key, motivo });
     }
     // Pregunta a la API de sesiones si la sesion ya cerro. true = cerrada; false = activa o sin dato.
     function sesionCerrada(key) {
@@ -334,6 +511,10 @@ export default definePluginEntry({
       const t = turnos.get(sessionKey);
       if (t && event.toolName === "sessions_spawn" && (!t.runId || !(ctx?.runId ?? event?.runId) || t.runId === (ctx?.runId ?? event?.runId))) {
         t.spawned.push(rutaNorm(String(event.params?.agentId ?? agentId ?? AGENT)));
+      }
+      if (EXEC_TOOLS.has(event.toolName) && typeof event.params?.command === "string") {
+        const host = event.params.host ?? event.params.node;
+        await comandoRiesgo(event.params.command, host ? String(host) : undefined, { ...ctx, agentId, sessionKey, runId: ctx?.runId ?? event?.runId });
       }
       const cur = { tool: event.toolName, params: JSON.stringify(event.params ?? {}).slice(0, 1500) };
       const prev = lastCall.get(sessionKey);
@@ -421,11 +602,11 @@ export default definePluginEntry({
     async function tick(now = Date.now()) {
       let cands;
       try { cands = await collect(now); } catch (e) {
-        log({ kind: "vigilante", fase: "revision", ok: false, error: String(e?.message ?? e) });
+        log({ kind: "vigilante", agentId: AGENT, fase: "revision", ok: false, error: String(e?.message ?? e) });
         return;
       }
       const quiet = quietNow(now) && !Object.keys(vig.subs).some((k) => ENG_RE.test(k));
-      log({ kind: "vigilante", fase: "revision", abiertos: Object.keys(vig.subs).length, candidatos: cands.map((c) => c.id), silencio: quiet });
+      log({ kind: "vigilante", agentId: AGENT, fase: "revision", abiertos: Object.keys(vig.subs).length, candidatos: cands.map((c) => c.id), silencio: quiet });
       for (const c of cands) {
         const r = c.pre ?? await ask("vigilante", { message: c.message }, {
           type: "choice",
@@ -443,7 +624,7 @@ export default definePluginEntry({
           try { await notify(text); vig.sent[c.id] = now; saveVig(); accion = "avisado"; }
           catch (e) { accion = `fallo_envio: ${e?.message ?? e}`; }
         }
-        log({ kind: "vigilante", fase: "accion", sessionKey: c.id, decision: r?.label, confidence: r?.conf, accion });
+        log({ kind: "vigilante", agentId: AGENT, fase: "accion", sessionKey: c.id, decision: r?.label, confidence: r?.conf, accion });
       }
     }
 

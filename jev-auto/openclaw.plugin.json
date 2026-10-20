@@ -26,6 +26,9 @@
       "vigilanteIntervalMs": {
         "type": "integer",
         "minimum": 60000
+      },
+      "decisionsPath": {
+        "type": "string"
       }
     }
   }

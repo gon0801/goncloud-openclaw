@@ -19,7 +19,7 @@ export async function resolve(specifier, context, nextResolve) {
 }`;
 register("data:text/javascript," + encodeURIComponent(loader));
 
-const { cleanPrompt, rutaNorm, default: plugin } = await import("./index.js");
+const { cleanPrompt, rutaNorm, sinSecretos, soloLectura, default: plugin } = await import("./index.js");
 
 test("cleanPrompt deja un mensaje plano tal cual", () => {
   assert.equal(cleanPrompt("Revisa las ventas de Mercado Libre de hoy"), "Revisa las ventas de Mercado Libre de hoy");
@@ -76,6 +76,54 @@ test("ja2: Jev ok sin answers.q no inyecta 'undefined (0)' y devuelve null", asy
   const handler = handlerDeRuteo(async () => ({ ok: true, status: "ok", result: { model: "jev", answers: {} } }));
   const r = await handler(EVENTO, ctxDe("ja2-sin-respuesta"));
   assert.equal(r, undefined);
+});
+
+test("soloLectura acepta comandos de solo lectura evidentes", () => {
+  for (const cmd of ["ls -la", "ls", "git status", "git log --oneline -5", "git diff", "cat jev-auto/index.js", "pwd", "gh pr list"]) {
+    assert.equal(soloLectura(cmd), true, cmd);
+  }
+});
+
+test("soloLectura acepta cadenas de solo lectura con pipes", () => {
+  assert.equal(soloLectura("ls | grep foo"), true);
+  assert.equal(soloLectura("cat a.txt | wc -l"), true);
+});
+
+test("soloLectura rechaza comandos que escriben o ejecutan", () => {
+  for (const cmd of ["rm -rf /tmp/x", "rm archivo", "git push", "git commit -m x", "cat a; rm b", "npm install"]) {
+    assert.equal(soloLectura(cmd), false, cmd);
+  }
+});
+
+test("soloLectura rechaza redirecciones y sustituciones", () => {
+  assert.equal(soloLectura("ls > salida.txt"), false);
+  assert.equal(soloLectura("echo $(whoami)"), false);
+  assert.equal(soloLectura("cat <(ls)"), false);
+  assert.equal(soloLectura("ls `whoami`"), false);
+});
+
+test("soloLectura rechaza vacio y find con acciones destructivas", () => {
+  assert.equal(soloLectura(""), false);
+  assert.equal(soloLectura(undefined), false);
+  assert.equal(soloLectura("find . -delete"), false);
+  assert.equal(soloLectura("find . -name '*.js'"), true);
+});
+
+test("sinSecretos tapa TOKEN=valor", () => {
+  assert.equal(sinSecretos("TOKEN=x"), "TOKEN=***");
+  assert.equal(sinSecretos("API_TOKEN=abc123 ls"), "API_TOKEN=*** ls");
+  assert.equal(sinSecretos("MY_SECRET_KEY=hunter2"), "MY_SECRET_KEY=***");
+});
+
+test("sinSecretos tapa Bearer y flags de token", () => {
+  assert.equal(sinSecretos("Authorization: Bearer abcdef123"), "Authorization: Bearer ***");
+  assert.equal(sinSecretos("--token abc123"), "--token ***");
+});
+
+test("sinSecretos tapa cadenas largas tipo token y deja el resto igual", () => {
+  assert.equal(sinSecretos("echo " + "A".repeat(40)), "echo ***");
+  assert.equal(sinSecretos("ls -la"), "ls -la");
+  assert.equal(sinSecretos("TOKEN=x"), "TOKEN=***");
 });
 
 test("con answers.q si inyecta la sugerencia", async () => {
