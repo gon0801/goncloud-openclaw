@@ -190,7 +190,7 @@ test("soloLectura rechaza comandos que ejecutan, escriben o cuelgan (F2)", () =>
     "jq --rawfile raw datos.txt . datos.json", "jq --slurpfile x datos.json .", "jq --argfile x datos.json .",
     "tail -f app.log", "tail --follow app.log", "tail -F app.log",
     "uniq entrada.txt salida.txt", "git branch -D main", "git branch -d vieja", "git branch nueva-rama",
-    "date -s 20250101", "rg --pre cat foo",
+    "date -s 20250101", "date -Rs20250101", "date -us 2025-01-01", "rg --pre cat foo",
   ]) {
     assert.equal(soloLectura(cmd), false, cmd);
   }
@@ -199,7 +199,8 @@ test("soloLectura rechaza comandos que ejecutan, escriben o cuelgan (F2)", () =>
 test("soloLectura sigue aceptando lecturas evidentes con banderas inocuas (F2)", () => {
   for (const cmd of [
     "grep -rn foo jev-auto/index.js", "grep -o foo datos.txt", "git branch", "git branch -a", "git branch --list",
-    "uniq datos.txt", "sort datos.txt", "jq . datos.json", "tail -n 20 app.log", "date +%F", "date -u",
+    "uniq datos.txt", "sort datos.txt", "jq . datos.json", "tail -n 20 app.log", "date +%F", "date -u", "date -R", "date +%s",
+    "date -Iseconds", "date -Ins", "date -d yesterday", "date -ud @0",
     "ls -o", "find . -name '*.js'", "cat jev-auto/index.js | grep foo | wc -l",
   ]) {
     assert.equal(soloLectura(cmd), true, cmd);
