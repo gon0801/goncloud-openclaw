@@ -4,7 +4,10 @@
 // (definePluginEntry devuelve la entrada tal cual) via un loader
 // registrado antes de importar el plugin.
 import assert from "node:assert/strict";
+import { mkdtempSync, readFileSync } from "node:fs";
 import { register } from "node:module";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
 
 const loader = `
@@ -52,16 +55,28 @@ test("rutaNorm deja igual a los demas agentes", () => {
   assert.equal(rutaNorm("main"), "main");
 });
 
-function handlerDeRuteo(evaluate) {
+function makePlugin(evaluate, cfg = {}) {
+  const dir = mkdtempSync(join(tmpdir(), "jev-auto-"));
   const handlers = new Map();
+  const injections = [];
   plugin.register({
-    pluginConfig: {},
+    pluginConfig: { logPath: join(dir, "log.jsonl"), decisionsPath: join(dir, "decisions.jsonl"), ...cfg },
     logger: { warn: () => {} },
     on: (name, fn) => handlers.set(name, fn),
     runtime: { decisions: { evaluate } },
+    enqueueNextTurnInjection: async (x) => { injections.push(x); },
   });
-  return handlers.get("before_prompt_build");
+  return { handlers, injections, dir, decisionsPath: join(dir, "decisions.jsonl") };
 }
+
+function handlerDeRuteo(evaluate) {
+  return makePlugin(evaluate).handlers.get("before_prompt_build");
+}
+
+const leerDecisiones = async (decisionsPath) => {
+  await new Promise((r) => setTimeout(r, 50));
+  return readFileSync(decisionsPath, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l));
+};
 
 const EVENTO = { currentUserMessage: "Necesito revisar las ventas de Mercado Libre de esta semana" };
 const ctxDe = (runId) => ({
@@ -109,6 +124,53 @@ test("soloLectura rechaza vacio y find con acciones destructivas", () => {
   assert.equal(soloLectura("find . -name '*.js'"), true);
 });
 
+test("soloLectura rechaza comandos que ejecutan, escriben o cuelgan (F2)", () => {
+  for (const cmd of [
+    "env ls", "env rm -rf /tmp/x", "less jev-auto/index.js", "cat a.txt | less",
+    "sort -o salida.txt datos.txt", "sort --output=salida.txt datos.txt", "ls | sort -o salida.txt",
+    "git diff --output=salida.txt", "git log --output=salida.txt",
+    "find . -fprint salida.txt", "find . -fls salida.txt", "find . -fprintf salida.txt %p",
+    "find . -exec rm {} +", "find . -execdir rm {} +", "find . -ok rm {} +", "find . -okdir rm {} +",
+    "jq --rawfile raw datos.txt . datos.json", "jq --slurpfile x datos.json .", "jq --argfile x datos.json .",
+    "tail -f app.log", "tail --follow app.log", "tail -F app.log",
+    "uniq entrada.txt salida.txt", "git branch -D main", "git branch -d vieja", "git branch nueva-rama",
+    "date -s 20250101", "rg --pre cat foo",
+  ]) {
+    assert.equal(soloLectura(cmd), false, cmd);
+  }
+});
+
+test("soloLectura sigue aceptando lecturas evidentes con banderas inocuas (F2)", () => {
+  for (const cmd of [
+    "grep -rn foo jev-auto/index.js", "grep -o foo datos.txt", "git branch", "git branch -a", "git branch --list",
+    "uniq datos.txt", "sort datos.txt", "jq . datos.json", "tail -n 20 app.log", "date +%F", "date -u",
+    "ls -o", "find . -name '*.js'", "cat jev-auto/index.js | grep foo | wc -l",
+  ]) {
+    assert.equal(soloLectura(cmd), true, cmd);
+  }
+});
+
+test("configSchema declara los umbrales que el codigo lee de cfg (F3)", () => {
+  const schema = JSON.parse(readFileSync(new URL("./openclaw.plugin.json", import.meta.url), "utf8"));
+  const props = schema.configSchema.properties;
+  assert.deepEqual(
+    { type: props.afirmaMin.type, def: props.afirmaMin.default },
+    { type: "number", def: 0.7 },
+  );
+  assert.deepEqual(
+    { type: props.evidenciaMax.type, def: props.evidenciaMax.default },
+    { type: "number", def: 0.3 },
+  );
+  assert.deepEqual(
+    { type: props.riesgoMin.type, def: props.riesgoMin.default },
+    { type: "number", def: 0.7 },
+  );
+  assert.deepEqual(
+    { type: props.vigilante.type, def: props.vigilante.default },
+    { type: "boolean", def: false },
+  );
+});
+
 test("sinSecretos tapa TOKEN=valor", () => {
   assert.equal(sinSecretos("TOKEN=x"), "TOKEN=***");
   assert.equal(sinSecretos("API_TOKEN=abc123 ls"), "API_TOKEN=*** ls");
@@ -134,4 +196,116 @@ test("con answers.q si inyecta la sugerencia", async () => {
   }));
   const r = await handler(EVENTO, ctxDe("con-respuesta"));
   assert.deepEqual(r, { prependContext: "Jev sugiere: meli (0.91)" });
+});
+
+const ctxCierre = (id) => ({
+  agentId: "main",
+  sessionKey: `agent:main:cierre-${id}`,
+  runId: `run-${id}`,
+  inputProvenance: { kind: "inter_session", sourceTool: "subagent", sourceSessionKey: "agent:meli:subagent:1" },
+});
+const EVENTO_CIERRE = { currentUserMessage: "Ya quedo enviado el correo al cliente y desplegado el cambio pedido" };
+const evaluateCierre = (afirma, evidencia) => async () => ({
+  ok: true,
+  status: "ok",
+  result: {
+    model: "jev",
+    answers: {
+      estado: { choice: "quedo", probabilities: { quedo: 0.91 } },
+      afirma: { probabilityTrue: afirma },
+      evidencia: { probabilityTrue: evidencia },
+    },
+  },
+});
+
+test("cierreEvidencia: afirma sin prueba inyecta cierre y aviso (F4)", async () => {
+  const { handlers, decisionsPath } = makePlugin(evaluateCierre(0.95, 0.1));
+  const r = await handlers.get("before_prompt_build")(EVENTO_CIERRE, ctxCierre("sin-prueba"));
+  assert.deepEqual(r, {
+    prependContext: "Jev cierre: quedo (0.91)\nJev: afirma algo hecho sin prueba visible; verifícalo antes de decírselo a David",
+  });
+  const lines = (await leerDecisiones(decisionsPath)).filter((l) => l.kind === "cierre-evidencia");
+  assert.equal(lines.length, 3);
+  assert.equal(lines.find((l) => l.q === "afirma").status, "acted");
+  assert.equal(lines.find((l) => l.q === "evidencia").status, "acted");
+});
+
+test("cierreEvidencia: con prueba o sin afirmacion no agrega el aviso (F4)", async () => {
+  const conPrueba = makePlugin(evaluateCierre(0.95, 0.9));
+  const r1 = await conPrueba.handlers.get("before_prompt_build")(EVENTO_CIERRE, ctxCierre("con-prueba"));
+  assert.deepEqual(r1, { prependContext: "Jev cierre: quedo (0.91)" });
+
+  const sinAfirmacion = makePlugin(evaluateCierre(0.4, 0.1));
+  const r2 = await sinAfirmacion.handlers.get("before_prompt_build")(EVENTO_CIERRE, ctxCierre("sin-afirmacion"));
+  assert.deepEqual(r2, { prependContext: "Jev cierre: quedo (0.91)" });
+});
+
+const ctxTool = (id) => ({ agentId: "meli", sessionKey: `agent:meli:tool-${id}`, runId: `run-${id}` });
+const evaluateRiesgo = (answers) => async () => ({
+  ok: true,
+  status: "ok",
+  result: { model: "jev", answers },
+});
+
+test("comandoRiesgo: comando destructivo inyecta aviso y bitacora acted/below (F4)", async () => {
+  const { handlers, injections, decisionsPath } = makePlugin(evaluateRiesgo({
+    tipo: { choice: "destructivo", probabilities: { destructivo: 0.92 } },
+    borra: { probabilityTrue: 0.95 },
+    git: { probabilityTrue: 0.1 },
+    prod: { probabilityTrue: 0.1 },
+    envia: { probabilityTrue: 0.1 },
+  }));
+  await handlers.get("before_tool_call")(
+    { toolName: "exec", params: { command: "rm -rf /tmp/x" } },
+    ctxTool("destructivo"),
+  );
+  assert.equal(injections.length, 1);
+  assert.match(injections[0].text, /Jev: comando riesgoso \(destructivo, borra archivos\)/);
+  const lines = (await leerDecisiones(decisionsPath)).filter((l) => l.kind === "comando-riesgo");
+  assert.equal(lines.find((l) => l.q === "borra").status, "acted");
+  assert.equal(lines.find((l) => l.q === "git").status, "below_threshold");
+});
+
+test("comandoRiesgo: Jev dice solo-lectura no inyecta aviso (F4)", async () => {
+  const { handlers, injections } = makePlugin(evaluateRiesgo({
+    tipo: { choice: "solo-lectura", probabilities: { "solo-lectura": 0.9 } },
+    borra: { probabilityTrue: 0.1 },
+    git: { probabilityTrue: 0.1 },
+    prod: { probabilityTrue: 0.1 },
+    envia: { probabilityTrue: 0.1 },
+  }));
+  await handlers.get("before_tool_call")(
+    { toolName: "exec", params: { command: "npm run algo-raro" } },
+    ctxTool("seguro"),
+  );
+  assert.equal(injections.length, 0);
+});
+
+test("comandoRiesgo: comando de solo lectura evidente no consulta a Jev (F4)", async () => {
+  let calls = 0;
+  const { handlers, injections } = makePlugin(async () => { calls++; throw new Error("no debio consultar"); });
+  await handlers.get("before_tool_call")(
+    { toolName: "exec", params: { command: "ls -la" } },
+    ctxTool("solo-lectura"),
+  );
+  assert.equal(calls, 0);
+  assert.equal(injections.length, 0);
+});
+
+test("comandoRiesgo: probabilidad que redondea al umbral actua y bitacora acted (F5)", async () => {
+  const { handlers, injections, decisionsPath } = makePlugin(evaluateRiesgo({
+    tipo: { choice: "reversible", probabilities: { reversible: 0.8 } },
+    borra: { probabilityTrue: 0.696 },
+    git: { probabilityTrue: 0.1 },
+    prod: { probabilityTrue: 0.1 },
+    envia: { probabilityTrue: 0.1 },
+  }));
+  await handlers.get("before_tool_call")(
+    { toolName: "exec", params: { command: "borrado-raro --todo" } },
+    ctxTool("redondeo"),
+  );
+  assert.equal(injections.length, 1);
+  assert.match(injections[0].text, /borra archivos/);
+  const lines = (await leerDecisiones(decisionsPath)).filter((l) => l.kind === "comando-riesgo");
+  assert.equal(lines.find((l) => l.q === "borra").status, "acted");
 });

@@ -73,11 +73,51 @@ export function cleanPrompt(raw) {
 const EXEC_TOOLS = new Set(["exec", "bash", "Bash", "shell"]);
 // Solo lectura evidente: no se consulta. Cada tramo (separado por | ; && ||) debe empezar con uno de estos,
 // sin redirecciones ni sustituciones. Ante la duda, se consulta.
-const RO_CMDS = /^(ls|cat|head|tail|grep|rg|wc|pwd|echo|which|whoami|date|stat|file|du|df|ps|env|uname|id|less|jq|sort|uniq|cut|tr|diff|find(?!.*\s-(delete|exec|ok)\b)|git (status|log|diff|show|branch|remote -v|rev-parse|blame)|openclaw (cron list|status)|gh (pr|run) (view|list|checks))(\s|$)/;
+// Fuera de la lista: env (ejecuta el comando que le sigue) y less (puede ejecutar y cuelga esperando teclas).
+const RO_CMDS = /^(ls|cat|head|tail|grep|rg|wc|pwd|echo|which|whoami|date|stat|file|du|df|ps|uname|id|jq|sort|uniq|cut|tr|diff|find|git (status|log|diff|show|branch|remote -v|rev-parse|blame)|openclaw (cron list|status)|gh (pr|run) (view|list|checks))(\s|$)/;
+// Banderas que escriben, ejecutan o leen archivos extra pase lo que pase el comando: nunca es solo lectura.
+const WRITE_FLAGS = /^(--output(?:=.*)?|-fprint0?|-fprintf|-fls|-execdir|-exec|-okdir|-ok|-delete|--rawfile(?:=.*)?|--slurpfile(?:=.*)?|--argfile(?:=.*)?|--pre(?:=.*)?|--compress-program(?:=.*)?|--ext-diff|--textconv|--hostname-bin(?:=.*)?)$/;
+// Chequeos por comando sobre los argumentos de un tramo ya aceptado por RO_CMDS.
+function tramoSeguro(tokens) {
+  const [cmd, sub] = tokens;
+  if (tokens.some((t) => WRITE_FLAGS.test(t))) return false;
+  if (cmd === "tail" && tokens.some((t) => /^--follow(?:=.*)?$/.test(t) || /^-[^-]*[fF]/.test(t))) return false;
+  if (cmd === "sort" && tokens.some((t) => t === "-o" || /^-[^-]*o/.test(t) && !t.startsWith("--") || t.startsWith("--output"))) return false;
+  if (cmd === "date") {
+    if (tokens.some((t) => t === "-s" || t.startsWith("--set") || /^-[a-z]*s/.test(t))) return false;
+    for (let i = 1; i < tokens.length; i++) {
+      const t = tokens[i];
+      if (t.startsWith("-") || t.startsWith("+") || t.startsWith("--")) continue;
+      if (["-d", "--date", "-r", "--reference"].includes(tokens[i - 1])) continue;
+      return false;
+    }
+  }
+  if (cmd === "uniq") {
+    let files = 0;
+    for (let i = 1; i < tokens.length; i++) {
+      const t = tokens[i];
+      if (["-f", "-s", "-w"].includes(t)) { i++; continue; }
+      if (t.startsWith("-")) continue;
+      files++;
+    }
+    if (files >= 2) return false;
+  }
+  if (cmd === "git" && sub === "branch") {
+    const rest = tokens.slice(2);
+    const SAFE = new Set(["-a", "--all", "-r", "--remotes", "-v", "-vv", "--verbose", "-l", "--list", "--show-current", "-q", "--quiet"]);
+    if (rest.includes("--list") || rest.includes("-l") || rest.includes("--show-current")) return rest.every((t) => SAFE.has(t) || t.startsWith("--column") || t.startsWith("--format") || !t.startsWith("-"));
+    return rest.every((t) => SAFE.has(t));
+  }
+  return true;
+}
 export function soloLectura(cmd) {
   const s = String(cmd ?? "").trim();
   if (!s || /[>`]|\$\(|<\(|\n/.test(s)) return false;
-  return s.split(/\|\||&&|[|;]/).map((p) => p.trim().replace(/^cd\s+\S+$/, "")).every((p) => !p || RO_CMDS.test(p));
+  return s.split(/\|\||&&|[|;]/).map((p) => p.trim().replace(/^cd\s+\S+$/, "")).every((p) => {
+    if (!p) return true;
+    if (!RO_CMDS.test(p)) return false;
+    return tramoSeguro(p.split(/\s+/).filter(Boolean));
+  });
 }
 // Tapa argumentos con pinta de secreto: VAR=valor de claves, flags de token/clave, Bearer, cadenas largas tipo token.
 export function sinSecretos(cmd) {
@@ -136,7 +176,9 @@ export default definePluginEntry({
         const threshold = rec.threshold !== undefined ? rec.threshold : THRESHOLD[kind] ?? null;
         const ans = rec.answer;
         // boolean: la accion se decide con probabilityTrue; choice: con la probabilidad de la opcion elegida.
-        const score = typeof ans?.probabilityTrue === "number" ? ans.probabilityTrue : ans?.probabilities?.[ans?.choice];
+        // El codigo actua con el valor redondeado de top() (2 decimales): la bitacora compara ese mismo valor.
+        const rawScore = typeof ans?.probabilityTrue === "number" ? ans.probabilityTrue : ans?.probabilities?.[ans?.choice];
+        const score = typeof rawScore === "number" ? Number(rawScore.toFixed(2)) : rawScore;
         // rec.below=true: el umbral es un tope (p <= threshold), no un piso.
         const passes = typeof score === "number" && (rec.below ? score <= threshold : score >= threshold);
         const line = {
@@ -253,7 +295,7 @@ export default definePluginEntry({
             bitacora("cierre-evidencia", state, questions[q], { q, agentId, ms, model, answer: A[q], ...meta[q], error: valid(A[q]) ? undefined : "respuesta_invalida" });
           const estado = valid(A.estado) && A.estado.choice !== undefined ? top(A.estado) : null;
           const pA = A.afirma?.probabilityTrue, pE = A.evidencia?.probabilityTrue;
-          const sinPrueba = typeof pA === "number" && typeof pE === "number" && pA >= AFIRMA_MIN && pE <= EVIDENCIA_MAX;
+          const sinPrueba = typeof pA === "number" && typeof pE === "number" && Number(pA.toFixed(2)) >= AFIRMA_MIN && Number(pE.toFixed(2)) <= EVIDENCIA_MAX;
           log({ kind: "cierre-evidencia", agentId, sessionKey: ctx.sessionKey, ok: true, ms, decision: estado?.label, confidence: estado?.conf,
             pAfirma: pA ?? null, pEvidencia: pE ?? null, sinPrueba, model, input: state.message.slice(0, 300) });
           return { estado, sinPrueba, pAfirma: pA, pEvidencia: pE };
@@ -309,7 +351,7 @@ export default definePluginEntry({
             threshold: q === "tipo" ? null : RIESGO_MIN, error: valid(A[q]) ? undefined : "respuesta_invalida" });
         const motivos = [];
         if (A.tipo?.choice === "destructivo") motivos.push("destructivo");
-        for (const q of Object.keys(MOTIVO)) if (A[q]?.probabilityTrue >= RIESGO_MIN) motivos.push(MOTIVO[q]);
+        for (const q of Object.keys(MOTIVO)) if (typeof A[q]?.probabilityTrue === "number" && Number(A[q].probabilityTrue.toFixed(2)) >= RIESGO_MIN) motivos.push(MOTIVO[q]);
         log({ kind: "comando-riesgo", agentId, sessionKey: ctx.sessionKey, ok: true, ms, decision: A.tipo?.choice, motivos, model, input: extra.cmdPreview });
         if (!motivos.length) return null;
         const text = `Jev: comando riesgoso (${motivos.join(", ")}); confirma con David si no estaba autorizado`;
