@@ -113,6 +113,7 @@ function tramoSeguro(tokens) {
 export function soloLectura(cmd) {
   const s = String(cmd ?? "").trim();
   if (!s || /[>`]|\$\(|<\(|\n/.test(s)) return false;
+  if (/(?<!&)&(?!&)/.test(s)) return false;
   return s.split(/\|\||&&|[|;]/).map((p) => p.trim().replace(/^cd\s+\S+$/, "")).every((p) => {
     if (!p) return true;
     if (!RO_CMDS.test(p)) return false;
@@ -120,10 +121,17 @@ export function soloLectura(cmd) {
   });
 }
 // Tapa argumentos con pinta de secreto: VAR=valor de claves, flags de token/clave, Bearer, cadenas largas tipo token.
+// Tambien las formas sin palabra "token/clave": curl -u/--user usuario:clave, -p pegado de
+// mysql/mysqldump/psql, sshpass -p, y cabeceras Authorization/Cookie/X-Api-Key via -H/--header.
 export function sinSecretos(cmd) {
   return String(cmd ?? "")
     .replace(/\b([A-Z0-9_]*(TOKEN|KEY|SECRET|PASS(WORD)?|AUTH)[A-Z0-9_]*)=\S+/gi, "$1=***")
     .replace(/(--?[\w-]*(token|key|secret|pass(word)?|auth)[\w-]*[=\s]+)\S+/gi, "$1***")
+    .replace(/((?:-H|--header)(?:=|\s+)["'](?:Authorization|Cookie|X-Api-Key|Api-Key|X-Auth-Token)\s*:\s*)[^"']+/gi, "$1***")
+    .replace(/((?:-H|--header)(?:=|\s+)(?:Authorization|Cookie|X-Api-Key|Api-Key|X-Auth-Token)\s*:\s*)\S+/gi, "$1***")
+    .replace(/(\bcurl\b[^|;&\n]*?)(--user(?:=|\s+)|-u\s+|-u)(["']?)[^\s"']+/g, "$1$2$3***")
+    .replace(/(\b(?:mysql|mysqldump|mariadb-dump|psql)\b[^|;&\n]*?)(-p)([^\s"'-][^\s"']*)/g, "$1$2***")
+    .replace(/(\bsshpass\b[^|;&\n]*?)(-p\s+|-p)([^\s"']+)/g, "$1$2***")
     .replace(/\b(Bearer|Basic)\s+\S+/gi, "$1 ***")
     .replace(/(\/\/[^\s:/@]+:)[^\s@]+@/g, "$1***@")
     .replace(/\b[A-Za-z0-9_\-+/=]{32,}\b/g, "***");

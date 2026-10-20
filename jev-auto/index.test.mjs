@@ -182,6 +182,67 @@ test("sinSecretos tapa Bearer y flags de token", () => {
   assert.equal(sinSecretos("--token abc123"), "--token ***");
 });
 
+test("sinSecretos tapa credenciales de curl, mysql, sshpass y cabeceras (S1)", () => {
+  for (const [cmd, secreto] of [
+    ["curl -u admin:hunter2 https://example.com", "hunter2"],
+    ["curl --user a:b https://example.com", "a:b"],
+    ["curl --user=a:b https://example.com", "a:b"],
+    ["mysql -pClaveSegura -e 'select 1'", "ClaveSegura"],
+    ["mysql -uroot -pClaveSegura db", "ClaveSegura"],
+    ["mysqldump -pClaveSegura db", "ClaveSegura"],
+    ["mysql --password=ClaveSegura db", "ClaveSegura"],
+    ["mysql --password ClaveSegura db", "ClaveSegura"],
+    ["sshpass -p ClaveSegura ssh host", "ClaveSegura"],
+    ["PGPASSWORD=ClaveSegura psql -c 'select 1'", "ClaveSegura"],
+    ['curl -H "Authorization: Token ClaveSegura" https://example.com', "ClaveSegura"],
+    ['curl -H "Cookie: session=ClaveSegura" https://example.com', "ClaveSegura"],
+    ['curl -H "X-Api-Key: ClaveSegura" https://example.com', "ClaveSegura"],
+    ['curl --header "Authorization: ClaveSegura" https://example.com', "ClaveSegura"],
+  ]) {
+    const limpio = sinSecretos(cmd);
+    assert.ok(!limpio.includes(secreto), `${cmd} -> ${limpio}`);
+    assert.ok(limpio.includes("***"), `${cmd} -> ${limpio}`);
+  }
+});
+
+test("soloLectura rechaza el & suelto de fondo sin romper && (S2)", () => {
+  assert.equal(soloLectura("ls &rm -rf /tmp/x"), false);
+  assert.equal(soloLectura("cat a & git push --force"), false);
+  assert.equal(soloLectura("ls & cat a.txt"), false);
+  assert.equal(soloLectura("ls && cat a.txt"), true);
+});
+
+test("comandoRiesgo no manda ni guarda el secreto en claro (S1)", async () => {
+  let estadoVisto;
+  const { handlers, decisionsPath } = makePlugin(async (payload) => {
+    estadoVisto = payload.state;
+    return {
+      ok: true,
+      status: "ok",
+      result: {
+        model: "jev",
+        answers: {
+          tipo: { choice: "reversible", probabilities: { reversible: 0.8 } },
+          borra: { probabilityTrue: 0.1 },
+          git: { probabilityTrue: 0.1 },
+          prod: { probabilityTrue: 0.1 },
+          envia: { probabilityTrue: 0.1 },
+        },
+      },
+    };
+  });
+  await handlers.get("before_tool_call")(
+    { toolName: "exec", params: { command: "curl -u admin:hunter2 https://example.com --subir" } },
+    ctxTool("sin-secreto"),
+  );
+  assert.ok(estadoVisto?.command, "Jev debio recibir el comando");
+  assert.ok(!estadoVisto.command.includes("hunter2"), estadoVisto.command);
+  const lineas = await leerDecisiones(decisionsPath);
+  assert.ok(lineas.length > 0, "la bitacora debio escribirse");
+  assert.ok(!JSON.stringify(lineas).includes("hunter2"), JSON.stringify(lineas));
+  assert.ok(lineas.every((l) => !String(l.cmdPreview ?? "").includes("hunter2")));
+});
+
 test("sinSecretos tapa cadenas largas tipo token y deja el resto igual", () => {
   assert.equal(sinSecretos("echo " + "A".repeat(40)), "echo ***");
   assert.equal(sinSecretos("ls -la"), "ls -la");
