@@ -93,6 +93,34 @@ test("ja2: Jev ok sin answers.q no inyecta 'undefined (0)' y devuelve null", asy
   assert.equal(r, undefined);
 });
 
+test("ask: answers.q vacia no inyecta nada y marca respuesta_invalida (F7)", async () => {
+  const fake = async () => ({
+    ok: true,
+    status: "ok",
+    result: { model: "jev", answers: { q: {} } },
+  });
+  const { handlers, decisionsPath, dir } = makePlugin(fake);
+  const r = await handlers.get("before_prompt_build")(EVENTO, ctxDe("respuesta-vacia"));
+  assert.equal(r, undefined);
+  const lines = await leerDecisiones(decisionsPath);
+  assert.ok(
+    lines.some((l) => l.status === "failure" && l.error === "respuesta_invalida"),
+    JSON.stringify(lines),
+  );
+  const sombra = readFileSync(join(dir, "log.jsonl"), "utf8")
+    .split("\n").filter(Boolean).map((l) => JSON.parse(l));
+  assert.ok(
+    sombra.some((l) => l.kind === "ruteo" && l.ok === false),
+    JSON.stringify(sombra),
+  );
+  const encargo = makePlugin(fake);
+  const r2 = await encargo.handlers.get("before_prompt_build")(EVENTO, {
+    ...ctxDe("respuesta-vacia-encargo"),
+    agentId: "meli",
+  });
+  assert.equal(r2, undefined);
+});
+
 test("soloLectura acepta comandos de solo lectura evidentes", () => {
   for (const cmd of ["ls -la", "ls", "git status", "git log --oneline -5", "git diff", "cat jev-auto/index.js", "pwd", "gh pr list"]) {
     assert.equal(soloLectura(cmd), true, cmd);
@@ -198,6 +226,25 @@ test("sinSecretos tapa credenciales de curl, mysql, sshpass y cabeceras (S1)", (
     ['curl -H "Cookie: session=ClaveSegura" https://example.com', "ClaveSegura"],
     ['curl -H "X-Api-Key: ClaveSegura" https://example.com', "ClaveSegura"],
     ['curl --header "Authorization: ClaveSegura" https://example.com', "ClaveSegura"],
+  ]) {
+    const limpio = sinSecretos(cmd);
+    assert.ok(!limpio.includes(secreto), `${cmd} -> ${limpio}`);
+    assert.ok(limpio.includes("***"), `${cmd} -> ${limpio}`);
+  }
+});
+
+test("sinSecretos tapa valores entrecomillados y cabeceras sensibles (F6)", () => {
+  for (const [cmd, secreto] of [
+    ["mysql -p'ClaveSegura1' -e 'select 1'", "ClaveSegura1"],
+    ['mysql -p"ClaveSegura2" db', "ClaveSegura2"],
+    ["curl -u admin:'hunter2x' https://example.com", "hunter2x"],
+    ["curl -u 'admin:hunter2y' https://example.com", "hunter2y"],
+    ['curl --user="admin:clave con espacios" https://example.com', "clave con espacios"],
+    ["curl -H 'PRIVATE-TOKEN: secretoH1' https://example.com", "secretoH1"],
+    ['curl -H "X-Gitlab-Token: secretoH2" https://example.com', "secretoH2"],
+    ["curl --header 'X-Custom-Auth: secretoH3' https://example.com", "secretoH3"],
+    ["sshpass -p'ClaveSegura3' ssh host", "ClaveSegura3"],
+    ['sshpass -p "ClaveSegura4" ssh host', "ClaveSegura4"],
   ]) {
     const limpio = sinSecretos(cmd);
     assert.ok(!limpio.includes(secreto), `${cmd} -> ${limpio}`);

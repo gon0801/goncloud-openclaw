@@ -123,15 +123,22 @@ export function soloLectura(cmd) {
 // Tapa argumentos con pinta de secreto: VAR=valor de claves, flags de token/clave, Bearer, cadenas largas tipo token.
 // Tambien las formas sin palabra "token/clave": curl -u/--user usuario:clave, -p pegado de
 // mysql/mysqldump/psql, sshpass -p, y cabeceras Authorization/Cookie/X-Api-Key via -H/--header.
+const HEADER_SENSIBLE = /(token|auth|key|secret|cookie|session|password)/i;
 export function sinSecretos(cmd) {
   return String(cmd ?? "")
     .replace(/\b([A-Z0-9_]*(TOKEN|KEY|SECRET|PASS(WORD)?|AUTH)[A-Z0-9_]*)=\S+/gi, "$1=***")
     .replace(/(--?[\w-]*(token|key|secret|pass(word)?|auth)[\w-]*[=\s]+)\S+/gi, "$1***")
-    .replace(/((?:-H|--header)(?:=|\s+)["'](?:Authorization|Cookie|X-Api-Key|Api-Key|X-Auth-Token)\s*:\s*)[^"']+/gi, "$1***")
-    .replace(/((?:-H|--header)(?:=|\s+)(?:Authorization|Cookie|X-Api-Key|Api-Key|X-Auth-Token)\s*:\s*)\S+/gi, "$1***")
-    .replace(/(\bcurl\b[^|;&\n]*?)(--user(?:=|\s+)|-u\s+|-u)(["']?)[^\s"']+/g, "$1$2$3***")
-    .replace(/(\b(?:mysql|mysqldump|mariadb-dump|psql)\b[^|;&\n]*?)(-p)([^\s"'-][^\s"']*)/g, "$1$2***")
-    .replace(/(\bsshpass\b[^|;&\n]*?)(-p\s+|-p)([^\s"']+)/g, "$1$2***")
+    .replace(/((?:-H|--header)(?:=|\s+))(["'])([^"']*)(\2)/g, (m, p, q, inner) => {
+      const i = inner.indexOf(":");
+      if (i < 0 || !HEADER_SENSIBLE.test(inner.slice(0, i))) return m;
+      return `${p}${q}${inner.slice(0, i).trim()}: ***${q}`;
+    })
+    .replace(/((?:-H|--header)(?:=|\s+))([A-Za-z0-9_-]+)(\s*:\s*)\S+/g, (m, p, name, colon) =>
+      HEADER_SENSIBLE.test(name) ? `${p}${name}${colon}***` : m)
+    .replace(/(\bcurl\b[^|;&\n]*?)(--user(?:=|\s+)|-u\s+|-u)("[^"]*"|'[^']*'|[^\s"']*(?:"[^"]*"|'[^']*')[^\s"']*|[^\s"']+)/g, "$1$2***")
+    .replace(/(\b(?:mysql|mysqldump|mariadb-dump|psql)\b[^|;&\n]*?)(-p)("[^"]*"|'[^']*'|[^\s"'-][^\s"']*)/g, "$1$2***")
+    .replace(/(\b(?:mysql|mysqldump|mariadb-dump|psql)\b[^|;&\n]*?)(-p\s+)("[^"]*"|'[^']*')/g, "$1$2***")
+    .replace(/(\bsshpass\b[^|;&\n]*?)(-p\s+|-p)("[^"]*"|'[^']*'|[^\s"']+)/g, "$1$2***")
     .replace(/\b(Bearer|Basic)\s+\S+/gi, "$1 ***")
     .replace(/(\/\/[^\s:/@]+:)[^\s@]+@/g, "$1***@")
     .replace(/\b[A-Za-z0-9_\-+/=]{32,}\b/g, "***");
@@ -245,9 +252,14 @@ export default definePluginEntry({
           bitacora(kind, state, question, { agentId, ms, model: outcome?.result?.model, error: String(error) });
           return null;
         }
+        const invalid = ans.choice === undefined && typeof ans.probabilityTrue !== "number" && typeof ans.score !== "number";
+        if (invalid) {
+          log({ kind, agentId, sessionKey: ctx.sessionKey, ok: false, ms, error: "respuesta_invalida" });
+          bitacora(kind, state, question, { agentId, ms, model: outcome?.result?.model, answer: ans, error: "respuesta_invalida" });
+          return null;
+        }
         const r = top(ans);
-        const invalid = !ans || (ans.choice === undefined && typeof ans.probabilityTrue !== "number" && typeof ans.score !== "number");
-        bitacora(kind, state, question, { agentId, ms, model: outcome?.result?.model, answer: ans, error: invalid ? "respuesta_invalida" : undefined });
+        bitacora(kind, state, question, { agentId, ms, model: outcome?.result?.model, answer: ans });
         log({ kind, agentId, sessionKey: ctx.sessionKey, ok: true, ms, decision: r.label, confidence: r.conf, pTrue: r.pTrue,
           probabilities: ans?.probabilities, model: outcome?.result?.model, input: String(state.message ?? "").slice(0, 300) });
         return r;
