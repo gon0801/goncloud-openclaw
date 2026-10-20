@@ -161,6 +161,13 @@ export function sinSecretos(cmd) {
     .replace(/(\/\/[^\s:/@]+:)[^\s@]+@/g, "$1***@")
     .replace(/\b[A-Za-z0-9_\-+/=]{32,}\b/g, "***");
 }
+// Razon: claw manda un title/description distinto en cada llamada aunque el comando sea el mismo, y eso impide ver repeticiones.
+const CAMPOS_COSMETICOS = new Set(["title", "description"]);
+export function sinCamposCosmeticos(params) {
+  if (!params || typeof params !== "object" || Array.isArray(params)) return params;
+  return Object.fromEntries(Object.entries(params).filter(([k]) => !CAMPOS_COSMETICOS.has(k)));
+}
+
 // Redacta cada valor string de params (objetos/arrays anidados) antes de serializar:
 // sobre el JSON las comillas escapadas (\" ) rompen las reglas de sinSecretos.
 export function sinSecretosParams(valor) {
@@ -610,8 +617,9 @@ export default definePluginEntry({
       // Comparar y deduplicar con el crudo (su sha256, sin guardarlo en claro): sinSecretos puede
       // dejar iguales dos llamadas distintas (rutas o sha largos -> ***) y eso daba falsos bucles.
       // sinSecretos solo se aplica al message que recibe Jev (y de ahi al registro sombra).
-      const crudo = JSON.stringify(event.params ?? {});
-      const cur = { tool: event.toolName, params: sinSecretos(JSON.stringify(sinSecretosParams(event.params ?? {}))).slice(0, 1500), hash: createHash("sha256").update(crudo).digest("hex") };
+      const paramsComparables = sinCamposCosmeticos(event.params ?? {});
+      const crudo = JSON.stringify(paramsComparables);
+      const cur = { tool: event.toolName, params: sinSecretos(JSON.stringify(sinSecretosParams(paramsComparables))).slice(0, 1500), hash: createHash("sha256").update(crudo).digest("hex") };
       const prev = lastCall.get(sessionKey);
       lastCall.set(sessionKey, cur);
       if (lastCall.size > 500) lastCall.delete(lastCall.keys().next().value);

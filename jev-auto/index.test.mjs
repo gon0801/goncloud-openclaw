@@ -792,6 +792,80 @@ test("g) runId solo en el event con toolCallId rpc- de turno si consulta a Jev",
   assert.equal(r.calls, 1);
 });
 
+async function dosExec(params1, params2, id) {
+  const estados = [];
+  let consultasHerramienta = 0;
+  const fake = async (payload) => {
+    estados.push(payload.state);
+    if (payload.questions.q) {
+      consultasHerramienta++;
+      return { ok: true, status: "ok", result: { model: "jev", answers: { q: { probabilityTrue: 0.95 } } } };
+    }
+    return {
+      ok: true,
+      status: "ok",
+      result: {
+        model: "jev",
+        answers: {
+          tipo: { choice: "reversible", probabilities: { reversible: 0.8 } },
+          borra: { probabilityTrue: 0.1 },
+          git: { probabilityTrue: 0.1 },
+          prod: { probabilityTrue: 0.1 },
+          envia: { probabilityTrue: 0.1 },
+        },
+      },
+    };
+  };
+  const { handlers, injections } = makePlugin(fake);
+  const ctx = ctxTool(id);
+  const handler = handlers.get("before_tool_call");
+  await handler({ toolName: "exec", params: params1 }, ctx);
+  await handler({ toolName: "exec", params: params2 }, ctx);
+  return { consultasHerramienta, estados, injections };
+}
+
+test("title: dos exec de un turno identicos salvo title si consultan a Jev (1 vez)", async () => {
+  const comando = "esperar-cambio --revisar-estado-largo";
+  const r = await dosExec(
+    { command: comando, title: "x (1)" },
+    { command: comando, title: "x (2)" },
+    "title-distinto",
+  );
+  assert.equal(r.consultasHerramienta, 1);
+});
+
+test("title: dos exec de un turno identicos salvo description si consultan a Jev (1 vez)", async () => {
+  const comando = "esperar-cambio --revisar-estado-largo";
+  const r = await dosExec(
+    { command: comando, description: "descripcion uno larga" },
+    { command: comando, description: "descripcion dos distinta" },
+    "description-distinta",
+  );
+  assert.equal(r.consultasHerramienta, 1);
+});
+
+test("title: dos exec con command distinto y mismo title no consultan a Jev", async () => {
+  const r = await dosExec(
+    { command: "esperar-cambio --revisar-estado-uno", title: "x" },
+    { command: "esperar-cambio --revisar-estado-dos", title: "x" },
+    "command-distinto",
+  );
+  assert.equal(r.consultasHerramienta, 0);
+});
+
+test("title: el mensaje que recibe Jev no contiene el texto del title", async () => {
+  const comando = "esperar-cambio --revisar-estado-largo";
+  const r = await dosExec(
+    { command: comando, title: "TituloCosmeticoUnico (1)" },
+    { command: comando, title: "TituloCosmeticoUnico (2)" },
+    "title-no-a-jev",
+  );
+  const estadoHerramienta = r.estados.find((s) => typeof s?.message === "string" && s.message.includes("anterior:"));
+  assert.ok(estadoHerramienta, "Jev debio recibir el estado de herramienta");
+  assert.ok(!JSON.stringify(estadoHerramienta).includes("TituloCosmeticoUnico"), JSON.stringify(estadoHerramienta));
+  assert.ok(estadoHerramienta.message.includes(comando), estadoHerramienta.message);
+});
+
 test("herramienta: comillas en el comando no filtran el secreto a Jev ni al log (F15)", async () => {
   for (const [i, [comando, secreto]] of [
     ['mysql -p"ClaveSegura9" db', "ClaveSegura9"],
