@@ -92,7 +92,7 @@ function tramoSeguro(tokens) {
   if (cmd === "tail" && tokens.some((t) => /^-[^-]*[fF]/.test(t))) return false;
   if (cmd === "sort" && tokens.some((t) => t === "-o" || /^-[^-]*o/.test(t) && !t.startsWith("--"))) return false;
   if (cmd === "date") {
-    if (tokens.some((t) => t === "-s" || /^-[a-z]*s/.test(t))) return false;
+    if (tokens.some((t) => t === "-s" || /^-[A-Za-z]*s/.test(t))) return false;
     for (let i = 1; i < tokens.length; i++) {
       const t = tokens[i];
       if (t.startsWith("-") || t.startsWith("+") || t.startsWith("--")) continue;

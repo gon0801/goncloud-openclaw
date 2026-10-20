@@ -19,7 +19,7 @@ mantiene ese estado en el run; anotarlo en un archivo sería una copia que mient
 si la máquina cambia.
 
 Desde 2026-10-20 CodeRabbit no es obligatorio (decisión de David): la compuerta
-solo corre si la receta lo lista; si comenta, sus hilos Major se adjudican igual.
+solo corre si la receta lo lista; si comenta, sus hilos Major/Critical se adjudican igual.
 
 Por qué la revisión incompleta del bot ya no frena (David, orden
 G-sin-candados 2026-10-19): el gate solo niega un hallazgo BLOQUEANTE sin
