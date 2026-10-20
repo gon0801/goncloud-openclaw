@@ -73,9 +73,16 @@ function handlerDeRuteo(evaluate) {
   return makePlugin(evaluate).handlers.get("before_prompt_build");
 }
 
-const leerDecisiones = async (decisionsPath) => {
-  await new Promise((r) => setTimeout(r, 50));
-  return readFileSync(decisionsPath, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l));
+const leerDecisiones = async (decisionsPath, esperadas = 1) => {
+  const tope = Date.now() + 2000;
+  let lineas = [];
+  for (;;) {
+    try {
+      lineas = readFileSync(decisionsPath, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l));
+    } catch { lineas = []; }
+    if (lineas.length >= esperadas || Date.now() >= tope) return lineas;
+    await new Promise((r) => setTimeout(r, 10));
+  }
 };
 
 const EVENTO = { currentUserMessage: "Necesito revisar las ventas de Mercado Libre de esta semana" };
@@ -284,7 +291,7 @@ test("comandoRiesgo no manda ni guarda el secreto en claro (S1)", async () => {
   );
   assert.ok(estadoVisto?.command, "Jev debio recibir el comando");
   assert.ok(!estadoVisto.command.includes("hunter2"), estadoVisto.command);
-  const lineas = await leerDecisiones(decisionsPath);
+  const lineas = await leerDecisiones(decisionsPath, 5);
   assert.ok(lineas.length > 0, "la bitacora debio escribirse");
   assert.ok(!JSON.stringify(lineas).includes("hunter2"), JSON.stringify(lineas));
   assert.ok(lineas.every((l) => !String(l.cmdPreview ?? "").includes("hunter2")));
@@ -332,7 +339,7 @@ test("cierreEvidencia: afirma sin prueba inyecta cierre y aviso (F4)", async () 
   assert.deepEqual(r, {
     prependContext: "Jev cierre: quedo (0.91)\nJev: afirma algo hecho sin prueba visible; verifícalo antes de decírselo a David",
   });
-  const lines = (await leerDecisiones(decisionsPath)).filter((l) => l.kind === "cierre-evidencia");
+  const lines = (await leerDecisiones(decisionsPath, 3)).filter((l) => l.kind === "cierre-evidencia");
   assert.equal(lines.length, 3);
   assert.equal(lines.find((l) => l.q === "afirma").status, "acted");
   assert.equal(lines.find((l) => l.q === "evidencia").status, "acted");
@@ -369,7 +376,7 @@ test("comandoRiesgo: comando destructivo inyecta aviso y bitacora acted/below (F
   );
   assert.equal(injections.length, 1);
   assert.match(injections[0].text, /Jev: comando riesgoso \(destructivo, borra archivos\)/);
-  const lines = (await leerDecisiones(decisionsPath)).filter((l) => l.kind === "comando-riesgo");
+  const lines = (await leerDecisiones(decisionsPath, 5)).filter((l) => l.kind === "comando-riesgo");
   assert.equal(lines.find((l) => l.q === "borra").status, "acted");
   assert.equal(lines.find((l) => l.q === "git").status, "below_threshold");
 });
@@ -414,6 +421,71 @@ test("comandoRiesgo: probabilidad que redondea al umbral actua y bitacora acted 
   );
   assert.equal(injections.length, 1);
   assert.match(injections[0].text, /borra archivos/);
-  const lines = (await leerDecisiones(decisionsPath)).filter((l) => l.kind === "comando-riesgo");
+  const lines = (await leerDecisiones(decisionsPath, 5)).filter((l) => l.kind === "comando-riesgo");
   assert.equal(lines.find((l) => l.q === "borra").status, "acted");
+});
+
+test("soloLectura: git remote exacto, file fuera, rg/gh peligrosos (F2 cierre)", () => {
+  for (const cmd of [
+    "git remote -v remove origin", "git remote -v add x y", "git remote add x y", "git remote prune origin",
+    "git remote set-url origin x", "git remote rename a b", "git remote -v extra", "git remote --verbose",
+    "file datos.txt", "file -C magia", "rg -z foo", "rg --search-zip foo", "rg --pre-glob x foo",
+    "gh pr checks 3 --watch", "gh pr view 3 --web", "gh run view 1 --watch",
+  ]) assert.equal(soloLectura(cmd), false, cmd);
+  for (const cmd of ["git remote -v", "git remote", "rg foo", "gh pr checks 3"]) {
+    assert.equal(soloLectura(cmd), true, cmd);
+  }
+});
+
+test("sinSecretos tapa JSON y redis-cli (F6 cierre)", () => {
+  for (const [cmd, secreto] of [
+    [`curl -d '{"password":"hunter2"}' https://example.com`, "hunter2"],
+    [`curl -d "{'PASSWORD': 'hunter2'}" https://example.com`, "hunter2"],
+    [`curl -d '{"api_key":"hunter2"}' https://example.com`, "hunter2"],
+    ["redis-cli -a hunter2 ping", "hunter2"],
+    ["redis-cli -a'hunter2' ping", "hunter2"],
+    ['redis-cli -a "hunter2" ping', "hunter2"],
+    ["redis-cli --pass hunter2 ping", "hunter2"],
+  ]) {
+    const limpio = sinSecretos(cmd);
+    assert.ok(!limpio.includes(secreto), `${cmd} -> ${limpio}`);
+    assert.ok(limpio.includes("***"), `${cmd} -> ${limpio}`);
+  }
+});
+
+test("comandoRiesgo no persiste texto del comando, solo hash (F6 cierre)", async () => {
+  const cmd = "curl -d '{\"password\":\"hunter2\"}' https://example.com --subir-datos";
+  const { handlers, decisionsPath, dir } = makePlugin(evaluateRiesgo({
+    tipo: { choice: "reversible", probabilities: { reversible: 0.8 } },
+    borra: { probabilityTrue: 0.1 }, git: { probabilityTrue: 0.1 },
+    prod: { probabilityTrue: 0.1 }, envia: { probabilityTrue: 0.1 },
+  }));
+  await handlers.get("before_tool_call")({ toolName: "exec", params: { command: cmd } }, ctxTool("sin-texto"));
+  const lineas = await leerDecisiones(decisionsPath, 5);
+  assert.ok(lineas.every((l) => !("cmdPreview" in l)), JSON.stringify(lineas));
+  assert.ok(lineas.every((l) => String(l.cmdHash ?? "").startsWith("sha256:")), JSON.stringify(lineas));
+  assert.ok(!JSON.stringify(lineas).includes("hunter2") && !JSON.stringify(lineas).includes("--subir-datos"));
+  const sombra = readFileSync(join(dir, "log.jsonl"), "utf8");
+  assert.ok(!sombra.includes("hunter2") && !sombra.includes("--subir-datos"), sombra);
+  assert.ok(!sombra.includes("cmdPreview"), sombra);
+});
+
+test("ask: answers.q solo con score no inyecta undefined (F7 cierre)", async () => {
+  const fake = async () => ({ ok: true, status: "ok", result: { model: "jev", answers: { q: { score: 0.9 } } } });
+  const { handlers, decisionsPath, dir } = makePlugin(fake);
+  const r = await handlers.get("before_prompt_build")(EVENTO, ctxDe("solo-score"));
+  assert.equal(r, undefined);
+  const lines = await leerDecisiones(decisionsPath);
+  assert.ok(lines.some((l) => l.status === "failure" && l.error === "respuesta_invalida"), JSON.stringify(lines));
+  const sombra = readFileSync(join(dir, "log.jsonl"), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l));
+  assert.ok(sombra.some((l) => l.kind === "ruteo" && l.ok === false), JSON.stringify(sombra));
+});
+
+test("ask: ok sin answers.q reporta 'sin respuesta', no 'ok' (F8)", async () => {
+  const fake = async () => ({ ok: true, status: "ok", result: { model: "jev", answers: {} } });
+  const { handlers, dir } = makePlugin(fake);
+  const r = await handlers.get("before_prompt_build")(EVENTO, ctxDe("sin-respuesta-f8"));
+  assert.equal(r, undefined);
+  const sombra = readFileSync(join(dir, "log.jsonl"), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l));
+  assert.ok(sombra.some((l) => l.kind === "ruteo" && l.ok === false && l.error === "sin respuesta"), JSON.stringify(sombra));
 });

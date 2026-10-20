@@ -74,7 +74,7 @@ const EXEC_TOOLS = new Set(["exec", "bash", "Bash", "shell"]);
 // Solo lectura evidente: no se consulta. Cada tramo (separado por | ; && ||) debe empezar con uno de estos,
 // sin redirecciones ni sustituciones. Ante la duda, se consulta.
 // Fuera de la lista: env (ejecuta el comando que le sigue) y less (puede ejecutar y cuelga esperando teclas).
-const RO_CMDS = /^(ls|cat|head|tail|grep|rg|wc|pwd|echo|which|whoami|date|stat|file|du|df|ps|uname|id|jq|sort|uniq|cut|tr|diff|find|git (status|log|diff|show|branch|remote -v|rev-parse|blame)|openclaw (cron list|status)|gh (pr|run) (view|list|checks))(\s|$)/;
+const RO_CMDS = /^(ls|cat|head|tail|grep|rg|wc|pwd|echo|which|whoami|date|stat|du|df|ps|uname|id|jq|sort|uniq|cut|tr|diff|find|git (status|log|diff|show|branch|remote|rev-parse|blame)|openclaw (cron list|status)|gh (pr|run) (view|list|checks))(\s|$)/;
 // Banderas que escriben, ejecutan o leen archivos extra pase lo que pase el comando: nunca es solo lectura.
 const WRITE_FLAGS = /^(--output(?:=.*)?|-fprint0?|-fprintf|-fls|-execdir|-exec|-okdir|-ok|-delete|--rawfile(?:=.*)?|--slurpfile(?:=.*)?|--argfile(?:=.*)?|--pre(?:=.*)?|--compress-program(?:=.*)?|--ext-diff|--textconv|--hostname-bin(?:=.*)?)$/;
 // Chequeos por comando sobre los argumentos de un tramo ya aceptado por RO_CMDS.
@@ -102,6 +102,11 @@ function tramoSeguro(tokens) {
     }
     if (files >= 2) return false;
   }
+  if (cmd === "git" && sub === "remote") {
+    return tokens.length === 2 || (tokens.length === 3 && tokens[2] === "-v");
+  }
+  if (cmd === "rg" && tokens.some((t) => t === "-z" || /^-[^-]*z/.test(t) && !t.startsWith("--") || t.startsWith("--search-zip") || t.startsWith("--pre-glob"))) return false;
+  if (cmd === "gh" && tokens.some((t) => t === "--watch" || t === "--web" || t.startsWith("--watch=") || t.startsWith("--web="))) return false;
   if (cmd === "git" && sub === "branch") {
     const rest = tokens.slice(2);
     const SAFE = new Set(["-a", "--all", "-r", "--remotes", "-v", "-vv", "--verbose", "-l", "--list", "--show-current", "-q", "--quiet"]);
@@ -126,6 +131,8 @@ export function soloLectura(cmd) {
 const HEADER_SENSIBLE = /(token|auth|key|secret|cookie|session|password)/i;
 export function sinSecretos(cmd) {
   return String(cmd ?? "")
+    .replace(/((?:"|')(?:password|passwd|pass|pwd|token|secret|api_key|apikey|access_token|auth)(?:"|')\s*:\s*)("[^"]*"|'[^']*'|[^\s,}\]]+)/gi, "$1***")
+    .replace(/(\bredis-cli\b[^|;&\n]*?)(-a\s+|-a|--pass(?:=|\s+))("[^"]*"|'[^']*'|[^\s"']+)/g, "$1$2***")
     .replace(/\b([A-Z0-9_]*(TOKEN|KEY|SECRET|PASS(WORD)?|AUTH)[A-Z0-9_]*)=\S+/gi, "$1=***")
     .replace(/(--?[\w-]*(token|key|secret|pass(word)?|auth)[\w-]*[=\s]+)\S+/gi, "$1***")
     .replace(/((?:-H|--header)(?:=|\s+))(["'])([^"']*)(\2)/g, (m, p, q, inner) => {
@@ -247,18 +254,17 @@ export default definePluginEntry({
         const ms = Date.now() - t0;
         const ans = outcome?.result?.answers?.q;
         if (!ans) {
-          const error = outcome?.reason ?? outcome?.status ?? outcome?.error ?? "sin respuesta";
+          const error = outcome?.ok === true || outcome?.status === "ok" ? "sin respuesta" : outcome?.reason ?? outcome?.status ?? outcome?.error ?? "sin respuesta";
           log({ kind, agentId, sessionKey: ctx.sessionKey, ok: false, ms, error });
           bitacora(kind, state, question, { agentId, ms, model: outcome?.result?.model, error: String(error) });
           return null;
         }
-        const invalid = ans.choice === undefined && typeof ans.probabilityTrue !== "number" && typeof ans.score !== "number";
-        if (invalid) {
+        const r = top(ans);
+        if (r.label === undefined || r.label === null) {
           log({ kind, agentId, sessionKey: ctx.sessionKey, ok: false, ms, error: "respuesta_invalida" });
           bitacora(kind, state, question, { agentId, ms, model: outcome?.result?.model, answer: ans, error: "respuesta_invalida" });
           return null;
         }
-        const r = top(ans);
         bitacora(kind, state, question, { agentId, ms, model: outcome?.result?.model, answer: ans });
         log({ kind, agentId, sessionKey: ctx.sessionKey, ok: true, ms, decision: r.label, confidence: r.conf, pTrue: r.pTrue,
           probabilities: ans?.probabilities, model: outcome?.result?.model, input: String(state.message ?? "").slice(0, 300) });
@@ -349,7 +355,7 @@ export default definePluginEntry({
       const agentId = ctx.agentId;
       const clean = sinSecretos(command);
       const state = { command: clean.slice(0, 2000), ...(host ? { host: host.slice(0, 100) } : {}) };
-      const extra = { cmdHash: "sha256:" + createHash("sha256").update(command).digest("hex"), cmdPreview: clean.slice(0, 80) };
+      const extra = { cmdHash: "sha256:" + createHash("sha256").update(command).digest("hex") };
       const ac = new AbortController();
       const t0 = Date.now();
       let timer;
@@ -372,7 +378,7 @@ export default definePluginEntry({
         const motivos = [];
         if (A.tipo?.choice === "destructivo") motivos.push("destructivo");
         for (const q of Object.keys(MOTIVO)) if (typeof A[q]?.probabilityTrue === "number" && Number(A[q].probabilityTrue.toFixed(2)) >= RIESGO_MIN) motivos.push(MOTIVO[q]);
-        log({ kind: "comando-riesgo", agentId, sessionKey: ctx.sessionKey, ok: true, ms, decision: A.tipo?.choice, motivos, model, input: extra.cmdPreview });
+        log({ kind: "comando-riesgo", agentId, sessionKey: ctx.sessionKey, ok: true, ms, decision: A.tipo?.choice, motivos, model, cmdHash: extra.cmdHash });
         if (!motivos.length) return null;
         const text = `Jev: comando riesgoso (${motivos.join(", ")}); confirma con David si no estaba autorizado`;
         try {
@@ -385,7 +391,7 @@ export default definePluginEntry({
         return text;
       } catch (e) {
         const ms = e?.ms ?? Date.now() - t0;
-        log({ kind: "comando-riesgo", agentId, sessionKey: ctx.sessionKey, ok: false, ms, error: String(e?.message ?? e), input: extra.cmdPreview });
+        log({ kind: "comando-riesgo", agentId, sessionKey: ctx.sessionKey, ok: false, ms, error: String(e?.message ?? e), cmdHash: extra.cmdHash });
         for (const q of Object.keys(RIESGO_Q)) bitacora("comando-riesgo", state, RIESGO_Q[q], { q, agentId, ms, model: e?.model, extra, threshold: q === "tipo" ? null : RIESGO_MIN, error: String(e?.message ?? e) });
         return null;
       } finally {
