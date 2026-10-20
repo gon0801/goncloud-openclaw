@@ -721,6 +721,67 @@ test("sinSecretos no confunde banderas cortas dentro de otra palabra o bandera l
   }
 });
 
+const PARAMS_LARGOS = { consulta: "listar las sesiones abiertas de esta prueba larga" };
+const CTX_EXTERNO = { agentId: "main", sessionKey: "agent:main:main" };
+
+async function dosSessionsList(toolCallId, ctx) {
+  let calls = 0;
+  const { handlers, dir } = makePlugin(async () => {
+    calls++;
+    return { ok: true, status: "ok", result: { model: "jev", answers: { q: { probabilityTrue: 0.95 } } } };
+  });
+  const handler = handlers.get("before_tool_call");
+  await handler({ toolName: "sessions_list", toolCallId: `${toolCallId}-1`, params: PARAMS_LARGOS }, ctx);
+  await handler({ toolName: "sessions_list", toolCallId: `${toolCallId}-2`, params: PARAMS_LARGOS }, ctx);
+  await new Promise((r) => setTimeout(r, 50));
+  let texto = "";
+  try { texto = readFileSync(join(dir, "log.jsonl"), "utf8"); } catch { texto = ""; }
+  return { calls, texto, enLastCall: globalThis.__jevAuto.lastCall.has(ctx.sessionKey) };
+}
+
+test("a) invocacion externa http-: sessions_list repetida no consulta a Jev ni escribe en el registro", async () => {
+  const r = await dosSessionsList("http-x", CTX_EXTERNO);
+  assert.equal(r.calls, 0);
+  assert.equal(r.texto, "");
+  assert.equal(r.enLastCall, false);
+});
+
+test("b) invocacion externa rpc-: sessions_list repetida no consulta a Jev ni escribe en el registro", async () => {
+  const r = await dosSessionsList("rpc-x", CTX_EXTERNO);
+  assert.equal(r.calls, 0);
+  assert.equal(r.texto, "");
+  assert.equal(r.enLastCall, false);
+});
+
+test("c) llamadas identicas de un turno con runId si consultan a Jev por bucle", async () => {
+  const r = await dosSessionsList("toolu_turno", { ...CTX_EXTERNO, runId: "run-turno" });
+  assert.equal(r.calls, 1);
+});
+
+test("d) llamada sin runId con toolCallId toolu_ no se salta: se compara como hoy", async () => {
+  const r = await dosSessionsList("toolu_abc", CTX_EXTERNO);
+  assert.equal(r.calls, 1);
+});
+
+test("e) exec externo http- con comando riesgoso sigue pasando por comandoRiesgo", async () => {
+  let calls = 0;
+  const fakeRiesgo = evaluateRiesgo({
+    tipo: { choice: "destructivo", probabilities: { destructivo: 0.92 } },
+    borra: { probabilityTrue: 0.95 },
+    git: { probabilityTrue: 0.1 },
+    prod: { probabilityTrue: 0.1 },
+    envia: { probabilityTrue: 0.1 },
+  });
+  const { handlers, injections } = makePlugin(async (payload) => { calls++; return fakeRiesgo(payload); });
+  await handlers.get("before_tool_call")(
+    { toolName: "exec", toolCallId: "http-x-1", params: { command: "rm -rf /tmp/x" } },
+    CTX_EXTERNO,
+  );
+  assert.equal(calls, 1);
+  assert.equal(injections.length, 1);
+  assert.match(injections[0].text, /Jev: comando riesgoso/);
+});
+
 test("herramienta: comillas en el comando no filtran el secreto a Jev ni al log (F15)", async () => {
   for (const [i, [comando, secreto]] of [
     ['mysql -p"ClaveSegura9" db', "ClaveSegura9"],
