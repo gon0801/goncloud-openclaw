@@ -41,7 +41,7 @@ El diseño amplía piezas existentes:
 - `scripts/mac/tmux-activity-watch.sh` detecta silencio, diálogos y fin de turno.
 - `tablero-runbook` muestra el progreso escrito por el director y lo cruza con GitHub y el plan.
 - `agent-dispatch` conserva el contrato de briefs, entregas y resultados completos.
-- La cadena de calidad conserva verifier, adversary, reviewer, cross-review, CodeRabbit y CI.
+- La cadena de calidad conserva verifier, adversary, reviewer, cross-review, CI y CodeRabbit.
 
 El diseño no crea otro tablero ni otro administrador de sesiones.
 
@@ -167,7 +167,7 @@ Las tareas que cambian los mismos archivos se ejecutan en serie. El director pue
 13. CodeRabbit revisa el SHA publicado.
 14. Si CodeRabbit encuentra un bloqueante, el PR permanece abierto. El implementador corrige localmente sin hacer push.
 15. Un harness distinto revisa solo la corrección local.
-16. Después de la aprobación local, el implementador publica el nuevo SHA en el mismo PR. CI vuelve a correr y CodeRabbit vuelve a revisar ese SHA.
+16. Después de la aprobación local, el implementador publica el nuevo SHA en el mismo PR. CI y CodeRabbit vuelven a revisar ese SHA.
 17. Las observaciones no bloqueantes van al plan y no abren otra ronda.
 18. Con recibo persistente válido para el head actual, CI verde y revisiones sin bloqueantes, el agente autorizado fusiona; la disponibilidad de CodeRabbit sigue la política del plan.
 19. `ingenieria` despliega o espera el sync, según el repo.
@@ -221,7 +221,7 @@ Cada carril muestra:
 - Estado y tiempo transcurrido.
 - Último evento.
 - Estado de cuota o autenticación.
-- Cross-review, CodeRabbit y CI con su SHA.
+- Cross-review, CI y CodeRabbit con su SHA.
 - PR, merge, deploy y canary.
 - Estado de la terminal: visible, separada o degradada.
 - Comando de solo lectura para adjuntar la terminal cuando la apertura automática falla.
@@ -240,7 +240,7 @@ Después de un reinicio, `main` reconcilia:
 2. Las sesiones `tmux` vivas.
 3. El estado de cada worktree y su HEAD.
 4. Las ramas remotas y los PRs.
-5. Las referencias de evidencia de cross-review, CodeRabbit, CI y el recibo del PR.
+5. Las referencias de evidencia de cross-review, CI y CodeRabbit y el recibo del PR.
 6. El SHA desplegado y el último canary.
 
 La reconciliación precede cualquier operación con efecto externo. Si un push, PR, merge o deploy ya ocurrió, el director registra el efecto y continúa. No repite la operación a ciegas.
