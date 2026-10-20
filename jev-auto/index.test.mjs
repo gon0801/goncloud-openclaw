@@ -200,6 +200,7 @@ test("soloLectura sigue aceptando lecturas evidentes con banderas inocuas (F2)",
   for (const cmd of [
     "grep -rn foo jev-auto/index.js", "grep -o foo datos.txt", "git branch", "git branch -a", "git branch --list",
     "uniq datos.txt", "sort datos.txt", "jq . datos.json", "tail -n 20 app.log", "date +%F", "date -u", "date -R", "date +%s",
+    "date -Iseconds", "date -Ins", "date -d yesterday", "date -ud @0",
     "ls -o", "find . -name '*.js'", "cat jev-auto/index.js | grep foo | wc -l",
   ]) {
     assert.equal(soloLectura(cmd), true, cmd);

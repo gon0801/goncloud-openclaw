@@ -85,6 +85,28 @@ const esLargaPeligrosa = (t) => {
   const nombre = t.slice(2).split("=")[0];
   return nombre.length >= 1 && LONG_PELIGROSAS.some((d) => d.startsWith(nombre));
 };
+// Banderas de date que llevan argumento pegado (p. ej. -Iseconds): lo que sigue en el token no son banderas.
+const DATE_CON_ARGUMENTO = new Set(["d", "f", "I", "r"]);
+function dateFijaHora(token) {
+  if (!token.startsWith("-") || token.startsWith("--")) return false;
+  for (const letra of token.slice(1)) {
+    if (letra === "s") return true;
+    if (DATE_CON_ARGUMENTO.has(letra)) return false;
+  }
+  return false;
+}
+// El token anterior deja el argumento para el siguiente token (p. ej. -ud @0, --date ayer).
+function dateEsperaArgumento(token) {
+  if (!token) return false;
+  if (token.startsWith("--")) return ["--date", "--reference", "--file"].includes(token);
+  if (!token.startsWith("-")) return false;
+  const letras = token.slice(1);
+  for (let i = 0; i < letras.length; i++) {
+    if (DATE_CON_ARGUMENTO.has(letras[i])) return letras[i] !== "I" && i === letras.length - 1;
+    if (letras[i] === "s") return false;
+  }
+  return false;
+}
 // Chequeos por comando sobre los argumentos de un tramo ya aceptado por RO_CMDS.
 function tramoSeguro(tokens) {
   const [cmd, sub] = tokens;
@@ -92,11 +114,11 @@ function tramoSeguro(tokens) {
   if (cmd === "tail" && tokens.some((t) => /^-[^-]*[fF]/.test(t))) return false;
   if (cmd === "sort" && tokens.some((t) => t === "-o" || /^-[^-]*o/.test(t) && !t.startsWith("--"))) return false;
   if (cmd === "date") {
-    if (tokens.some((t) => t === "-s" || /^-[A-Za-z]*s/.test(t))) return false;
+    if (tokens.some(dateFijaHora)) return false;
     for (let i = 1; i < tokens.length; i++) {
       const t = tokens[i];
       if (t.startsWith("-") || t.startsWith("+") || t.startsWith("--")) continue;
-      if (["-d", "--date", "-r", "--reference"].includes(tokens[i - 1])) continue;
+      if (dateEsperaArgumento(tokens[i - 1])) continue;
       return false;
     }
   }
