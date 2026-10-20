@@ -140,7 +140,7 @@ const HEADER_SENSIBLE = /(token|auth|key|secret|cookie|session|password)/i;
 export function sinSecretos(cmd) {
   return String(cmd ?? "")
     .replace(/((?:"|')(?:password|passwd|pass|pwd|token|secret|api_key|apikey|access_token|auth)(?:"|')\s*:\s*)("[^"]*"|'[^']*'|[^\s,}\]]+)/gi, "$1***")
-    .replace(/(\bredis-cli\b[^|;&\n]*?)(-a\s+|-a|--pass(?:=|\s+))("[^"]*"|'[^']*'|[^\s"']+)/g, "$1$2***")
+    .replace(/(\bredis-cli\b[^|;&\n]*?)((?<![\w-])-a\s+|(?<![\w-])-a|(?<![\w-])--pass(?:=|\s+))("[^"]*"|'[^']*'|[^\s"']+)/g, "$1$2***")
     .replace(/\b([A-Z0-9_]*(TOKEN|KEY|SECRET|PASS(WORD)?|AUTH)[A-Z0-9_]*)=\S+/gi, "$1=***")
     .replace(/(--?[\w-]*(?:token|key|secret|pass(?:word)?|auth|user|cookie|session|login|credential)[\w-]*[=\s]+)("[^"]*"|'[^']*'|[^\s]+)/gi, (m, p) => (/stdin/i.test(p) ? m : `${p}***`))
     .replace(/((?:-H|--header)(?:=|\s+))(["'])([^"']*)(\2)/g, (m, p, q, inner) => {
@@ -154,12 +154,20 @@ export function sinSecretos(cmd) {
     .replace(/(\bcurl\b[^|;&\n]*?)((?<![\w-])-b(?:\s+|=)?)("[^"]*"|'[^']*'|[^\s"']*(?:"[^"]*"|'[^']*')[^\s"']*|[^\s"']+)/g, "$1$2***")
     .replace(/(\bcurl\b[^|;&\n]*?)((?<![\w-])-U(?:\s+|=)?)("[^"]*"|'[^']*'|[^\s"']*(?:"[^"]*"|'[^']*')[^\s"']*|[^\s"']+)/g, "$1$2***")
     .replace(/(\b(?:docker|podman|helm|nerdctl)\b[^|;&\n]*?\blogin\b[^|;&\n]*?)((?<![\w-])-p(?:\s+|=)?)("[^"]*"|'[^']*'|[^\s"']*(?:"[^"]*"|'[^']*')[^\s"']*|[^\s"']+)/g, "$1$2***")
-    .replace(/(\b(?:mysql|mysqldump|mariadb-dump|psql)\b[^|;&\n]*?)(-p)("[^"]*"|'[^']*'|[^\s"'-][^\s"']*)/g, "$1$2***")
-    .replace(/(\b(?:mysql|mysqldump|mariadb-dump|psql)\b[^|;&\n]*?)(-p\s+)("[^"]*"|'[^']*')/g, "$1$2***")
-    .replace(/(\bsshpass\b[^|;&\n]*?)(-p\s+|-p)("[^"]*"|'[^']*'|[^\s"']+)/g, "$1$2***")
+    .replace(/(\b(?:mysql|mysqldump|mariadb-dump|psql)\b[^|;&\n]*?)((?<![\w-])-p)("[^"]*"|'[^']*'|[^\s"'-][^\s"']*)/g, "$1$2***")
+    .replace(/(\b(?:mysql|mysqldump|mariadb-dump|psql)\b[^|;&\n]*?)((?<![\w-])-p\s+)("[^"]*"|'[^']*')/g, "$1$2***")
+    .replace(/(\bsshpass\b[^|;&\n]*?)((?<![\w-])-p\s+|(?<![\w-])-p)("[^"]*"|'[^']*'|[^\s"']+)/g, "$1$2***")
     .replace(/\b(Bearer|Basic)\s+\S+/gi, "$1 ***")
     .replace(/(\/\/[^\s:/@]+:)[^\s@]+@/g, "$1***@")
     .replace(/\b[A-Za-z0-9_\-+/=]{32,}\b/g, "***");
+}
+// Redacta cada valor string de params (objetos/arrays anidados) antes de serializar:
+// sobre el JSON las comillas escapadas (\" ) rompen las reglas de sinSecretos.
+export function sinSecretosParams(valor) {
+  if (typeof valor === "string") return sinSecretos(valor);
+  if (Array.isArray(valor)) return valor.map(sinSecretosParams);
+  if (valor && typeof valor === "object") return Object.fromEntries(Object.entries(valor).map(([k, v]) => [k, sinSecretosParams(v)]));
+  return valor;
 }
 
 const top = (a) => {
@@ -599,7 +607,7 @@ export default definePluginEntry({
       // dejar iguales dos llamadas distintas (rutas o sha largos -> ***) y eso daba falsos bucles.
       // sinSecretos solo se aplica al message que recibe Jev (y de ahi al registro sombra).
       const crudo = JSON.stringify(event.params ?? {});
-      const cur = { tool: event.toolName, params: sinSecretos(crudo).slice(0, 1500), hash: createHash("sha256").update(crudo).digest("hex") };
+      const cur = { tool: event.toolName, params: sinSecretos(JSON.stringify(sinSecretosParams(event.params ?? {}))).slice(0, 1500), hash: createHash("sha256").update(crudo).digest("hex") };
       const prev = lastCall.get(sessionKey);
       lastCall.set(sessionKey, cur);
       if (lastCall.size > 500) lastCall.delete(lastCall.keys().next().value);

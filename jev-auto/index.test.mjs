@@ -703,3 +703,59 @@ test("sinSecretos no tapa --password-stdin ni comandos sin secretos (F13)", () =
   assert.equal(sinSecretos("docker login --password-stdin registry.example.com"), "docker login --password-stdin registry.example.com");
   assert.equal(sinSecretos("curl -s https://example.com/api"), "curl -s https://example.com/api");
 });
+
+test("sinSecretos no confunde banderas cortas dentro de otra palabra o bandera larga (F14)", () => {
+  for (const [cmd, secreto] of [
+    ["mysql -h db-prod -pClaveSegura db", "ClaveSegura"],
+    ["mysql --port=3307 -pClaveSegura db", "ClaveSegura"],
+    ["curl --upload-file f -u admin:hunter2 https://x", "hunter2"],
+    ["redis-cli -h cache-app -a hunter2 ping", "hunter2"],
+    ["mysqldump -h db-prod -pClaveSegura db", "ClaveSegura"],
+    ["sshpass -o proxy-prod -p hunter2 ssh host", "hunter2"],
+    ["docker login reg-prod -p ClaveF14 registry.example.com", "ClaveF14"],
+    ["curl -H 'X-U: x' -U userF14:passF14 https://example.com", "passF14"],
+  ]) {
+    const limpio = sinSecretos(cmd);
+    assert.ok(!limpio.includes(secreto), `${cmd} -> ${limpio}`);
+    assert.ok(limpio.includes("***"), `${cmd} -> ${limpio}`);
+  }
+});
+
+test("herramienta: comillas en el comando no filtran el secreto a Jev ni al log (F15)", async () => {
+  for (const [i, [comando, secreto]] of [
+    ['mysql -p"ClaveSegura9" db', "ClaveSegura9"],
+    ['curl -H "X-Api-Key: abc123secreto" https://x', "abc123secreto"],
+  ].entries()) {
+    const estados = [];
+    const fake = async (payload) => {
+      estados.push(payload.state);
+      if (payload.questions.q) {
+        return { ok: true, status: "ok", result: { model: "jev", answers: { q: { probabilityTrue: 0.95 } } } };
+      }
+      return {
+        ok: true,
+        status: "ok",
+        result: {
+          model: "jev",
+          answers: {
+            tipo: { choice: "reversible", probabilities: { reversible: 0.8 } },
+            borra: { probabilityTrue: 0.1 },
+            git: { probabilityTrue: 0.1 },
+            prod: { probabilityTrue: 0.1 },
+            envia: { probabilityTrue: 0.1 },
+          },
+        },
+      };
+    };
+    const { handlers, dir } = makePlugin(fake);
+    const ctx = ctxTool(`f15-${i}`);
+    await handlers.get("before_tool_call")({ toolName: "exec", params: { command: comando } }, ctx);
+    await handlers.get("before_tool_call")({ toolName: "exec", params: { command: comando } }, ctx);
+    const estadoHerramienta = estados.find((s) => typeof s?.message === "string" && s.message.includes("anterior:"));
+    assert.ok(estadoHerramienta, "Jev debio recibir el estado de herramienta");
+    assert.ok(!JSON.stringify(estados).includes(secreto), JSON.stringify(estados));
+    const sombraTexto = await leerSombraTexto(join(dir, "log.jsonl"));
+    assert.ok(sombraTexto.length > 0, "el log sombra debio escribirse");
+    assert.ok(!sombraTexto.includes(secreto), sombraTexto);
+  }
+});
