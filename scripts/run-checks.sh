@@ -93,7 +93,7 @@ for t in scripts/tests/*.sh; do
   shell_tests+=("$(basename "$t")")
 done
 node_tests=()
-for t in scripts/tests/*.mjs; do
+for t in scripts/tests/*.mjs jev-auto/*.test.mjs; do
   [ -e "$t" ] || continue
   node_tests+=("$(basename "$t")")
 done
@@ -214,7 +214,7 @@ cmd_sintaxis_tablero() { (cd tablero-runbook && PATH="$(dirname "$NODE"):$PATH" 
 cmd_bateria_tablero()  { (cd tablero-runbook && "$NODE" --test --test-reporter tap --test-reporter-destination stdout); }
 cmd_corpus()           { "$NODE" summa-gate/verify-corpus.mjs; }
 cmd_shell()            { bash "scripts/tests/$1"; }
-cmd_node_test()        { "$NODE" --test "scripts/tests/$1"; }
+cmd_node_test()        { if [ -f "scripts/tests/$1" ]; then "$NODE" --test "scripts/tests/$1"; else "$NODE" --test "jev-auto/$1"; fi; }
 
 case "$SHARD" in
   todo) paso "bateria completa | logs y resumen en $LOGDIR" ;;

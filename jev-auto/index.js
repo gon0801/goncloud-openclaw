@@ -4,6 +4,7 @@
 import { definePluginEntry } from "openclaw/plugin-sdk/plugin-entry";
 import { appendFile } from "node:fs/promises";
 import { readFileSync, writeFileSync, renameSync } from "node:fs";
+import { dirname, join } from "node:path";
 
 const ROSTER = {
   amazon: "Amazon MX y US, Seller Central, Seller Flex (envios, recolecciones, flex), ordenes, guias, devoluciones, reembolsos, inventario FBA, censo de ordenes no personalizadas",
@@ -21,7 +22,7 @@ const ROSTER = {
 };
 
 const CLI_AGENTS = ["claude", "codex", "kimi", "opencode", "qwen", "cursor"];
-const rutaNorm = (a) => (CLI_AGENTS.includes(a) ? "cli" : a);
+export const rutaNorm = (a) => (CLI_AGENTS.includes(a) ? "cli" : a);
 
 const CLOSE = {
   quedo: "El ayudante completo la tarea y entrego el resultado pedido",
@@ -135,7 +136,7 @@ export default definePluginEntry({
         ]);
         const ms = Date.now() - t0;
         const ans = outcome?.result?.answers?.q;
-        if (!outcome?.ok && outcome?.status !== "ok" && !ans) {
+        if (!ans) {
           log({ kind, agentId, sessionKey: ctx.sessionKey, ok: false, ms, error: outcome?.reason ?? outcome?.status ?? outcome?.error ?? "sin respuesta" });
           return null;
         }
@@ -193,7 +194,7 @@ export default definePluginEntry({
     });
 
     // ---- Correcciones: Jev sugirio X y main despacho a Y (o lo resolvio el mismo) ----
-    const CORR = LOG.replace(/[^/]+$/, "correcciones.jsonl");
+    const CORR = join(dirname(LOG), "correcciones.jsonl");
     let correcciones = [];
     try {
       correcciones = readFileSync(CORR, "utf8").split("\n").filter(Boolean).map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean).slice(-MAX_EJEMPLOS);
@@ -231,7 +232,7 @@ export default definePluginEntry({
     const DAVID = cfg.notifyTo ?? "6470689715";
     const EVERY = cfg.vigilanteIntervalMs ?? 5 * 60_000;
     const MIN = 60_000;
-    const STATE = LOG.replace(/[^/]+$/, "vigilante-estado.json");
+    const STATE = join(dirname(LOG), "vigilante-estado.json");
     const PROMISE_RE = /\bte (aviso|escribo|digo|confirmo|reporto|mando)\b|\bavis(o|are) (cuando|en cuanto)|\ben cuanto (termine|quede|acabe|tenga)/i;
     const ENG_RE = /^agent:(ingenieria|implementer):/;
     const STATUS = {
