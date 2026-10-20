@@ -7,7 +7,8 @@ cinco compuertas puras que se evalúan todas: `faltan` es el diagnóstico comple
 `mergear` corre la misma evaluación y solo con `listo` true ordena
 `gh pr merge --squash --match-head-commit` y relee que quedó MERGED; `reintentar`
 re-corre una sola vez el job de infraestructura cuya firma está en la receta.
-Tras el merge borra la rama del PR (no bases ni forks, solo si la punta no se movió).
+Tras el merge borra la rama del PR (no bases de la receta, `main`, `master`,
+`feat/hermes-team`, `feat/jev-hermes` ni forks, solo si la punta no se movió).
 
 Por qué AUTORES_BOT trae dos grafías: los marcadores del bot son texto que
 cualquiera puede escribir, así que la compuerta exige el autor. `gh pr view`
@@ -43,6 +44,7 @@ import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
+from urllib.parse import quote
 
 # --- constantes-tabla: lo que otro repo decide distinto es dato, no rama -----
 
@@ -683,14 +685,17 @@ def borrar_rama_tras_merge(gh_bin, receta, numero: int, head: str):
             return None, "rama-no-borrada:fork"
         if rama == receta.base or rama in RAMAS_PROTEGIDAS:
             return None, "rama-no-borrada:protegida"
+        rama_url = quote(rama, safe="/")
         ref = json_de(
-            llamar(gh_bin, ["api", f"repos/{receta.repo}/git/ref/heads/{rama}"]),
+            llamar(gh_bin, ["api", f"repos/{receta.repo}/git/ref/heads/{rama_url}"]),
             f"ref de {rama}",
         )
-        sha = ((ref.get("object") or {}).get("sha")) if isinstance(ref, dict) else None
-        if sha != head:
+        objeto = ref.get("object") if isinstance(ref, dict) else None
+        if not isinstance(objeto, dict):
+            return None, "rama-no-borrada:punta-ilegible"
+        if objeto.get("sha") != head:
             return None, "rama-no-borrada:punta-movida"
-        llamar(gh_bin, ["api", "-X", "DELETE", f"repos/{receta.repo}/git/refs/heads/{rama}"])
+        llamar(gh_bin, ["api", "-X", "DELETE", f"repos/{receta.repo}/git/refs/heads/{rama_url}"])
         return rama, None
     except Falla as error:
         return None, f"rama-no-borrada:{error}"

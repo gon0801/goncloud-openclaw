@@ -194,12 +194,20 @@ class MergeConToy(unittest.TestCase):
         return [linea for linea in self.lineas_de_log() if linea.startswith("api -X DELETE ")]
 
     def mergear_verde(
-        self, rama="feat/carril-321", *, es_fork=False, sha_remota=HEAD321, fallar_borrado=False
+        self,
+        rama="feat/carril-321",
+        *,
+        es_fork=False,
+        sha_remota=HEAD321,
+        fallar_borrado=False,
+        ref_crudo=None,
     ):
         pr = self.escenario_verde()
         pr["state"] = "OPEN"
         self.guardar(321, pr)
         self.poner_rama(rama, es_fork=es_fork, sha_remota=sha_remota)
+        if ref_crudo is not None:
+            (self.store / "ref-rama.json").write_text(json.dumps(ref_crudo))
         (self.store / "mergeado.json").unlink(missing_ok=True)
         (self.store / "fallar-borrado").unlink(missing_ok=True)
         if fallar_borrado:
@@ -736,6 +744,33 @@ class MergeConToy(unittest.TestCase):
             self.lineas_delete(),
             [f"api -X DELETE repos/{REPO}/git/refs/heads/feat/carril-321"],
         )
+
+    def test_mergear_borra_rama_con_numeral_codificando_la_ruta(self):
+        codigo, salida, _ = self.mergear_verde(rama="fix/#123")
+        self.assertEqual(codigo, 0)
+        datos = json.loads(salida)
+        self.assertTrue(datos["mergeado"])
+        self.assertEqual(datos["ramaBorrada"], "fix/#123")
+        self.assertIn(
+            f"api repos/{REPO}/git/ref/heads/fix/%23123",
+            self.lineas_de_log(),
+        )
+        self.assertEqual(
+            self.lineas_delete(),
+            [f"api -X DELETE repos/{REPO}/git/refs/heads/fix/%23123"],
+        )
+
+    def test_mergear_con_object_no_dict_avisa_punta_ilegible_y_no_borra(self):
+        codigo, salida, _ = self.mergear_verde(ref_crudo={"object": "x"})
+        self.assertEqual(codigo, 0)
+        datos = json.loads(salida)
+        self.assertTrue(datos["mergeado"])
+        self.assertNotIn("ramaBorrada", datos)
+        self.assertEqual(
+            datos["avisos"],
+            ["hallazgo-menor-sin-adjudicar:F4", "rama-no-borrada:punta-ilegible"],
+        )
+        self.assertEqual(self.lineas_delete(), [])
 
     def test_mergear_ya_estaba_no_borra_la_rama(self):
         pr = self.escenario_verde()
