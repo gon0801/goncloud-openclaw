@@ -26,6 +26,31 @@
       "vigilanteIntervalMs": {
         "type": "integer",
         "minimum": 60000
+      },
+      "decisionsPath": {
+        "type": "string"
+      },
+      "afirmaMin": {
+        "type": "number",
+        "minimum": 0,
+        "maximum": 1,
+        "default": 0.7
+      },
+      "evidenciaMax": {
+        "type": "number",
+        "minimum": 0,
+        "maximum": 1,
+        "default": 0.3
+      },
+      "riesgoMin": {
+        "type": "number",
+        "minimum": 0,
+        "maximum": 1,
+        "default": 0.7
+      },
+      "vigilante": {
+        "type": "boolean",
+        "default": false
       }
     }
   }
