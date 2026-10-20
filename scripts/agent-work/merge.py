@@ -7,6 +7,7 @@ cinco compuertas puras que se evalúan todas: `faltan` es el diagnóstico comple
 `mergear` corre la misma evaluación y solo con `listo` true ordena
 `gh pr merge --squash --match-head-commit` y relee que quedó MERGED; `reintentar`
 re-corre una sola vez el job de infraestructura cuya firma está en la receta.
+Tras el merge borra la rama del PR (no bases ni forks, solo si la punta no se movió).
 
 Por qué AUTORES_BOT trae dos grafías: los marcadores del bot son texto que
 cualquiera puede escribir, así que la compuerta exige el autor. `gh pr view`
@@ -89,6 +90,8 @@ RE_ADJUDICACION = re.compile(
     re.MULTILINE,
 )
 RE_SHA = re.compile(r"[0-9a-f]{7,40}")
+RAMAS_PROTEGIDAS = frozenset({"main", "master", "feat/hermes-team", "feat/jev-hermes"})
+"""Ramas que nunca se borran tras un merge: feat/jev-hermes la usan las cadenas de Hermes."""
 
 
 def canonico(documento) -> str:
@@ -648,6 +651,51 @@ def cmd_listo(gh_bin, receta, numero: int, head: str) -> int:
     return 0 if veredicto["listo"] else 1
 
 
+def borrar_rama_tras_merge(gh_bin, receta, numero: int, head: str):
+    """Borra la rama del PR ya mergeado: (ramaBorrada, None) si la borró, o
+    (None, "rama-no-borrada:<motivo>") si no. Un fallo de gh es aviso, nunca Falla:
+    el merge ya quedó confirmado y no se convierte en fallo por no poder borrar."""
+    try:
+        datos = json_de(
+            llamar(
+                gh_bin,
+                [
+                    "pr",
+                    "view",
+                    str(numero),
+                    "--repo",
+                    receta.repo,
+                    "--json",
+                    "headRefName,isCrossRepository",
+                ],
+            ),
+            f"pr view {numero}",
+        )
+        if (
+            not isinstance(datos, dict)
+            or not isinstance(datos.get("headRefName"), str)
+            or not datos.get("headRefName")
+            or not isinstance(datos.get("isCrossRepository"), bool)
+        ):
+            raise Falla(f"pr view {numero} sin headRefName/isCrossRepository")
+        rama = datos["headRefName"]
+        if datos["isCrossRepository"]:
+            return None, "rama-no-borrada:fork"
+        if rama == receta.base or rama in RAMAS_PROTEGIDAS:
+            return None, "rama-no-borrada:protegida"
+        ref = json_de(
+            llamar(gh_bin, ["api", f"repos/{receta.repo}/git/ref/heads/{rama}"]),
+            f"ref de {rama}",
+        )
+        sha = ((ref.get("object") or {}).get("sha")) if isinstance(ref, dict) else None
+        if sha != head:
+            return None, "rama-no-borrada:punta-movida"
+        llamar(gh_bin, ["api", "-X", "DELETE", f"repos/{receta.repo}/git/refs/heads/{rama}"])
+        return rama, None
+    except Falla as error:
+        return None, f"rama-no-borrada:{error}"
+
+
 def cmd_mergear(gh_bin, receta, numero: int, head: str) -> int:
     if receta.metodo != "squash":
         raise Falla(f"la receta de {receta.repo} no trae metodo squash: {receta.metodo}")
@@ -692,25 +740,28 @@ def cmd_mergear(gh_bin, receta, numero: int, head: str) -> int:
     estado, oid = releer_merge(gh_bin, receta.repo, numero)
     if estado != "MERGED":
         raise Falla(f"merge sin confirmar: el PR {numero} quedó en {estado}")
-    print(
-        canonico(
+    rama_borrada, aviso_borrado = borrar_rama_tras_merge(gh_bin, receta, numero, head)
+    avisos = list(veredicto["avisos"])
+    if aviso_borrado is not None:
+        avisos.append(aviso_borrado)
+    recibo = {
+        "mergeado": True,
+        "mergeCommit": oid,
+        "adjudicaciones": [
             {
-                "mergeado": True,
-                "mergeCommit": oid,
-                "adjudicaciones": [
-                    {
-                        "ref": a.ref,
-                        "autor": a.autor,
-                        "permiso": a.permiso,
-                        "veredicto": a.veredicto,
-                    }
-                    for a in vista.adjudicaciones
-                    if a.permiso in PERMISOS_DE_ESCRITURA
-                ],
-                "avisos": veredicto["avisos"],
+                "ref": a.ref,
+                "autor": a.autor,
+                "permiso": a.permiso,
+                "veredicto": a.veredicto,
             }
-        )
-    )
+            for a in vista.adjudicaciones
+            if a.permiso in PERMISOS_DE_ESCRITURA
+        ],
+        "avisos": avisos,
+    }
+    if rama_borrada is not None:
+        recibo["ramaBorrada"] = rama_borrada
+    print(canonico(recibo))
     return 0
 
 

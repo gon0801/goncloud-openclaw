@@ -42,6 +42,24 @@ case "$*" in
     else
       printf '{"state":"OPEN","mergeCommit":null}\n'
     fi ;;
+  'pr view '*' --json headRefName,isCrossRepository')
+    if [ -f "$d/store/rama-pr.json" ]; then
+      cat "$d/store/rama-pr.json"
+    else
+      printf '{"headRefName":"feat/carril-321","isCrossRepository":false}\n'
+    fi ;;
+  'api repos/'*'/git/ref/heads/'*)
+    if [ -f "$d/store/ref-rama.json" ]; then
+      cat "$d/store/ref-rama.json"
+    else
+      printf '{"object":{"sha":"a3967285970254a93c586bd1fbce326db0c6a51b"}}\n'
+    fi ;;
+  'api -X DELETE repos/'*'/git/refs/heads/'*)
+    if [ -f "$d/store/fallar-borrado" ]; then
+      printf 'gh: fallo al borrar la rama\n' >&2
+      exit 1
+    fi
+    printf '{}\n' ;;
   'pr merge '*)
     if [ -f "$d/store/fallar-merge" ]; then
       printf 'gh: el head del PR ya no es el del --match-head-commit\n' >&2
@@ -165,6 +183,33 @@ class MergeConToy(unittest.TestCase):
 
     def lineas_de_log(self):
         return (self.tmp / "argv.log").read_text().splitlines()
+
+    def poner_rama(self, rama="feat/carril-321", *, es_fork=False, sha_remota=HEAD321):
+        (self.store / "rama-pr.json").write_text(
+            json.dumps({"headRefName": rama, "isCrossRepository": es_fork})
+        )
+        (self.store / "ref-rama.json").write_text(json.dumps({"object": {"sha": sha_remota}}))
+
+    def lineas_delete(self):
+        return [linea for linea in self.lineas_de_log() if linea.startswith("api -X DELETE ")]
+
+    def mergear_verde(
+        self, rama="feat/carril-321", *, es_fork=False, sha_remota=HEAD321, fallar_borrado=False
+    ):
+        pr = self.escenario_verde()
+        pr["state"] = "OPEN"
+        self.guardar(321, pr)
+        self.poner_rama(rama, es_fork=es_fork, sha_remota=sha_remota)
+        (self.store / "mergeado.json").unlink(missing_ok=True)
+        (self.store / "fallar-borrado").unlink(missing_ok=True)
+        if fallar_borrado:
+            (self.store / "fallar-borrado").write_text("x")
+        log = self.tmp / "argv.log"
+        if log.exists():
+            log.write_text("")
+        return self.correr(
+            "mergear", "321", "--sha", HEAD321, "--repo", REPO, "--receta", str(RECETA)
+        )
 
     def comentario_del_bot(self, pr):
         candidatos = [
@@ -572,6 +617,7 @@ class MergeConToy(unittest.TestCase):
         pr = self.escenario_verde()
         pr["state"] = "OPEN"
         self.guardar(321, pr)
+        self.poner_rama()
         codigo, salida, _ = self.correr(
             "mergear", "321", "--sha", HEAD321, "--repo", REPO, "--receta", str(RECETA)
         )
@@ -583,11 +629,16 @@ class MergeConToy(unittest.TestCase):
                 "mergeCommit": MERGE_COMMIT,
                 "adjudicaciones": [],
                 "avisos": ["hallazgo-menor-sin-adjudicar:F4"],
+                "ramaBorrada": "feat/carril-321",
             },
         )
         self.assertIn(
             f"pr merge 321 --repo {REPO} --squash --match-head-commit {HEAD321}",
             self.lineas_de_log(),
+        )
+        self.assertEqual(
+            self.lineas_delete(),
+            [f"api -X DELETE repos/{REPO}/git/refs/heads/feat/carril-321"],
         )
         # La re-corrida con el PR ya MERGED no vuelve a mergear: es ya-estaba.
         pr["state"] = "MERGED"
@@ -604,6 +655,105 @@ class MergeConToy(unittest.TestCase):
             [linea for linea in self.lineas_de_log() if linea.startswith("pr merge ")],
             [f"pr merge 321 --repo {REPO} --squash --match-head-commit {HEAD321}"],
         )
+        self.assertEqual(
+            self.lineas_delete(),
+            [f"api -X DELETE repos/{REPO}/git/refs/heads/feat/carril-321"],
+        )
+
+    def test_mergear_borra_la_rama_del_pr_tras_confirmar_el_merge(self):
+        codigo, salida, _ = self.mergear_verde()
+        self.assertEqual(codigo, 0)
+        datos = json.loads(salida)
+        self.assertTrue(datos["mergeado"])
+        self.assertEqual(datos["ramaBorrada"], "feat/carril-321")
+        self.assertEqual(
+            self.lineas_delete(),
+            [f"api -X DELETE repos/{REPO}/git/refs/heads/feat/carril-321"],
+        )
+        self.assertIn(
+            f"pr view 321 --repo {REPO} --json headRefName,isCrossRepository",
+            self.lineas_de_log(),
+        )
+        self.assertIn(
+            f"api repos/{REPO}/git/ref/heads/feat/carril-321",
+            self.lineas_de_log(),
+        )
+
+    def test_mergear_no_borra_la_base_ni_feat_jev_hermes(self):
+        # main es la base de la receta real; feat/jev-hermes entra por RAMAS_PROTEGIDAS.
+        for rama in ("main", "feat/jev-hermes"):
+            with self.subTest(rama=rama):
+                codigo, salida, _ = self.mergear_verde(rama=rama)
+                self.assertEqual(codigo, 0)
+                datos = json.loads(salida)
+                self.assertTrue(datos["mergeado"])
+                self.assertNotIn("ramaBorrada", datos)
+                self.assertEqual(
+                    datos["avisos"],
+                    ["hallazgo-menor-sin-adjudicar:F4", "rama-no-borrada:protegida"],
+                )
+                self.assertEqual(self.lineas_delete(), [])
+
+    def test_mergear_no_borra_una_rama_de_fork(self):
+        codigo, salida, _ = self.mergear_verde(es_fork=True)
+        self.assertEqual(codigo, 0)
+        datos = json.loads(salida)
+        self.assertTrue(datos["mergeado"])
+        self.assertNotIn("ramaBorrada", datos)
+        self.assertEqual(
+            datos["avisos"],
+            ["hallazgo-menor-sin-adjudicar:F4", "rama-no-borrada:fork"],
+        )
+        self.assertEqual(self.lineas_delete(), [])
+
+    def test_mergear_no_borra_si_la_punta_remota_se_movio(self):
+        codigo, salida, _ = self.mergear_verde(sha_remota="b" * 40)
+        self.assertEqual(codigo, 0)
+        datos = json.loads(salida)
+        self.assertTrue(datos["mergeado"])
+        self.assertNotIn("ramaBorrada", datos)
+        self.assertEqual(
+            datos["avisos"],
+            ["hallazgo-menor-sin-adjudicar:F4", "rama-no-borrada:punta-movida"],
+        )
+        self.assertEqual(self.lineas_delete(), [])
+
+    def test_mergear_si_el_borrado_falla_el_merge_sigue_siendo_exito(self):
+        codigo, salida, _ = self.mergear_verde(fallar_borrado=True)
+        self.assertEqual(codigo, 0)
+        datos = json.loads(salida)
+        self.assertTrue(datos["mergeado"])
+        self.assertEqual(datos["mergeCommit"], MERGE_COMMIT)
+        self.assertNotIn("ramaBorrada", datos)
+        self.assertEqual(
+            datos["avisos"],
+            [
+                "hallazgo-menor-sin-adjudicar:F4",
+                "rama-no-borrada:gh salió 1: gh: fallo al borrar la rama",
+            ],
+        )
+        self.assertEqual(
+            self.lineas_delete(),
+            [f"api -X DELETE repos/{REPO}/git/refs/heads/feat/carril-321"],
+        )
+
+    def test_mergear_ya_estaba_no_borra_la_rama(self):
+        pr = self.escenario_verde()
+        pr["state"] = "MERGED"
+        self.guardar(321, pr)
+        self.poner_rama()
+        (self.store / "mergeado.json").write_text(
+            json.dumps({"state": "MERGED", "mergeCommit": {"oid": MERGE_COMMIT}})
+        )
+        codigo, salida, _ = self.correr(
+            "mergear", "321", "--sha", HEAD321, "--repo", REPO, "--receta", str(RECETA)
+        )
+        self.assertEqual(codigo, 0)
+        self.assertEqual(
+            json.loads(salida),
+            {"mergeado": True, "ya-estaba": True, "mergeCommit": MERGE_COMMIT},
+        )
+        self.assertEqual(self.lineas_delete(), [])
 
     def test_mergear_no_listo_sale_1_sin_llamar_a_pr_merge(self):
         pr = self.montar(322)
