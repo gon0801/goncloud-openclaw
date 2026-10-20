@@ -11,7 +11,7 @@ description: Cierra un PR con CI y revisión vigentes para el head, merge por Gi
 Mientras el SummonAI Kit siga apagado, esta sección reemplaza la orden fechada del dueño y el paso 2 del flujo de abajo.
 No hay recibo `saikit-entrega.v1` ni entrypoint de merge del kit: no los pidas.
 <!-- candado: test-merge-sin-kit.sh -->
-Con CI y CodeRabbit aprobados y los bloqueantes resueltos, ejecuta el cierre según el repo del PR: en `gon0801/goncloud-openclaw`, `gon0801/goncloud-pr-review` y `gon0801/goncloud-hermes`, `python3 /Users/dn/dev/wt/agent-work-host/scripts/agent-work/merge.py mergear <PR> --sha <head> --repo <owner/repo>` (`docs/runbooks/loop-autopilot.md` §6); en cualquier otro repo, `gh pr merge <PR> --squash --match-head-commit <SHA>` después de leer los bots y los checks a mano. En el nodo Mac usa `PATH=/opt/homebrew/bin:$PATH`.
+Con CI verde, la revisión del bot ai-review (DeepSeek) sobre el head sin bloqueantes abiertos y, si CodeRabbit comentó, sus hilos Major/Critical adjudicados, ejecuta el cierre según el repo del PR: en `gon0801/goncloud-openclaw`, `gon0801/goncloud-pr-review` y `gon0801/goncloud-hermes`, `python3 /Users/dn/dev/wt/agent-work-host/scripts/agent-work/merge.py mergear <PR> --sha <head> --repo <owner/repo>` (`docs/runbooks/loop-autopilot.md` §6); en cualquier otro repo, `gh pr merge <PR> --squash --match-head-commit <SHA>` después de leer los bots y los checks a mano. En el nodo Mac usa `PATH=/opt/homebrew/bin:$PATH`.
 Confirma `MERGED` y el SHA integrado.
 
 <!-- candado: test-merge-sin-kit.sh -->
@@ -19,7 +19,7 @@ Solo el coordinador comenta, descarta (`ai-review: descartar F<n>`) y adjudica h
 
 ## Flujo de cierre
 
-1. Lee el SHA actual del PR, CI y CodeRabbit; corrige los bloqueantes de revision.
+1. Lee el SHA actual del PR y CI, y la revisión del bot ai-review (DeepSeek) sobre el head; si CodeRabbit comentó, lee sus hilos. Corrige los bloqueantes de revision.
 2. Con la orden fechada del dueno y el recibo del kit vigente (con el kit apagado, sigue «Kit apagado»), ejecuta `gh pr merge <PR> --squash --match-head-commit <SHA>` desde el worktree, leyendo los bots y los checks a mano. En el nodo Mac usa `PATH=/opt/homebrew/bin:$PATH`.
 3. Comprueba `MERGED` y el SHA integrado. Si la tarea incluye despliegue, sigue el procedimiento del destino y verifica el resultado.
 

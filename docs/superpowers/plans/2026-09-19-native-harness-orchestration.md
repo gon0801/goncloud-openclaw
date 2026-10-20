@@ -48,7 +48,7 @@ CodeRabbit is requested once after local review. Read its comments on the curren
 - Writers never share a worktree. Each writing branch starts from a freshly fetched `origin/<default>`.
 - `main` chooses and records the worker but never performs merge, live configuration, or deploy. Only `implementer` or `ingenieria` executes those effects.
 - The first push and PR happen only after local cross-review has no reproducible blocker.
-- A CodeRabbit blocker is corrected locally, cross-reviewed only over the correction, then pushed to the same PR. CI and CodeRabbit rerun for the new SHA.
+- A CodeRabbit blocker is corrected locally, cross-reviewed only over the correction, then pushed to the same PR. CI reruns for the new SHA, and CodeRabbit reviews it again.
 - CodeRabbit unavailable is recorded as unavailable, never as approval; use the canonical declared-unavailability policy below. Only reproducible blockers reopen correction reviews.
 - Merge consumes the installed kit's persistent `saikit-entrega.v1` PR receipt and current CI evidence; use `expectedHeadOid`. Local hook state, a signing model and a second approval format are not prerequisites.
 - Success means a canary passed against the live SHA. A failed canary ends in a verified rollback or an evidence-bearing alert.
@@ -793,7 +793,7 @@ Expected: every required job passes on the PR head and their union is the full b
 
 Run: `/opt/homebrew/bin/gh pr view --json headRefOid,reviews,comments,mergeStateStatus`
 
-Expected: CodeRabbit completed on the current head without an open reproducible blocker, or its unavailability was declared under the global policy. If it reports a blocker, keep this PR open, fix locally without pushing, cross-review only `git diff "$SHA_VISTO"..HEAD`, then push to this same branch so CI and CodeRabbit rerun. Nonblocking findings become concrete `Plans.md` rows and are named in the PR. Once the kit's receipt and current CI validate, the authorized closer merges B4; install and verify that merged SHA before real smokes.
+Expected: CodeRabbit completed on the current head without an open reproducible blocker, or its unavailability was declared under the global policy. If it reports a blocker, keep this PR open, fix locally without pushing, cross-review only `git diff "$SHA_VISTO"..HEAD`, then push to this same branch so CI reruns and CodeRabbit reviews again. Nonblocking findings become concrete `Plans.md` rows and are named in the PR. Once the kit's receipt and current CI validate, the authorized closer merges B4; install and verify that merged SHA before real smokes.
 
 - [ ] **Step 11: Execute one low-risk integral canary through the new route**
 

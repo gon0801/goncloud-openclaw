@@ -75,7 +75,8 @@ ramas protegidas y despliegue. `main` queda fuera del allowlist de merge
 (14.4) y la revisión del PR la hacen los bots (loop §4).
 
 Evidencia de promoción a Etapa 4: al menos un PR nativo completo (evidencia
-del bot ai-review en el head, CI vigente en ese head. Revisión: el bot ai-review (DeepSeek) sobre el head, sin bloqueantes abiertos. CodeRabbit es opcional: si comenta, se lee y sus hilos Major/Critical se adjudican; si no comenta o está sin cuota, no frena ni se espera.)
+del bot ai-review en el head sin bloqueantes abiertos, CI vigente en ese head;
+CodeRabbit, si comenta, se lee, y si no, no frena ni se espera)
 y la recepción del cambio por la ruta autorizada: recibo del kit o, con
 `modo_recibo: ci-y-revisor` declarado en `preaprobaciones.v1.json` (kit
 apagado, David 2026-09-28), CI verde y veredicto de revisor sobre el mismo

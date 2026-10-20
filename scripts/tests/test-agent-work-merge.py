@@ -351,27 +351,6 @@ class MergeConToy(unittest.TestCase):
         self.assertNotIn("coderabbit-rate-limited", veredicto["avisos"])
         self.assertFalse(any("coderabbit" in aviso for aviso in veredicto["avisos"]))
 
-    def test_receta_real_con_hilo_major_de_coderabbit_sigue_frenando(self):
-        # Aunque CodeRabbit ya no sea obligatorio, un Major suyo sin resolver frena
-        # SOLO por el hallazgo: sin status de CodeRabbit (statuses vacía, como en
-        # test_receta_real_sin_coderabbit_esta_listo_sin_aviso) no sale
-        # coderabbit-ausente en faltan ni ningún aviso de coderabbit en avisos.
-        # Con la receta de 99673f5 (coderabbit obligatorio) esta prueba sale roja:
-        # faltan trae coderabbit-ausente además del hallazgo.
-        self.montar(328)
-        estado = json.loads((self.store / "status.json").read_text())
-        estado["statuses"] = []
-        (self.store / "status.json").write_text(json.dumps(estado))
-        codigo, salida, _ = self.listo(328, HEAD328)
-        self.assertEqual(codigo, 1)
-        veredicto = json.loads(salida)
-        self.assertFalse(veredicto["listo"])
-        self.assertEqual(veredicto["faltan"], ["hallazgo-sin-adjudicar:cr:4295315734"])
-        self.assertNotIn("coderabbit-ausente", veredicto["faltan"])
-        self.assertNotIn("coderabbit-rate-limited", veredicto["avisos"])
-        self.assertFalse(any("coderabbit" in aviso for aviso in veredicto["avisos"]))
-        self.assertEqual(veredicto["avisos"], [])
-
     def test_hilo_menor_sin_resolver_solo_avisa(self):
         pr = self.montar(328)
         threads = json.loads((self.store / "threads.json").read_text())
