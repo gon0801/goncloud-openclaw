@@ -179,6 +179,9 @@ const top = (a) => {
   return { label: a?.choice, conf: Number((p[a?.choice] ?? 0).toFixed(2)) };
 };
 const agentOf = (k) => (typeof k === "string" && k.startsWith("agent:") ? k.split(":")[1] : undefined);
+// Razon: sin runId y con toolCallId http-/rpc- es una invocacion externa, no un turno de agente en bucle de espera.
+export const esInvocacionExterna = (event, ctx) =>
+  !(ctx?.runId ?? event?.runId) && /^(?:http|rpc)-/.test(String(event?.toolCallId ?? ""));
 const lastAssistantText = (messages) => {
   for (let i = (messages?.length ?? 0) - 1; i >= 0; i--) {
     const m = messages[i];
@@ -603,6 +606,7 @@ export default definePluginEntry({
         const host = event.params.host ?? event.params.node;
         await comandoRiesgo(event.params.command, host ? String(host) : undefined, { ...ctx, agentId, sessionKey, runId: ctx?.runId ?? event?.runId });
       }
+      if (esInvocacionExterna(event, ctx)) return;
       // Comparar y deduplicar con el crudo (su sha256, sin guardarlo en claro): sinSecretos puede
       // dejar iguales dos llamadas distintas (rutas o sha largos -> ***) y eso daba falsos bucles.
       // sinSecretos solo se aplica al message que recibe Jev (y de ahi al registro sombra).
