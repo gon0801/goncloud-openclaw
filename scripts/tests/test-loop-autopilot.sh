@@ -99,7 +99,7 @@ for a in 'LISTO <sha>' \
          'politica-calidad.json' \
          'solo el coordinador' \
          'ai-review: descartar F' \
-         'merge.py mergear <PR> --sha <head>' \
+         'lo que cambia código va por `motor entrega` (skill `motor`)' \
          'nunca lo escribe el lead' \
          'CodeRabbit no es un proveedor de modelo'; do
   # `--` obligatorio: un ancla que empieza con `-` (como `-Alcance last-commit`)
@@ -192,11 +192,13 @@ printf '%s' "$s5" | grep -qF 'cero bloqueantes adjudicados abiertos' \
 viejo=$(printf '%s' "$s5" | grep -inE 'con comentarios accionables no es' || true)
 [ -z "$viejo" ] || fail "$DOC: la seccion 5 volvio a tratar cualquier comentario como revision no aprobada: $viejo"
 s6=$(seccion 6)
-for regla in 'Revisión: el bot ai-review (DeepSeek) sobre el head, sin bloqueantes abiertos' 'CodeRabbit es opcional: si comenta, se lee y sus hilos Major/Critical se adjudican; si no comenta o está sin cuota, no frena ni se espera, pero un hilo Major/Critical suyo sin adjudicar frena hasta adjudicarse' 'cualquier agente Claw o CLI ejecuta `python3 /Users/dn/dev/wt/agent-work-host/scripts/agent-work/merge.py mergear <PR> --sha <head> --repo <owner/repo>`' 'devuelve el faltan y no mergea' 'No se requiere orden adicional, recibo del lead ni tabla de preaprobaciones'; do
+for regla in 'Revisión: el bot ai-review (DeepSeek) sobre el head, sin bloqueantes abiertos' 'CodeRabbit es opcional: si comenta, se lee y sus hilos Major/Critical se adjudican; si no comenta o está sin cuota, no frena ni se espera, pero un hilo Major/Critical suyo sin adjudicar frena hasta adjudicarse' 'El merge y el despliegue los hace el motor: lo que cambia código va por `motor entrega` (skill `motor`); ningún agente mergea ni despliega a mano' 'el lead entrega el plan de cierre al motor con `motor entrega`' 'devuelve el `faltan` y no mergea' 'No se requiere orden adicional, recibo del lead ni tabla de preaprobaciones'; do
   printf '%s' "$s6" | grep -qF "$regla" || fail "$DOC: falta la regla de merge: $regla"
 done
 viejo=$(printf '%s' "$s6" | grep -F 'Con CI y CodeRabbit aprobados' || true)
 [ -z "$viejo" ] || fail "$DOC: la seccion 6 volvio a exigir CodeRabbit aprobado: $viejo"
+viejo=$(printf '%s' "$s6" | grep -F 'merge.py' || true)
+[ -z "$viejo" ] || fail "$DOC: la seccion 6 volvio a la ruta vieja de merge (retirada en el bloque H): $viejo"
 s7=$(seccion 7)
 printf '%s' "$s7" | grep -qF 'sin permiso adicional ni ventana de cron' \
   || fail "$DOC: despliegue requiere permiso adicional"
