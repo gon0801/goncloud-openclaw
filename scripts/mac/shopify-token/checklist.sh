@@ -1,5 +1,5 @@
 #!/bin/bash
-# Sale 0 solo si: la línea `# motor:shopify-token` está una sola vez en el crontab, el token se
+# Sale 0 solo si: el LaunchAgent ai.goncloud.shopify-token responde a launchctl print, el token se
 # escribió hace menos de 12 h (incluye "hace menos de 15 min") y shop.json responde 200 con él, y el
 # cron de claw está desactivado.
 set -u
@@ -8,8 +8,7 @@ MAX_EDAD=${SHOPIFY_TOKEN_MAX_EDAD:-43200}
 rc=0
 no() { log "NO: $*"; rc=1; }
 
-n=$(cuenta_marcadas)
-[ "$n" = 1 ] && log "ok: línea del crontab una sola vez" || no "la línea marcada está $n veces en el crontab (debe ser 1)"
+agente_cargado && log "ok: LaunchAgent $LABEL cargado" || no "launchctl print no responde para $LABEL"
 
 if [ -s "$TOKEN_FILE" ]; then
   edad=$(( $(date +%s) - $(stat -f %m "$TOKEN_FILE" 2>/dev/null || stat -c %Y "$TOKEN_FILE") ))
