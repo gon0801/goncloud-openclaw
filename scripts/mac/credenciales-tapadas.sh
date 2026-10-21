@@ -47,7 +47,8 @@ for p in files:
             k, v = m.group(1), m.group(2).strip().strip("'\"").strip()
             if v and set(v) <= {"*"}:
                 print(f"{p}\t{k}\ttapada")
-            elif not v:
+            elif not v and (s.startswith("export") or re.fullmatch(r"[A-Z_][A-Z0-9_]*", k)):
+                # Sin MAYÚSCULAS ni export, "algo=" es un valor suelto (base64), no una clave: no se imprime.
                 print(f"{p}\t{k}\tvacia")
     if not found and p.startswith(oc + "/credentials/"):
         v = text.strip()

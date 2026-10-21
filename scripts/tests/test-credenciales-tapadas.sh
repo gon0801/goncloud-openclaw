@@ -4,7 +4,9 @@ set -u
 cd "$(dirname "$0")/../.." || exit 1
 S=scripts/mac/credenciales-tapadas.sh
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
-mkdir -p "$T/credentials" "$T/workspace-x"
+mkdir -p "$T/credentials" "$T/workspace-x" "$T/workspace-a"
+printf 'QmFzZTY0VmFsb3I=\n' > "$T/workspace-a/.env"
+printf 'QmFzZTY0VmFsb3J0b3A=\n' >> "$T/.env"
 printf 'TAPADA_KEY=*****\nVACIA_KEY=\nSANA_KEY=valorsecreto123\n' > "$T/.env"
 printf 'UTF16_KEY=hola\n' | iconv -f UTF-8 -t UTF-16 > "$T/workspace-x/.env"
 echo '{"a":{"apiKey":"valorjson999"}}' > "$T/openclaw.json"
@@ -17,6 +19,7 @@ chk "lista la vacía" 'echo "$out" | grep -q "VACIA_KEY"'
 chk "lista el UTF-16" 'echo "$out" | grep -q "workspace-x/.env"'
 chk "no lista la sana" '! echo "$out" | grep -q "SANA_KEY"'
 chk "valor con '=' final no se lista ni se imprime" '! echo "$out" | grep -Eq "relay.secret|abc"'
+chk "valor suelto con '=' en .env no se lista ni se imprime" '! echo "$out" | grep -Eq "QmFzZTY0|workspace-a"'
 chk "ningún valor en la salida" '! echo "$out" | grep -Eq "valorsecreto123|valorjson999|\*\*\*"'
 res=$(OPENCLAW_HOME="$T" bash "$S" --resumen); rc=$?
 chk "--resumen cuenta 3 y sale 0" '[ "$rc" = 0 ] && [ "$res" = "credenciales tapadas: 3" ]'
