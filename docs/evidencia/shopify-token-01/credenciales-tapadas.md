@@ -17,3 +17,9 @@ Rerun tras el intento 6 (el texto a la izquierda de `=` solo se trata como clave
 Lista de rutas y claves que salieron en esta corrida: ninguna. Se visitaron 5 archivos reales (`~/.openclaw/credentials/browser-extension-relay.secret` → relay de la extensión del navegador; `~/.openclaw/credentials/shopify_app.json` y `~/.openclaw/credentials/shopify_token.txt` → Shopify; `~/.openclaw/.env` → Telegram, GitHub, Tavily, etc.; `~/.openclaw/openclaw.json`). No hay `.env` en `workspace-*` en esta Mini.
 
 Aviso final: no hay más credenciales tapadas; nada que arreglar en este plan.
+
+Rerun del intento 7 (`nombre_claro` exige `export <variable>=`; un valor suelto que empieza por "export" —p. ej. `exportc2VjcmV0bw=`— ya no se imprime como nombre de clave): `credenciales tapadas: 0`.
+
+Lista de rutas y claves que salieron en esta corrida: ninguna. Se visitaron los mismos 5 archivos reales (`~/.openclaw/credentials/browser-extension-relay.secret` → relay de la extensión del navegador; `~/.openclaw/credentials/shopify_app.json` y `~/.openclaw/credentials/shopify_token.txt` → Shopify; `~/.openclaw/.env` → Telegram, GitHub, Tavily, etc.; `~/.openclaw/openclaw.json`). No hay `.env` en `workspace-*` en esta Mini.
+
+Aviso final: no hay más credenciales tapadas; nada que arreglar en este plan.
