@@ -161,4 +161,6 @@ printf '#!/bin/sh\necho "$0 $*" >> "%s/claw-argv.txt"\n' "$T" > "$HOME/.openclaw
 grep -q "^$HOME/.openclaw/bin/openclaw agent " "$T/claw-argv.txt" 2>/dev/null || fail "9: el aviso no llamó a ~/.openclaw/bin/openclaw"
 grep -q 'openclaw-r' "$T/claw-argv.txt" && fail "9: el aviso llamó a una ruta con .openclaw-r"
 
-echo "OK test-sincronizar-pstack"
+# A stderr: el motor corre el Acepta entre backticks (sustitución de comando) y un OK por stdout
+# se ejecutaría como comando (127). En stdout, éxito = silencio.
+echo "OK test-sincronizar-pstack" >&2
