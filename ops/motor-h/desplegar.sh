@@ -7,7 +7,7 @@
 #   3. quita de openclaw.json las herramientas de escritura (write, edit) de
 #      implementer e ingenieria (respaldo previo)
 #   4. borra los crons *-vigia del gateway
-#   5. reinicia el gateway (launchd) y espera el health ok
+#   5. reinicia el gateway (openclaw gateway restart) y espera el health ok
 #   6. en la Mac: mueve ~/.claude/skills/prompt-claw a ~/.claude/skills-retiradas/
 # Cierra corriendo ops/motor-h/checklist.sh: si algo no quedó, sale != 0.
 #
@@ -81,9 +81,7 @@ print(sum(1 for j in jobs if str(j.get("name", "")).endswith("-vigia")))')
 echo "-- crons *-vigia: 0"
 
 # -- 5. reinicio del gateway (launchd) y espera del health
-label=$(launchctl list | grep -i openclaw | awk '{print $3}' | head -1)
-[ -n "$label" ] || paro "no hay etiqueta launchd de openclaw"
-echo "-- reinicio del gateway ($label); crons activos ahora:"
+echo "-- reinicio del gateway; crons corriendo ahora:"
 "$OC" cron list --json 2>/dev/null | python3 -c 'import json,sys
 d = json.load(sys.stdin)
 jobs = d.get("jobs", d if isinstance(d, list) else [])
@@ -91,10 +89,9 @@ for j in jobs:
     st = j.get("state", {})
     if st.get("runningAtMs"):
         print("   corriendo:", j.get("name"))' || true
-uid=$(id -u)
-launchctl bootout "gui/$uid/$label" 2>/dev/null || true
-sleep 3
-launchctl bootstrap "gui/$uid" "$HOME/Library/LaunchAgents/$label.plist" || paro "bootstrap falló"
+# Reinicio soportado (enable + kickstart). bootout/bootstrap a mano dejó el gateway
+# descargado: por ssh `launchctl list` no ve el servicio y bootstrap falla.
+"$OC" gateway restart || paro "openclaw gateway restart falló"
 n=0
 while [ $n -lt 20 ]; do
   ok=$("$OC" health --json 2>/dev/null | python3 -c 'import json,sys; print(1 if json.load(sys.stdin).get("ok") else 0)' 2>/dev/null || echo 0)

@@ -88,4 +88,10 @@ echo "ok (7): prompt-claw presente -> !=0"
 corre "$HOME_OK" && fail "(8) con respuesta vacía el checklist salió 0"
 echo "ok (8): respuesta sin claves -> !=0"
 
+# (9) desplegar.sh reinicia con `openclaw gateway restart`, no con bootout/bootstrap
+# (por ssh `launchctl list` no ve el servicio y el bootstrap dejó el gateway caído)
+grep -q '"\$OC" gateway restart' ops/motor-h/desplegar.sh || fail "(9) desplegar.sh no usa openclaw gateway restart"
+grep -qE 'launchctl (bootout|bootstrap)' ops/motor-h/desplegar.sh && fail "(9) desplegar.sh vuelve a usar launchctl bootout/bootstrap"
+echo "ok (9): reinicio por openclaw gateway restart"
+
 echo "VERDE: checklist.sh discrimina los ocho casos"
