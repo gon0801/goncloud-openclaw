@@ -10,6 +10,7 @@ printf 'QmFzZTY0VmFsb3J0b3A=\n' >> "$T/.env"
 printf 'TAPADA_KEY=*****\nVACIA_KEY=\nSANA_KEY=valorsecreto123\n' > "$T/.env"
 printf 'UTF16_KEY=hola\n' | iconv -f UTF-8 -t UTF-16 > "$T/workspace-x/.env"
 echo '{"a":{"apiKey":"valorjson999"}}' > "$T/openclaw.json"
+mkdir -p "$T/workspace-b"; printf 'JBSWY3DPEHPK3PXP=\n' > "$T/workspace-b/.env"
 printf 'abc=\n' > "$T/credentials/relay.secret"
 fails=0
 chk() { if eval "$2"; then echo "OK: $1"; else echo "FALLO: $1"; fails=$((fails+1)); fi; }
@@ -20,6 +21,7 @@ chk "lista el UTF-16" 'echo "$out" | grep -q "workspace-x/.env"'
 chk "no lista la sana" '! echo "$out" | grep -q "SANA_KEY"'
 chk "valor con '=' final no se lista ni se imprime" '! echo "$out" | grep -Eq "relay.secret|abc"'
 chk "valor suelto con '=' en .env no se lista ni se imprime" '! echo "$out" | grep -Eq "QmFzZTY0|workspace-a"'
+chk "valor base32 con '=' final en .env no se imprime" '! echo "$out" | grep -Eq "JBSWY3DPEHPK3PXP|workspace-b"'
 chk "ningún valor en la salida" '! echo "$out" | grep -Eq "valorsecreto123|valorjson999|\*\*\*"'
 res=$(OPENCLAW_HOME="$T" bash "$S" --resumen); rc=$?
 chk "--resumen cuenta 3 y sale 0" '[ "$rc" = 0 ] && [ "$res" = "credenciales tapadas: 3" ]'
