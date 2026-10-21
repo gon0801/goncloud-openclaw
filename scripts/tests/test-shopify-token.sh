@@ -57,6 +57,13 @@ esac
 printf '%s\n' "$cfg" | /usr/bin/curl "$@"
 SH
 chmod +x "$T/bin/curl"
+# python3 espía: anota su argv (lo que vería `ps`) y luego ejecuta el python3 real.
+cat > "$T/bin/python3" <<SH
+#!/bin/bash
+echo "\$*" >> "$T/argv.log"
+exec $(command -v python3) "\$@"
+SH
+chmod +x "$T/bin/python3"; : > "$T/argv.log"
 printf 'TELEGRAM_BOT_TOKEN=123456:BOT-de-prueba\nOTRA=1\n' > "$T/env"
 
 SALIDAS=$T/salidas.txt; : > "$SALIDAS"
@@ -120,5 +127,9 @@ for s in "$SECRET" "$NUEVO" "$VIEJO"; do
   grep -qF "$s" "$SALIDAS" && fail "caso 5: una salida contiene un valor de credencial"
 done
 grep -q '^AVISO' "$SALIDAS" || fail "caso 5: no hubo avisos que revisar"
-echo "ok 5 sin credenciales en salidas"
+[ -s "$T/argv.log" ] || fail "caso 5: el python3 espía no registró nada"
+for s in "$SECRET" "$CLIENT_ID" "$NUEVO" "$VIEJO"; do
+  grep -qF "$s" "$T/argv.log" && fail "caso 5: una credencial aparece en el argv de python3 (visible con ps)"
+done
+echo "ok 5 sin credenciales en salidas ni en argv"
 echo "PASS test-shopify-token"

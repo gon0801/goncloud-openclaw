@@ -43,12 +43,13 @@ falla() {
 
 [ -r "$APP_JSON" ] || falla "no encuentro el archivo de la app de Shopify"
 
-# store, client_id y client_secret salen como tres líneas por un archivo temporal 600 (no por argv).
+# El mismo python que lee el archivo deja la tienda en $TMP/cred y el cuerpo de la petición (con
+# client_id y client_secret) en $TMP/body.json, ambos 600: las credenciales nunca pasan por argv.
 TMP=$(mktemp -d "${TMPDIR:-/tmp}/shopify-token.XXXXXX") || falla "no pude crear una carpeta temporal"
 trap 'rm -rf "$TMP"' EXIT
 chmod 700 "$TMP"
 
-python3 -I - "$APP_JSON" "$TMP/cred" <<'PY' || falla "el archivo de la app de Shopify no se puede leer o le faltan datos"
+python3 -I - "$APP_JSON" "$TMP/cred" "$TMP/body.json" <<'PY' || falla "el archivo de la app de Shopify no se puede leer o le faltan datos"
 import json, os, sys
 raw = open(sys.argv[1], "rb").read()
 if raw[:2] in (b"\xff\xfe", b"\xfe\xff"):
@@ -59,18 +60,17 @@ d = json.loads(txt.lstrip("﻿"))
 vals = [str(d.get(k, "")).strip() for k in ("store", "client_id", "client_secret")]
 if not all(vals) or any("\n" in v or "\r" in v for v in vals):
     sys.exit(1)
-fd = os.open(sys.argv[2], os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-with os.fdopen(fd, "w") as f:
-    f.write("\n".join(vals) + "\n")
+for path, text in ((sys.argv[2], vals[0] + "\n"),
+                   (sys.argv[3], json.dumps({"grant_type": "client_credentials",
+                                             "client_id": vals[1], "client_secret": vals[2]}) + "\n")):
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w") as f:
+        f.write(text)
 PY
-{ read -r STORE; read -r CID; read -r CSEC; } < "$TMP/cred"
+read -r STORE < "$TMP/cred"
 BASE=${SHOPIFY_BASE:-https://$STORE}
 
-# 1. Pedir el token. El cuerpo con las credenciales y la configuración de curl van por archivos 600.
-python3 -I - "$CID" "$CSEC" > "$TMP/body.json" <<'PY' || falla "no pude armar la petición"
-import json, sys
-print(json.dumps({"grant_type": "client_credentials", "client_id": sys.argv[1], "client_secret": sys.argv[2]}))
-PY
+# 1. Pedir el token. El cuerpo (body.json) y la configuración de curl van por archivos 600.
 CODE=$(printf 'url = "%s/admin/oauth/access_token"\nheader = "Content-Type: application/json"\ndata = "@%s"\n' \
   "$BASE" "$TMP/body.json" | curl -sS -m 30 -o "$TMP/resp.json" -w '%{http_code}' -K - 2>/dev/null)
 [ "$CODE" = 200 ] || falla "Shopify rechazó la petición del token (respuesta ${CODE:-sin respuesta})"
