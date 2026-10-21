@@ -18,7 +18,7 @@ def nombre_claro(s):
     # Texto con forma clara de nombre de variable: detrás de 'export', o TODO
     # MAYÚSCULAS/dígitos/guion bajo con al menos una letra y un guion bajo.
     # Cualquier otra cosa a la izquierda de '=' puede ser un valor (p. ej. base64url).
-    if s.startswith("export"):
+    if re.match(r"export\s+[A-Za-z_][A-Za-z0-9_]*\s*=", s):
         return True
     mm = re.match(r"([A-Z][A-Z0-9_]*)\s*=", s)
     return bool(mm and "_" in mm.group(1))

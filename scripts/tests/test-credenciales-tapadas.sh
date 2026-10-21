@@ -17,6 +17,7 @@ printf 'TELEGRAM_BOT_TOKEN=\n' > "$T/credentials/telegram"
 printf -- '-----BEGIN PRIVATE KEY-----\nMIIBVAIBADANBgkqhkiG9w0BAQEFAASCAT4wggE6AgEAAkEAxyz\nQ0E=\n-----END PRIVATE KEY-----\n' > "$T/credentials/key.pem"
 mkdir -p "$T/workspace-q"; printf 'MFRGGZA=\n' > "$T/workspace-q/.env"
 mkdir -p "$T/workspace-w"; printf 'c2Vj_cmV0bw=\n' > "$T/workspace-w/.env"
+mkdir -p "$T/workspace-e"; printf 'exportc2VjcmV0bw=\n' > "$T/workspace-e/.env"
 fails=0
 chk() { if eval "$2"; then echo "OK: $1"; else echo "FALLO: $1"; fails=$((fails+1)); fi; }
 out=$(OPENCLAW_HOME="$T" bash "$S" 2>&1)
@@ -32,9 +33,10 @@ chk "última línea de un PEM no se imprime" '! echo "$out" | grep -q "Q0E"'
 chk "base32 corto MFRGGZA= no se imprime" '! echo "$out" | grep -q "MFRGGZA"'
 chk "base64url con '_' y '=' en credentials/ no se imprime" '! echo "$out" | grep -q "dGVzdF9_c2VjcmV0X3ZhbG9y=" && ! echo "$out" | grep -q "relay.secret"'
 chk "base64url con '_' y '=' suelto en workspace .env no se imprime" '! echo "$out" | grep -q "c2Vj_cmV0bw="'
+chk "valor suelto que empieza por 'export' no se imprime como clave" '! echo "$out" | grep -q "exportc2VjcmV0bw" && echo "$out" | grep -q "workspace-e/.env.*línea 1.*vacia?"'
 chk "ningún valor en la salida" '! echo "$out" | grep -Eq "valorsecreto123|valorjson999|\*\*\*"'
 res=$(OPENCLAW_HOME="$T" bash "$S" --resumen); rc=$?
-chk "--resumen cuenta 8 y sale 0" '[ "$rc" = 0 ] && [ "$res" = "credenciales tapadas: 8" ]'
+chk "--resumen cuenta 9 y sale 0" '[ "$rc" = 0 ] && [ "$res" = "credenciales tapadas: 9" ]'
 # archivo ilegible: se lista y no aborta el escaneo de los siguientes
 U=$(mktemp -d); mkdir -p "$U/credentials" "$U/workspace-z"
 printf 'A_TOKEN=\n' > "$U/credentials/a.txt"; chmod 000 "$U/credentials/a.txt"
