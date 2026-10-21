@@ -13,6 +13,16 @@ oc = os.environ["OC"]
 files = sorted(glob.glob(oc + "/credentials/*")) + [oc + "/.env", oc + "/openclaw.json"] \
     + sorted(glob.glob(oc + "/workspace-*/.env"))
 SECRETISH = re.compile(r"token|key|secret|pass|auth", re.I)
+
+def nombre_claro(s):
+    # Texto con forma clara de nombre de variable: detrás de 'export', o TODO
+    # MAYÚSCULAS/dígitos/guion bajo con al menos una letra y un guion bajo.
+    # Cualquier otra cosa a la izquierda de '=' puede ser un valor (p. ej. base64url).
+    if s.startswith("export"):
+        return True
+    mm = re.match(r"([A-Z][A-Z0-9_]*)\s*=", s)
+    return bool(mm and "_" in mm.group(1))
+
 for p in files:
     if not os.path.isfile(p):
         continue
@@ -40,7 +50,7 @@ for p in files:
     if p.startswith(oc + "/credentials/") and not p.endswith(".env"):
         # Un valor suelto (p. ej. base64 con "=") no es un .env: exigir varias líneas o un KEY=VALOR no vacío.
         pares = [re.match(r"(?:export\s+)?[A-Za-z_][A-Za-z0-9_]*\s*=(.*)$", l.strip()) for l in lines if l.strip() and not l.strip().startswith("#")]
-        inequivoca = any(l.strip().startswith("export") or re.match(r"[A-Za-z0-9]*_[A-Za-z0-9_]*\s*=", l.strip()) for l in lines)
+        inequivoca = any(nombre_claro(l.strip()) for l in lines)
         if not any(m and m.group(1).strip().strip("'\"").strip() for m in pares) and len([m for m in pares if m]) < 2 and not inequivoca:
             lines = []
     for n, line in enumerate(lines, 1):
@@ -51,13 +61,16 @@ for p in files:
         if m:
             found = True
             k, v = m.group(1), m.group(2).strip().strip("'\"").strip()
+            # Solo se imprime la clave si tiene forma inequívoca de nombre de variable;
+            # si no, puede ser un valor (p. ej. base64url con '_' y '='), y solo se indica la línea.
+            claro = nombre_claro(s)
             if v and set(v) <= {"*"}:
-                print(f"{p}\t{k}\ttapada")
+                print(f"{p}\t{k if claro else f'línea {n}'}\ttapada")
             elif not v:
-                if s.startswith("export") or "_" in k:
+                if claro:
                     print(f"{p}\t{k}\tvacia")
-                elif re.fullmatch(r"[A-Z0-9]+", k):
-                    # Forma ambigua (puede ser un valor base32/PEM): nunca se imprime el texto, solo la línea.
+                else:
+                    # Forma ambigua (puede ser un valor base64url/base32/PEM): nunca se imprime el texto, solo la línea.
                     print(f"{p}\tlínea {n}\tvacia?")
     if not found and p.startswith(oc + "/credentials/"):
         v = text.strip()
