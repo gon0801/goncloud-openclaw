@@ -1,4 +1,4 @@
-# Piezas comunes de desplegar.sh, checklist.sh y rollback.sh (se cargan con `source`).
+# Piezas comunes de desplegar.sh, checklist.sh y rollback.sh (se cargan con `source`; LaunchAgent, nunca crontab).
 MARCA='# motor:shopify-token'
 CRON_CLAW=dbc3eee3-28d4-4043-bee9-8fd584341bf8
 OPENCLAW=${OPENCLAW_BIN:-/Users/gon/.openclaw/bin/openclaw}
@@ -10,29 +10,20 @@ LOG_RENUEVA=${SHOPIFY_TOKEN_LOG:-$HOME/Library/Logs/shopify-token.log}
 
 log() { printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*"; }
 
-# crontab actual de gon; vacío si no hay.
-crontab_actual() { crontab -l 2>/dev/null || true; }
+LABEL=ai.goncloud.shopify-token
+PLANTILLA=$AQUI/../ai.goncloud.shopify-token.plist
+LA_DIR=${LAUNCH_AGENTS_DIR:-$HOME/Library/LaunchAgents}
+PLIST=$LA_DIR/$LABEL.plist
+LAUNCHCTL=${LAUNCHCTL_BIN:-launchctl}
+DOMINIO=gui/$(id -u)
 
-# Instala el texto de stdin como crontab (o lo borra si no queda nada). En macOS, si la terminal no
-# tiene permiso (Acceso total al disco) crontab se queda esperando una ventana que nadie ve: se corta
-# a los CRONTAB_ESPERA segundos (20 por defecto) y se falla en vez de colgar el despliegue.
-crontab_instalar() {
-  local nuevo rc
-  nuevo=$(cat)
-  if [ -z "$nuevo" ]; then
-    crontab -r 2>/dev/null || true
-  else
-    printf '%s\n' "$nuevo" | perl -e 'alarm shift; exec @ARGV' "${CRONTAB_ESPERA:-20}" crontab -; rc=$?
-    if [ $rc = 142 ] || [ $rc = 124 ]; then
-      log "crontab no responde: macOS espera un permiso (Ajustes > Privacidad > Acceso total al disco para la terminal/app que lo corre); solo una persona puede darlo" >&2
-    fi
-    return $rc
-  fi
+# Escribe en $1 el plist de la plantilla con HOME y la ruta de renueva.sh.
+generar_plist() {
+  sed -e "s|__HOME__|$HOME|g" -e "s|__RENUEVA__|$RENUEVA|g" "$PLANTILLA" > "$1"
 }
 
-linea_cron() { printf '5 0,12 * * * %q >> %q 2>&1 %s' "$RENUEVA" "$LOG_RENUEVA" "$MARCA"; }
-
-cuenta_marcadas() { crontab_actual | grep -cF -- "$MARCA" || true; }
+# ¿el LaunchAgent está cargado? (launchctl print responde)
+agente_cargado() { "$LAUNCHCTL" print "$DOMINIO/$LABEL" >/dev/null 2>&1; }
 
 # ¿el cron de claw está activado? 0 = activado, 1 = desactivado, 2 = no se pudo saber.
 cron_claw_activo() {
