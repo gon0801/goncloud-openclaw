@@ -31,7 +31,13 @@ for p in files:
             elif not v.strip() and SECRETISH.search(k):
                 print(f"{p}\t{k}\tvacia")
         continue
-    for line in text.splitlines():
+    lines = text.splitlines()
+    if p.startswith(oc + "/credentials/") and not p.endswith(".env"):
+        # Un valor suelto (p. ej. base64 con "=") no es un .env: exigir varias líneas o un KEY=VALOR no vacío.
+        pares = [re.match(r"(?:export\s+)?[A-Za-z_][A-Za-z0-9_]*\s*=(.*)$", l.strip()) for l in lines if l.strip() and not l.strip().startswith("#")]
+        if not any(m and m.group(1).strip().strip("'\"").strip() for m in pares) and len(pares) < 2:
+            lines = []
+    for line in lines:
         s = line.strip()
         if not s or s.startswith("#"):
             continue

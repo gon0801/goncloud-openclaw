@@ -8,6 +8,7 @@ mkdir -p "$T/credentials" "$T/workspace-x"
 printf 'TAPADA_KEY=*****\nVACIA_KEY=\nSANA_KEY=valorsecreto123\n' > "$T/.env"
 printf 'UTF16_KEY=hola\n' | iconv -f UTF-8 -t UTF-16 > "$T/workspace-x/.env"
 echo '{"a":{"apiKey":"valorjson999"}}' > "$T/openclaw.json"
+printf 'abc=\n' > "$T/credentials/relay.secret"
 fails=0
 chk() { if eval "$2"; then echo "OK: $1"; else echo "FALLO: $1"; fails=$((fails+1)); fi; }
 out=$(OPENCLAW_HOME="$T" bash "$S" 2>&1)
@@ -15,6 +16,7 @@ chk "lista la tapada" 'echo "$out" | grep -q "TAPADA_KEY"'
 chk "lista la vacía" 'echo "$out" | grep -q "VACIA_KEY"'
 chk "lista el UTF-16" 'echo "$out" | grep -q "workspace-x/.env"'
 chk "no lista la sana" '! echo "$out" | grep -q "SANA_KEY"'
+chk "valor con '=' final no se lista ni se imprime" '! echo "$out" | grep -Eq "relay.secret|abc"'
 chk "ningún valor en la salida" '! echo "$out" | grep -Eq "valorsecreto123|valorjson999|\*\*\*"'
 res=$(OPENCLAW_HOME="$T" bash "$S" --resumen); rc=$?
 chk "--resumen cuenta 3 y sale 0" '[ "$rc" = 0 ] && [ "$res" = "credenciales tapadas: 3" ]'
