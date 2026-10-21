@@ -154,4 +154,13 @@ touch "$HOME/.agents/.pstack-oficial-activo"
 sh "$A" | grep -q 'Invoke the `poteto-mode` skill' || fail "8: el hook no dio el aviso con la copia activa"
 sh "$A" | grep -q 'pstack:poteto-mode' && fail "8: el aviso nombra la skill con el prefijo del port"
 
-echo "OK test-sincronizar-pstack"
+# 9. sin PSTACK_AVISO_CMD ni OPENCLAW_BIN, el aviso va al CLI de claw en ~/.openclaw/bin, nunca al fork R retirado.
+mkdir -p "$HOME/.openclaw/bin"
+printf '#!/bin/sh\necho "$0 $*" >> "%s/claw-argv.txt"\n' "$T" > "$HOME/.openclaw/bin/openclaw"; chmod +x "$HOME/.openclaw/bin/openclaw"
+(unset PSTACK_AVISO_CMD OPENCLAW_BIN; PSTACK_TARBALL="$T/roto.tgz" bash "$S" >/dev/null 2>&1) && fail "9: la corrida con el árbol roto salió 0"
+grep -q "^$HOME/.openclaw/bin/openclaw agent " "$T/claw-argv.txt" 2>/dev/null || fail "9: el aviso no llamó a ~/.openclaw/bin/openclaw"
+grep -q 'openclaw-r' "$T/claw-argv.txt" && fail "9: el aviso llamó a una ruta con .openclaw-r"
+
+# A stderr: el motor corre el Acepta entre backticks (sustitución de comando) y un OK por stdout
+# se ejecutaría como comando (127). En stdout, éxito = silencio.
+echo "OK test-sincronizar-pstack" >&2

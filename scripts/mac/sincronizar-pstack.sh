@@ -42,7 +42,7 @@ avisar() {
     "$PSTACK_AVISO_CMD" "$texto" || true
     return 0
   fi
-  if "${OPENCLAW_BIN:-$HOME/.openclaw-r/openclaw}" agent --agent main --deliver --timeout 180 \
+  if "${OPENCLAW_BIN:-$HOME/.openclaw/bin/openclaw}" agent --agent main --deliver --timeout 180 \
       --message "$texto" >/dev/null 2>&1; then
     log "aviso enviado por claw"
   elif /usr/bin/osascript -e 'display notification "La sincronización de pstack falló. Ver ~/Library/Logs/sincronizar-pstack.log" with title "pstack"' >/dev/null 2>&1; then
