@@ -16,7 +16,12 @@ SECRETISH = re.compile(r"token|key|secret|pass|auth", re.I)
 for p in files:
     if not os.path.isfile(p):
         continue
-    raw = open(p, "rb").read()
+    try:
+        with open(p, "rb") as fh:
+            raw = fh.read()
+    except OSError:
+        print(f"{p}\t-\tilegible")
+        continue
     if raw[:2] in (b"\xff\xfe", b"\xfe\xff") or (b"\x00" in raw[:200] and len(raw) > 1):
         print(f"{p}\t-\tutf16")
         continue
@@ -35,9 +40,10 @@ for p in files:
     if p.startswith(oc + "/credentials/") and not p.endswith(".env"):
         # Un valor suelto (p. ej. base64 con "=") no es un .env: exigir varias líneas o un KEY=VALOR no vacío.
         pares = [re.match(r"(?:export\s+)?[A-Za-z_][A-Za-z0-9_]*\s*=(.*)$", l.strip()) for l in lines if l.strip() and not l.strip().startswith("#")]
-        if not any(m and m.group(1).strip().strip("'\"").strip() for m in pares) and len(pares) < 2:
+        inequivoca = any(l.strip().startswith("export") or re.match(r"[A-Za-z0-9]*_[A-Za-z0-9_]*\s*=", l.strip()) for l in lines)
+        if not any(m and m.group(1).strip().strip("'\"").strip() for m in pares) and len([m for m in pares if m]) < 2 and not inequivoca:
             lines = []
-    for line in lines:
+    for n, line in enumerate(lines, 1):
         s = line.strip()
         if not s or s.startswith("#"):
             continue
@@ -47,10 +53,12 @@ for p in files:
             k, v = m.group(1), m.group(2).strip().strip("'\"").strip()
             if v and set(v) <= {"*"}:
                 print(f"{p}\t{k}\ttapada")
-            elif not v and (s.startswith("export") or (re.fullmatch(r"[A-Z_][A-Z0-9_]*", k) and ("_" in k or len(k) < 12))):
-                # Sin export, "algo=" es un valor suelto (base64, base32/TOTP) y no una clave si no tiene
-                # minúsculas ni "_" y es largo (>= 12): no se imprime.
-                print(f"{p}\t{k}\tvacia")
+            elif not v:
+                if s.startswith("export") or "_" in k:
+                    print(f"{p}\t{k}\tvacia")
+                elif re.fullmatch(r"[A-Z0-9]+", k):
+                    # Forma ambigua (puede ser un valor base32/PEM): nunca se imprime el texto, solo la línea.
+                    print(f"{p}\tlínea {n}\tvacia?")
     if not found and p.startswith(oc + "/credentials/"):
         v = text.strip()
         k = os.path.basename(p)
@@ -60,7 +68,7 @@ for p in files:
             print(f"{p}\t{k}\ttapada")
 PY
 }
-out=$(escanear)
+out=$(escanear) || { echo "error al escanear" >&2; exit 2; }
 n=0
 [ -n "$out" ] && n=$(printf '%s\n' "$out" | wc -l | tr -d ' ')
 if [ "$RESUMEN" = 1 ]; then echo "credenciales tapadas: $n"; exit 0; fi

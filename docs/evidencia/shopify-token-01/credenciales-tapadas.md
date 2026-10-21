@@ -9,3 +9,5 @@ Se revisaron `~/.openclaw/credentials/*` (browser-extension-relay.secret → rel
 Nota: una primera corrida marcó `openclaw.json` → `accountId` (`"*"` en un binding de Telegram). Es un comodín de enrutamiento, no una credencial, así que el script ya no marca asteriscos en claves que no parecen secretos.
 
 Aviso final: no hay más credenciales tapadas.
+
+Rerun tras el intento 5 (archivos ilegibles se listan como `ilegible`, `CLAVE=` sola en credentials/ se detecta, formas ambiguas salen como `línea N` + `vacia?` sin texto): `credenciales tapadas: 0`.
