@@ -26,7 +26,7 @@ for p in files:
     if isjson:
         for m in re.finditer(r'["\']?([A-Za-z0-9_.\-]+)["\']?\s*:\s*(?:"([^"\n]*)"|\'([^\'\n]*)\')', text):
             k, v = m.group(1), m.group(2) if m.group(2) is not None else m.group(3)
-            if v.strip() and set(v.strip()) <= {"*"}:
+            if v.strip() and set(v.strip()) <= {"*"} and SECRETISH.search(k):
                 print(f"{p}\t{k}\ttapada")
             elif not v.strip() and SECRETISH.search(k):
                 print(f"{p}\t{k}\tvacia")
