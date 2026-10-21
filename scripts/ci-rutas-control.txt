@@ -39,7 +39,5 @@ docs/evidence/agent-work/proveedores-permitidos.json
 docs/evidence/agent-work/coverage.json
 # Configuracion de agent-work: politica de calidad (test-sistema-agentes-contrato.py).
 docs/evidence/agent-work/politica-calidad.json
-# Configuracion de agent-work: receta de merge que lee scripts/agent-work/merge.py (test-agent-work-merge.py).
-docs/evidence/agent-work/recetas-repos.json
 # Inventario del sistema unificado (test-sistema-agentes-contrato.py).
 docs/evidence/sistema-agentes-unificado/SUA-00-inventario.json

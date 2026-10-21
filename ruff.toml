@@ -13,8 +13,6 @@ include = [
     "scripts/agent-work/reporte.py",
     "scripts/tests/test-agent-work-reporte.py",
     "scripts/tests/test-agent-work-contexto.py",
-    "scripts/agent-work/merge.py",
-    "scripts/tests/test-agent-work-merge.py",
 ]
 target-version = "py39"
 line-length = 100

@@ -1,18 +1,19 @@
 ---
 name: saikit-merge-route
-description: main elige quien cierra el PR y recibe el resultado; no ejecuta el merge.
+description: main no ejecuta el merge ni elige un closer: el merge y el despliegue los hace el motor por `motor entrega`.
 <!-- candado: test-saikit-cierre-pr-merge-owner.sh -->
 ---
 
 # Merge de PR (rol main)
 <!-- candado: test-saikit-cierre-pr-merge-owner.sh -->
 
-`main` elige quien cierra (implementer o ingenieria) y le pasa el PR con recibo
+`main` no ejecuta el merge ni elige un closer.
 <!-- candado: test-saikit-cierre-pr-merge-owner.sh -->
-`saikit-entrega.v1` vigente para el head y CI en verde. Solo el closer invoca la ruta
-de merge (`saikit-cierre-pr`); `main` recibe solo el resultado.
+Solo el closer invoca la ruta de merge, y desde el bloque H la única ruta es el
+motor: lo que cambia código va por `motor entrega` (skill `motor`); ningún
+agente mergea ni despliega a mano. `main` recibe solo el resultado.
 <!-- candado: test-saikit-cierre-pr-merge-owner.sh -->
 <!-- candado: test-saikit-cierre-pr-merge-owner.sh -->
 <!-- candado: test-merge-sin-kit.sh -->
-Con el kit apagado, lo anterior no aplica: `main` encarga el cierre a implementer o ingenieria con la sección «Kit apagado» de `saikit-cierre-pr`.
+Con el kit apagado, lo anterior no cambia: no hay recibo `saikit-entrega.v1` que pedir ni closer al que encargar el cierre; `main` entrega el plan de cierre al motor.
 En el nodo Mac usa `PATH=/opt/homebrew/bin:$PATH`.

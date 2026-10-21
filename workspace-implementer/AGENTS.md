@@ -12,7 +12,7 @@ Implement the requested change completely and minimally — no speculative abstr
 
 ## Dos maquinas
 
-read, write, edit, ls y exec trabajan en la MISMA maquina: la Mac mini de claw (usuario `gon`). Los repos estan en `/Users/gon/dev/<repo>` (remoto `git@github-claw:gon0801/<repo>.git`). En exec, uv esta en `/Users/gon/.local/bin/uv`; node, pnpm y claude en `/Users/gon/.openclaw/tools/node/bin/`.
+read, ls y exec trabajan en la MISMA maquina: la Mac mini de claw (usuario `gon`). Los repos estan en `/Users/gon/dev/<repo>` (remoto `git@github-claw:gon0801/<repo>.git`). En exec, uv esta en `/Users/gon/.local/bin/uv`; node, pnpm y claude en `/Users/gon/.openclaw/tools/node/bin/`. No tienes `write` ni `edit`: lo que cambia código va por `motor entrega`.
 
 
 
@@ -22,9 +22,9 @@ El lead te pasa siempre rutas absolutas, el nombre del repo y el alcance. Si fal
 
 Prohibido inventar flags de CLI. `openclaw cron edit -sS` no existe. Se intentó tres veces. Antes de un flag nuevo, corre `<cli> --help` en exec.
 
-Tus tools son read, write, edit, ls, exec, sessions_send, sessions_history, memory_search, browser, message, progress_card, context7__query-docs y context7__resolve-library-id.
+Tus tools son read, ls, exec, sessions_send, sessions_history, memory_search, browser, message, progress_card, context7__query-docs y context7__resolve-library-id.
 
-Puede mergear PRs con `python3 /Users/gon/dev/goncloud-openclaw/scripts/agent-work/merge.py mergear <PR> --sha <head> --repo <owner/repo>` y desplegar sin pedir permiso adicional, con CI verde. Revisión: el bot ai-review (DeepSeek) sobre el head, sin bloqueantes abiertos. CodeRabbit es opcional: si comenta, se lee y sus hilos Major/Critical se adjudican; si no comenta o está sin cuota, no frena ni se espera, pero un hilo Major/Critical suyo sin adjudicar frena hasta adjudicarse. En un repo sin receta en `merge.py` (fuera de goncloud-openclaw, goncloud-pr-review y goncloud-hermes), `gh pr merge <PR> --squash --match-head-commit <SHA>` después de leer los bots y los checks a mano.
+Lo que cambia código va por `motor entrega`: se escribe el plan, se valida con `motor valida` y se entrega con `motor entrega <plan.md> --home <home> --json` (skill `motor`); el motor implementa, revisa, mergea y despliega — nadie mergea ni despliega a mano.
 
 Nunca: no toca secrets, `openclaw.json`, modelos, auth ni crons del gateway; no inventa flags de CLI. Reporta a: solo a main (el lead), por el canal de la tarea; sin mensajes externos por su cuenta.
 

@@ -8,7 +8,7 @@ fails=0
 chk() { d=$1; shift; if "$@" >/dev/null 2>&1; then echo "OK: $d"; else echo "FALLO: $d"; fails=$((fails+1)); fi }
 chk "spec existe" test -f "$SPEC"
 chk "seccion Fleet roles and routing" grep -q "## Fleet roles and routing" "$SPEC"
-chk "todos los agentes" grep -qF "Cualquier agente Claw o CLI puede mergear y desplegar sin autorización adicional por operación" "$SPEC"
+chk "merge solo por el motor" grep -qF "ningún agente Claw o CLI mergea ni despliega a mano, sin autorización adicional por operación" "$SPEC"
 chk "regla 4 (listo sin verify/ no se reporta)" grep -qF "Nada se reporta como \"listo\" sin haberse verificado antes con la prueba del repo" "$SPEC"
 chk "D2 registrada" grep -qF "no se adapta el verifier a \`.cursor/skills/verify-*\`" "$SPEC"
 chk "enlace al mapa 6.4" grep -qF "../runbooks/camino-feliz-producto.md" "$SPEC"

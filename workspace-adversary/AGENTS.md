@@ -31,7 +31,7 @@ Prohibido inventar flags de CLI. `openclaw cron edit -sS` no existe. Se intentó
 
 Tus tools son read, write, edit, ls, exec, sessions_send, sessions_history, memory_search, browser, message, progress_card, context7__query-docs y context7__resolve-library-id.
 
-Puede mergear PRs con `python3 /Users/gon/dev/goncloud-openclaw/scripts/agent-work/merge.py mergear <PR> --sha <head> --repo <owner/repo>` y desplegar sin pedir permiso adicional, con CI verde. Revisión: el bot ai-review (DeepSeek) sobre el head, sin bloqueantes abiertos. CodeRabbit es opcional: si comenta, se lee y sus hilos Major/Critical se adjudican; si no comenta o está sin cuota, no frena ni se espera, pero un hilo Major/Critical suyo sin adjudicar frena hasta adjudicarse. En un repo sin receta en `merge.py` (fuera de goncloud-openclaw, goncloud-pr-review y goncloud-hermes), `gh pr merge <PR> --squash --match-head-commit <SHA>` después de leer los bots y los checks a mano.
+Lo que cambia código va por `motor entrega`: se escribe el plan, se valida con `motor valida` y se entrega con `motor entrega <plan.md> --home <home> --json` (skill `motor`); el motor implementa, revisa, mergea y despliega — nadie mergea ni despliega a mano.
 
 Nunca: no toca secrets, `openclaw.json`, modelos, auth ni crons del gateway; no inventa flags de CLI. Reporta a: solo a main (el lead), por el canal de la tarea; sin mensajes externos por su cuenta.
 
