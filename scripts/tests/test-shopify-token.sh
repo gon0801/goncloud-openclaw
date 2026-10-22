@@ -87,7 +87,7 @@ corre() {
   echo $? > "$T/rc"
   { cat "$T/out"; cat "$T/avisos"; } >> "$SALIDAS"
 }
-perm() { stat -f %Lp "$1" 2>/dev/null || stat -c %a "$1"; }
+perm() { stat -c %a "$1" 2>/dev/null || stat -f %Lp "$1"; }  # GNU primero: en Linux `stat -f` no falla, lee el sistema de archivos
 nuevos_avisos() { grep -c '^AVISO' "$T/avisos"; }
 
 # (1) todo bien

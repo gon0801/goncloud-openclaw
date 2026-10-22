@@ -11,7 +11,7 @@ no() { log "NO: $*"; rc=1; }
 agente_cargado && log "ok: LaunchAgent $LABEL cargado" || no "launchctl print no responde para $LABEL"
 
 if [ -s "$TOKEN_FILE" ]; then
-  edad=$(( $(date +%s) - $(stat -f %m "$TOKEN_FILE" 2>/dev/null || stat -c %Y "$TOKEN_FILE") ))
+  edad=$(( $(date +%s) - $(stat -c %Y "$TOKEN_FILE" 2>/dev/null || stat -f %m "$TOKEN_FILE") ))
   [ "$edad" -lt "$MAX_EDAD" ] && log "ok: token escrito hace ${edad}s" || no "el token tiene ${edad}s (máximo ${MAX_EDAD}s)"
   store=$(python3 -I - "$APP_JSON" 2>/dev/null <<'PY'
 import json, sys
