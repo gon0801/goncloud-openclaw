@@ -1,0 +1,162 @@
+#!/usr/bin/env python3
+"""Actualización semanal de Nextcloud dentro de su versión mayor (/usr/local/bin/actualiza-nextcloud).
+
+Corre en el cron de root los domingos. Baja la imagen que fija el compose (`nextcloud:33-apache`:
+arreglos de la 33 y de PHP, nunca otra versión mayor). Si es la misma que corre, no hace nada.
+Si es nueva, saca el respaldo de siempre (`nextcloud_backup.sh`), reinicia Nextcloud con ella y
+espera a que salga de mantenimiento con la base al día. Callado si todo sale bien; si un paso
+falla, avisa por Telegram y deja de seguir.
+
+Salida: 0 al día o actualizado, 1 falló y el aviso salió, 2 falló y el aviso no salió.
+`--prueba-aviso` solo manda un aviso de prueba. El token del bot nunca se imprime.
+
+Variables para probarlo sin tocar nada real: ACTUALIZA_NC (carpeta del compose), ACTUALIZA_DOCKER
+(binario de docker), ACTUALIZA_ENV (claves del bot), ACTUALIZA_API (base de la API de Telegram),
+ACTUALIZA_ESPERA_S y ACTUALIZA_PASO_S (cuánto esperar a que termine y cada cuánto mirar).
+"""
+
+from __future__ import annotations
+
+import html
+import json
+import os
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+CONTENEDOR = "nextcloud-app"
+
+
+class Fallo(Exception):
+    pass
+
+
+def leer_env(ruta: Path) -> dict[str, str]:
+    claves = {}
+    for linea in ruta.read_text().splitlines():
+        linea = linea.strip()
+        if not linea or linea.startswith("#"):
+            continue
+        k, _, v = linea.partition("=")
+        k = k.strip()
+        if k.startswith("export "):
+            k = k[len("export ") :].strip()
+        claves[k] = v.strip().strip("'\"")
+    return claves
+
+
+def enviar(texto: str, env: Path, api: str) -> None:
+    claves = leer_env(env)
+    token = claves.get("TELEGRAM_BOT_TOKEN")
+    chat = claves.get("TELEGRAM_CHAT_ID")
+    if not token or not chat:
+        raise RuntimeError(f"faltan TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID en {env}")
+    import urllib.request
+
+    cuerpo = json.dumps({"chat_id": chat, "text": texto, "parse_mode": "HTML"}).encode()
+    req = urllib.request.Request(
+        f"{api}/bot{token}/sendMessage", data=cuerpo, headers={"Content-Type": "application/json"}
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=30) as r:
+            respuesta = json.load(r)
+    except Exception as e:
+        raise RuntimeError(f"{type(e).__name__}: {str(e).replace(token, '***')}") from None
+    if not respuesta.get("ok"):
+        raise RuntimeError("Telegram no aceptó el mensaje")
+
+
+def corre(argv: list[str], paso: str) -> str:
+    r = subprocess.run(argv, capture_output=True, text=True, check=False)
+    if r.returncode != 0:
+        detalle = (r.stderr or r.stdout).strip().splitlines()[-1:] or [f"salió con {r.returncode}"]
+        raise Fallo(f"{paso}: {detalle[0][:200]}")
+    return r.stdout
+
+
+def estado(docker: str) -> dict | None:
+    r = subprocess.run(
+        [docker, "exec", "-u", "www-data", CONTENEDOR, "php", "occ", "status", "--output=json"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if r.returncode != 0:
+        return None
+    try:
+        return json.loads(r.stdout[r.stdout.find("{") :])
+    except ValueError:
+        return None
+
+
+def actualiza(nc: Path, docker: str, espera_s: float, paso_s: float) -> str | None:
+    """None si ya estaba al día; si actualizó, la versión con la que quedó."""
+    compose = [docker, "compose", "-f", str(nc / "docker-compose.yml")]
+    corriendo = corre(
+        [docker, "inspect", CONTENEDOR, "--format", "{{.Image}}"], "leer la imagen que corre"
+    ).strip()
+    corre([*compose, "pull", "-q", "app"], "bajar la imagen nueva")
+    ref = json.loads(corre([*compose, "config", "--format", "json"], "leer el compose"))
+    imagen = ref["services"]["app"]["image"]
+    nueva = corre(
+        [docker, "image", "inspect", imagen, "--format", "{{.Id}}"], "leer la imagen nueva"
+    ).strip()
+    if nueva == corriendo:
+        return None
+    corre(["bash", str(nc / "nextcloud_backup.sh")], "sacar el respaldo")
+    corre([*compose, "up", "-d", "app"], "reiniciar Nextcloud")
+    limite = time.monotonic() + espera_s
+    ultimo = None
+    while time.monotonic() < limite:
+        ultimo = estado(docker)
+        if ultimo and not ultimo.get("maintenance") and not ultimo.get("needsDbUpgrade"):
+            php = corre(
+                [docker, "exec", CONTENEDOR, "php", "-r", "echo PHP_VERSION;"], "leer PHP"
+            ).strip()
+            return f"Nextcloud {ultimo.get('versionstring')} con PHP {php}"
+        time.sleep(paso_s)
+    if ultimo is None:
+        raise Fallo("Nextcloud no contestó después de reiniciarlo")
+    raise Fallo(
+        "Nextcloud sigue en mantenimiento o con la base sin actualizar "
+        f"(versión {ultimo.get('versionstring')})"
+    )
+
+
+def main(argv: list[str]) -> int:
+    nc = Path(os.environ.get("ACTUALIZA_NC", "/mnt/data/appdata/nextcloud"))
+    docker = os.environ.get("ACTUALIZA_DOCKER", "docker")
+    env = Path(os.environ.get("ACTUALIZA_ENV", "/mnt/data/appdata/orbit/secrets/accounting.env"))
+    api = os.environ.get("ACTUALIZA_API", "https://api.telegram.org")
+    if "--prueba-aviso" in argv:
+        texto = "<b>Nextcloud</b>\nPrueba: así te llega un aviso si la actualización semanal falla."
+    else:
+        try:
+            hecho = actualiza(
+                nc,
+                docker,
+                float(os.environ.get("ACTUALIZA_ESPERA_S", "900")),
+                float(os.environ.get("ACTUALIZA_PASO_S", "10")),
+            )
+        except Exception as e:  # noqa: BLE001 - un paso que falla se avisa, nunca se calla
+            problema = str(e) if isinstance(e, Fallo) else f"{type(e).__name__}: {e}"
+        else:
+            print(f"{time.strftime('%F %T')} {f'actualizado: {hecho}' if hecho else 'al día'}")
+            return 0
+        print(f"{time.strftime('%F %T')} falló: {problema}")
+        texto = (
+            "<b>Nextcloud: la actualización semanal no terminó bien</b>\n"
+            f"• {html.escape(problema, quote=False)}\n"
+            "Antes de reiniciar se saca el respaldo de la base. Pídele a tu asistente que lo revise."
+        )
+    try:
+        enviar(texto, env, api)
+    except Exception as e:  # noqa: BLE001
+        print(f"ERROR: no se pudo avisar por Telegram: {e}", file=sys.stderr)
+        return 2
+    return 0 if "--prueba-aviso" in argv else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
