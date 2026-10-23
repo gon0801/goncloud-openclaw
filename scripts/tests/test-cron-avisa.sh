@@ -165,10 +165,37 @@ rm "$EST/vieja.json"
 correr --revisa
 [ "$RC" -eq 0 ] || fail "--revisa con todo fresco no salió 0 (rc=$RC)"
 [ "$(avisos)" = 0 ] || fail "--revisa avisó con todo fresco"
+DIARIA=$(python3 -c 'import time; print(int(time.time()) - 30 * 3600)')
+GRACIA=$(python3 -c 'import time; print(int(time.time()) - 2 * 3600)')
+printf '{"nombre":"Diaria","inicio":1,"fin":%s,"codigo":0,"cada":24,"fallos":0}\n' "$DIARIA" > "$EST/diaria.json"
+printf '{"nombre":"Con gracia","inicio":1,"fin":%s,"codigo":0,"cada":1,"fallos":0}\n' "$GRACIA" > "$EST/gracia.json"
+correr --revisa --seco
+[ "$RC" -eq 0 ] || fail "umbral 1.5 × cada + 1 h: diaria a 30 h o con gracia a 2 h salió atrasada (rc=$RC): $(cat "$SB/out")"
+rm "$EST/diaria.json" "$EST/gracia.json"
+printf '{"nombre":"A<b> & c","inicio":1,"fin":1,"codigo":0,"cada":1,"fallos":0}\n' > "$EST/h.json"
+correr --revisa --seco
+grep -qF "• A<b> & c: no está corriendo." "$SB/out" || fail "--seco deformó un nombre con <b> o &: $(cat "$SB/out")"
+correr --revisa
+grep -qF "A&lt;b&gt; &amp; c" "$SB/tg.log" || fail "el aviso no escapó el nombre: $(cat "$SB/tg.log")"
+rm "$EST/h.json"
 printf 'no es json' > "$EST/rota.json"
 correr --revisa
 [ "$RC" -eq 2 ] || fail "--revisa con un estado ilegible no salió 2 (rc=$RC)"
 rm "$EST/rota.json"
+for n in 8 9; do
+  rm -f "$EST"/t*.json
+  for i in $(seq "$n"); do
+    printf '{"nombre":"Tarea %s","inicio":1,"fin":%s,"codigo":0,"cada":1,"fallos":0}\n' "$i" "$VIEJO" > "$EST/t$i.json"
+  done
+  correr --revisa
+  if [ "$n" -eq 8 ]; then
+    texto 0 | grep -q "tareas:" && fail "agrupó con solo 8 tareas"
+    [ "$(texto 0 | grep -c '^• ')" -eq 8 ] || fail "con 8 no listó 8 líneas"
+  else
+    texto 0 | grep -q "• 9 tareas:" || fail "con 9 no agrupó: $(texto 0)"
+  fi
+done
+rm -f "$EST"/t*.json
 for i in $(seq 10); do
   printf '{"nombre":"Tarea %s","inicio":1,"fin":%s,"codigo":0,"cada":1,"fallos":0}\n' "$i" "$VIEJO" > "$EST/t$i.json"
 done
@@ -179,6 +206,25 @@ texto 0 | grep -q "• 10 tareas:" || fail "no agrupó en '• 10 tareas:': $(te
 reset
 correr --revisa
 [ "$RC" -eq 2 ] || fail "--revisa sin carpeta de estados no salió 2 (rc=$RC)"
+if [ "$(id -u)" -ne 0 ]; then
+  mkdir -p "$EST"
+  chmod 000 "$EST"
+  correr --revisa --seco
+  chmod 755 "$EST"
+  [ "$RC" -eq 2 ] || fail "--revisa con la carpeta sin permiso no salió 2 (rc=$RC)"
+fi
+
+reset
+mkdir -p "$EST"
+printf '{"nombre":"Rota","inicio":1,"fin":1,"codigo":1,"cada":24,"fallos":null,"avisado":false}\n' > "$EST/rota.json"
+correr --nombre "Rota" --cada 24 -- "$CMD" 6
+[ "$RC" -eq 6 ] || fail "un estado con fallos null cambió el código (rc=$RC)"
+[ "$(estado rota fallos)" = 1 ] || fail "fallos null no se tomó como 0"
+for malo in nan inf 0 -1; do
+  correr --nombre "Mala cada" --cada "$malo" -- "$CMD" 0
+  [ "$RC" -eq 2 ] || fail "--cada $malo no se rechazó (rc=$RC)"
+done
+[ ! -e "$EST/mala-cada.json" ] || fail "--cada inválido dejó estado"
 
 # 8
 reset
