@@ -1,0 +1,9 @@
+# GONCLOUD Odoo — Backup diario
+# pg_dump de EHV (custom format) + filestore comprimido.
+# Se ejecuta a las 02:20 UTC, antes de restic-backup (03:01) y restic-backup-b2 (04:00).
+
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
+
+# min  hour  dom  month  dow   user  command
+20     2     *    *      *     root  /mnt/data/appdata/odoo/odoo_backup.sh >> /mnt/data/backups/odoo/backup.log 2>&1

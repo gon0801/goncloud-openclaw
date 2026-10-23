@@ -1,0 +1,10 @@
+# GONCLOUD Nextcloud — Backup diario
+# mysqldump + config.php + lista de apps. Activa maintenance mode brevemente
+# (~5-10s) durante el dump para consistencia con los archivos.
+# Se ejecuta a las 02:45 UTC, antes de restic-backup (03:01).
+
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
+
+# min  hour  dom  month  dow   user  command
+45     2     *    *      *     root  /mnt/data/appdata/nextcloud/nextcloud_backup.sh >> /mnt/data/backups/nextcloud/backup.log 2>&1

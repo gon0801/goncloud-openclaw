@@ -1,0 +1,8 @@
+0 */4 * * * docker exec bridge-api python3 /data/backfill_meli_mappings.py >> /mnt/data/appdata/bridge/data/backfill.log 2>&1
+*/30 * * * * chmod 640 /mnt/data/appdata/bridge/data/.meli_tokens.json 2>/dev/null
+30 3 * * * /mnt/data/appdata/orbit/backup.sh >> /mnt/data/appdata/orbit/backup.log 2>&1
+45 */6 * * * /mnt/data/appdata/orbit/refresh_estimacion.sh >> /mnt/data/appdata/orbit/logs/estimacion.log 2>&1
+# job_key=spapi:vigilante  aviso si el cron spapi:diario no dejó sus 8 corridas
+30 7 * * * /usr/bin/flock -n /tmp/spapi-vigilante.lock docker exec orbit-app-1 python -m app.cli spapi_vigilante >> /mnt/data/appdata/orbit/logs/spapi-vigilante.log 2>&1
+10 */6 * * * /usr/local/bin/orbit_meli_pase_copy.sh >> /mnt/data/appdata/orbit/logs/meli_pase.log 2>&1
+15 10 * * 0 ACTUALIZA_ENV=/etc/goncloud/accounting.env /usr/bin/flock -n /tmp/actualiza-nextcloud.lock /usr/local/bin/actualiza-nextcloud >> /var/log/actualiza-nextcloud.log 2>&1
