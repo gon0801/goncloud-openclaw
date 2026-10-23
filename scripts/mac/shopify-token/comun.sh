@@ -3,7 +3,8 @@ MARCA='# motor:shopify-token'
 CRON_CLAW=dbc3eee3-28d4-4043-bee9-8fd584341bf8
 OPENCLAW=${OPENCLAW_BIN:-/Users/gon/.openclaw/bin/openclaw}
 AQUI=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-RENUEVA=${RENUEVA:-$AQUI/renueva.sh}
+RAIZ=${SHOPIFY_TOKEN_RAIZ:-$HOME/.local/share/goncloud}
+INSTALADO=$RAIZ/shopify-token
 TOKEN_FILE=${SHOPIFY_TOKEN_FILE:-$HOME/.openclaw/credentials/shopify_token.txt}
 APP_JSON=${SHOPIFY_APP_JSON:-$HOME/.openclaw/credentials/shopify_app.json}
 LOG_RENUEVA=${SHOPIFY_TOKEN_LOG:-$HOME/Library/Logs/shopify-token.log}
@@ -17,9 +18,17 @@ PLIST=$LA_DIR/$LABEL.plist
 LAUNCHCTL=${LAUNCHCTL_BIN:-launchctl}
 DOMINIO=gui/$(id -u)
 
-# Escribe en $1 el plist de la plantilla con HOME y la ruta de renueva.sh.
+# Escribe en $1 el plist de la plantilla con HOME y la ruta de renueva.sh instalada.
 generar_plist() {
-  sed -e "s|__HOME__|$HOME|g" -e "s|__RENUEVA__|$RENUEVA|g" "$PLANTILLA" > "$1"
+  sed -e "s|__HOME__|$HOME|g" -e "s|__RENUEVA__|$INSTALADO/renueva.sh|g" "$PLANTILLA" > "$1"
+}
+
+# Imprime "<runs> <last exit code>" de launchctl print; vacío si no responde. El código es "-" si aún no salió.
+estado_corrida() {
+  "$LAUNCHCTL" print "$DOMINIO/$LABEL" 2>/dev/null | awk '
+    /^[[:space:]]*runs = /           { r = $3 }
+    /^[[:space:]]*last exit code = / { c = $5 }
+    END { if (r != "") print r, (c ~ /^[0-9]+$/ ? c : "-") }'
 }
 
 # ¿el LaunchAgent está cargado? (launchctl print responde)

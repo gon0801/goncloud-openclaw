@@ -1,5 +1,7 @@
 #!/bin/bash
-# Sale 0 solo si: el LaunchAgent ai.goncloud.shopify-token responde a launchctl print, el token se
+# Sale 0 solo si: el LaunchAgent ai.goncloud.shopify-token responde a launchctl print, cada ruta de
+# su plist instalado existe y ninguna está dentro de ~/.motor/, launchd la corrió al menos una vez y
+# salió con 0 (runs >= 1, last exit code = 0), el token se
 # escribió hace menos de 12 h (incluye "hace menos de 15 min") y shop.json responde 200 con él, y el
 # cron de claw está desactivado.
 set -u
@@ -9,6 +11,30 @@ rc=0
 no() { log "NO: $*"; rc=1; }
 
 agente_cargado && log "ok: LaunchAgent $LABEL cargado" || no "launchctl print no responde para $LABEL"
+
+if [ -f "$PLIST" ]; then
+  if rutas=$(python3 -I - "$PLIST" 2>&1 <<'PY'
+import os, plistlib, sys
+malas = []
+for a in plistlib.load(open(sys.argv[1], "rb"))["ProgramArguments"]:
+    if a.startswith("/"):
+        if not os.path.exists(a):
+            malas.append("no existe " + a)
+        if "/.motor/" in a:
+            malas.append("está dentro de ~/.motor/: " + a)
+if malas:
+    print("; ".join(malas))
+    sys.exit(1)
+PY
+  ); then log "ok: las rutas del plist existen y ninguna está en ~/.motor/"
+  else no "el plist apunta a una ruta mala (${rutas:-no pude leerlo})"; fi
+else
+  no "no hay plist instalado en $PLIST"
+fi
+
+read -r runs salio <<<"$(estado_corrida)"
+if [ "${runs:-0}" -ge 1 ] 2>/dev/null && [ "${salio:--}" = 0 ]; then log "ok: launchd la corrió ${runs} vez/veces y salió con 0"
+else no "launchd no la corrió bien (runs = ${runs:-?}, last exit code = ${salio:-?})"; fi
 
 if [ -s "$TOKEN_FILE" ]; then
   edad=$(( $(date +%s) - $(stat -c %Y "$TOKEN_FILE" 2>/dev/null || stat -f %m "$TOKEN_FILE") ))
