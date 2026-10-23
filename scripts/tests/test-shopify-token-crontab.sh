@@ -141,6 +141,21 @@ echo off > "$FAKE_CLAW"
 bash "$D/checklist.sh" >/dev/null 2>&1 || fail "checklist: debía volver a pasar al restaurar todo"
 echo "ok 4 checklist falla"
 
+# (4b) plist que apunta a una ruta borrada, y last exit code = 127: NO y salida ≠0
+mv "$INST/renueva.sh" "$INST/renueva.sh.bak"
+bash "$D/checklist.sh" >"$T/out" 2>&1 && fail "checklist: aceptó un plist con ruta borrada: $(cat "$T/out")"
+grep -q '^.*NO: .*ruta' "$T/out" || fail "checklist: no dijo NO por la ruta borrada: $(cat "$T/out")"
+mv "$INST/renueva.sh.bak" "$INST/renueva.sh"
+echo 127 > "$FAKE_STATE/rc"
+bash "$D/checklist.sh" >"$T/out" 2>&1 && fail "checklist: aceptó last exit code = 127"
+grep -q 'NO: launchd no la corrió bien' "$T/out" || fail "checklist: no dijo NO por el 127: $(cat "$T/out")"
+echo 0 > "$FAKE_STATE/rc"
+sed "s|$INST|$HOME/.motor/x|" "$PL" > "$T/pl.motor"; cp "$PL" "$T/pl.ok"; cp "$T/pl.motor" "$PL"
+bash "$D/checklist.sh" >/dev/null 2>&1 && fail "checklist: aceptó un plist dentro de ~/.motor/"
+cp "$T/pl.ok" "$PL"
+bash "$D/checklist.sh" >/dev/null 2>&1 || fail "checklist: debía volver a pasar"
+echo "ok 4b checklist: ruta borrada y 127"
+
 # (5) rollback: descarga el agente, borra el plist y reactiva claw; repetirlo no falla
 bash "$D/rollback.sh" >"$T/out" 2>&1 || fail "rollback debía salir 0: $(cat "$T/out")"
 [ ! -e "$FAKE_LOADED" ] || fail "rollback: el agente seguía cargado"
