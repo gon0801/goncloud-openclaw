@@ -23,6 +23,7 @@ from __future__ import annotations
 import argparse
 import html
 import json
+import math
 import os
 import re
 import subprocess
@@ -96,6 +97,11 @@ def leer_estado(ruta: Path) -> dict:
     return estado if isinstance(estado, dict) else {}
 
 
+def racha(previo: dict) -> int:
+    fallos = previo.get("fallos", 0)
+    return fallos if isinstance(fallos, int) and not isinstance(fallos, bool) and fallos >= 0 else 0
+
+
 def guardar_estado(ruta: Path, estado: dict) -> None:
     ruta.parent.mkdir(parents=True, exist_ok=True)
     fd, tmp = tempfile.mkstemp(dir=ruta.parent, prefix=ruta.name + ".", suffix=".tmp")
@@ -124,7 +130,7 @@ def envuelve(nombre: str, cada: float, tras: int, comando: list[str], carpeta: P
         return codigo
     ruta = carpeta / f"{slug(nombre)}.json"
     previo = leer_estado(ruta)
-    fallos = int(previo.get("fallos", 0)) + 1 if codigo else 0
+    fallos = racha(previo) + 1 if codigo else 0
     avisado = bool(previo.get("avisado", False))
     nombre_html = html.escape(nombre, quote=False)
     if codigo and fallos >= tras and not avisado:
@@ -160,7 +166,7 @@ def mensaje_revisa(atrasadas: list[str]) -> str:
 
 def revisa(seco: bool, carpeta: Path, env: Path, api: str) -> int:
     try:
-        rutas = sorted(carpeta.glob("*.json"))
+        rutas = sorted(carpeta / n for n in os.listdir(carpeta) if n.endswith(".json"))
     except OSError as e:
         print(f"ERROR: no pude leer {carpeta}: {e.strerror or type(e).__name__}", file=sys.stderr)
         return 2
@@ -183,7 +189,7 @@ def revisa(seco: bool, carpeta: Path, env: Path, api: str) -> int:
     if atrasadas:
         texto = mensaje_revisa(atrasadas)
         if seco:
-            print(re.sub(r"</?b>", "", html.unescape(texto)))
+            print(html.unescape(re.sub(r"</?b>", "", texto)))
         elif not avisar(texto, env, api):
             return 2
     if ilegibles:
@@ -211,7 +217,7 @@ def main(argv: list[str]) -> int:
         return revisa(a.seco, carpeta, env, api)
     if a.seco:
         p.error("--seco solo va con --revisa")
-    if not a.nombre or not a.cada or a.cada <= 0 or a.tras < 1 or not comando:
+    if not a.nombre or not a.cada or not math.isfinite(a.cada) or a.cada <= 0 or a.tras < 1 or not comando:
         p.error("uso: --nombre <frase> --cada <horas> [--tras N] -- <comando…>")
     return envuelve(a.nombre, a.cada, a.tras, comando, carpeta, env, api)
 
