@@ -10,15 +10,37 @@ T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
 fail() { printf 'FAIL: %s\n' "$1"; exit 1; }
 for f in desplegar checklist rollback comun; do [ -f "$D/$f.sh" ] || fail "falta $D/$f.sh"; done
 
-mkdir -p "$T/bin" "$T/home" "$T/LA"
+mkdir -p "$T/bin" "$T/home" "$T/LA" "$T/lcstate"
 cat > "$T/bin/launchctl" <<'SH'
 #!/bin/bash
-# launchctl falso: "cargado" = existe el archivo $FAKE_LOADED; registra las llamadas
+# launchctl falso: "cargado" = existe $FAKE_LOADED (copia del plist); registra las llamadas.
+# kickstart corre el ProgramArguments del plist cargado como launchd y guarda runs, código y salida.
 echo "$*" >> "$FAKE_LC_LOG"
 case "$1" in
-  print)     [ -f "$FAKE_LOADED" ] ;;
-  bootstrap) [ -f "$FAKE_LOADED" ] && exit 5; [ -f "$3" ] || exit 1; cp "$3" "$FAKE_LOADED" ;;
-  bootout)   [ -f "$FAKE_LOADED" ] || exit 3; rm -f "$FAKE_LOADED" ;;
+  print)
+    [ -f "$FAKE_LOADED" ] || exit 113
+    runs=$(cat "$FAKE_STATE/runs" 2>/dev/null || echo 0)
+    rc=$(cat "$FAKE_STATE/rc" 2>/dev/null || echo "(never exited)")
+    printf '%s = {\n\tactive count = 0\n\truns = %s\n\tlast exit code = %s\n}\n' "$2" "$runs" "$rc" ;;
+  bootstrap) [ -f "$FAKE_LOADED" ] && exit 5; [ -f "$3" ] || exit 1; cp "$3" "$FAKE_LOADED"; rm -f "$FAKE_STATE"/runs "$FAKE_STATE"/rc ;;
+  bootout)   [ -f "$FAKE_LOADED" ] || exit 3; rm -f "$FAKE_LOADED" "$FAKE_STATE"/runs "$FAKE_STATE"/rc ;;
+  kickstart)
+    [ -f "$FAKE_LOADED" ] || exit 113
+    python3 -I - "$FAKE_LOADED" "$FAKE_STATE" <<'PY'
+import os, plistlib, subprocess, sys
+d = plistlib.load(open(sys.argv[1], "rb"))
+env = dict(os.environ, **d.get("EnvironmentVariables", {}))
+r = subprocess.run(d["ProgramArguments"], capture_output=True, text=True, env=env)
+st = sys.argv[2]
+try:
+    n = int(open(st + "/runs").read())
+except OSError:
+    n = 0
+open(st + "/runs", "w").write(str(n + 1))
+open(st + "/rc", "w").write(str(r.returncode))
+open(st + "/out", "a").write(r.stdout + r.stderr)
+PY
+    ;;
   *) exit 2 ;;
 esac
 SH
@@ -49,6 +71,7 @@ echo x >> "$FAKE_RENUEVA_LOG"; exit "${FAKE_RENUEVA_RC:-0}"
 SH
 chmod +x "$T"/bin/* "$T/renueva.sh"
 
+export FAKE_STATE=$T/lcstate SHOPIFY_TOKEN_RAIZ=$T/raiz
 export FAKE_LOADED=$T/loaded FAKE_LC_LOG=$T/lc.log FAKE_CRON_TRAMPA=$T/trampa
 export FAKE_CLAW=$T/claw FAKE_CLAW_LOG=$T/claw.log FAKE_RENUEVA_LOG=$T/renueva.log
 export PATH="$T/bin:$PATH" OPENCLAW_BIN=$T/bin/openclaw LAUNCHCTL_BIN=$T/bin/launchctl RENUEVA=$T/renueva.sh
@@ -124,4 +147,27 @@ echo "ok 6 renueva falla"
 # (7) nada de esto toca crontab
 [ ! -e "$FAKE_CRON_TRAMPA" ] || fail "se llamó a crontab: $(cat "$FAKE_CRON_TRAMPA")"
 echo "ok 7 sin crontab"
+
+# (8) la copia del motor desaparece: el plist no depende de ella
+copia_motor() {
+  local m=$1/.motor/tmp/despliega-shopify-token-02-A/scripts/mac
+  mkdir -p "$m"; cp -R "$D" "$m/shopify-token"; cp "$D/../ai.goncloud.shopify-token.plist" "$m/"
+  cp "$T/renueva.sh" "$m/shopify-token/renueva.sh"
+}
+reset; unset RENUEVA; rm -rf "$T/raiz" "$T/mc"; : > "$FAKE_STATE/out"; rm -f "$FAKE_STATE"/runs "$FAKE_STATE"/rc
+copia_motor "$T/mc"
+bash "$T/mc/.motor/tmp/despliega-shopify-token-02-A/scripts/mac/shopify-token/desplegar.sh" >"$T/out" 2>&1 \
+  || fail "copia desaparece: desplegar debía salir 0: $(cat "$T/out")"
+rm -rf "$T/mc"
+python3 -I - "$PL" <<'PY' || fail "copia desaparece: el plist apunta a rutas que no existen o dentro de /.motor/"
+import os, plistlib, sys
+for a in plistlib.load(open(sys.argv[1], "rb"))["ProgramArguments"]:
+    if a.startswith("/"):
+        assert os.path.exists(a), "no existe " + a
+        assert "/.motor/" not in a, "dentro de /.motor/: " + a
+PY
+"$T/bin/launchctl" kickstart -k "gui/$(id -u)/ai.goncloud.shopify-token" || fail "copia desaparece: kickstart falló"
+"$T/bin/launchctl" print "gui/$(id -u)/ai.goncloud.shopify-token" | grep -q 'last exit code = 0$' \
+  || fail "copia desaparece: kickstart no dejó last exit code = 0"
+echo "ok 8 la copia del motor desaparece"
 echo "PASS test-shopify-token-crontab"
