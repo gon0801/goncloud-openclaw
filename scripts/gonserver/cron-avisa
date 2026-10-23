@@ -9,6 +9,11 @@ seguidos (por omisión 1) y cuando vuelve a salir 0 después de haber avisado. E
 "saltada porque otra corrida tenía el candado": no cuenta como fallo ni como éxito y no toca el estado.
 Si el aviso no sale, lo anota en la salida y el código del comando no cambia.
 
+    cron-avisa --revisa [--seco]
+
+Avisa, en un solo mensaje, de cada tarea cuyo último fin es más viejo que 1.5 × `cada` + 1 h.
+`--seco` imprime y no avisa. Sale 0 si no hay nada, 1 si hay algo y 2 si no pudo leer o avisar.
+
 Variables para probarlo sin tocar nada real: CRON_AVISA_ESTADO (carpeta de estados), CRON_AVISA_ENV
 (claves del bot) y CRON_AVISA_API (base de la API de Telegram). El token del bot nunca se imprime.
 """
@@ -28,6 +33,10 @@ import unicodedata
 from pathlib import Path
 
 SALTADA = 75
+MAX_LINEAS = 8
+GRACIA_S = 3600
+ENCABEZADO = "En el servidor · Tareas programadas:"
+CIERRE = "Pídele a tu asistente que lo revise; lo demás sigue trabajando."
 
 
 def leer_env(ruta: Path) -> dict[str, str]:
@@ -140,6 +149,48 @@ def envuelve(nombre: str, cada: float, tras: int, comando: list[str], carpeta: P
     return codigo
 
 
+def mensaje_revisa(atrasadas: list[str]) -> str:
+    if len(atrasadas) <= MAX_LINEAS:
+        lineas = [f"• {html.escape(n, quote=False)}: no está corriendo." for n in atrasadas]
+    else:
+        nombres = ", ".join(html.escape(n, quote=False) for n in atrasadas[:3])
+        lineas = [f"• {len(atrasadas)} tareas: {nombres} y otras no están corriendo."]
+    return "\n".join([f"<b>{ENCABEZADO}</b>", *lineas, CIERRE])
+
+
+def revisa(seco: bool, carpeta: Path, env: Path, api: str) -> int:
+    try:
+        rutas = sorted(carpeta.glob("*.json"))
+    except OSError as e:
+        print(f"ERROR: no pude leer {carpeta}: {e.strerror or type(e).__name__}", file=sys.stderr)
+        return 2
+    if not carpeta.is_dir():
+        print(f"ERROR: no existe la carpeta de estados {carpeta}", file=sys.stderr)
+        return 2
+    ahora = time.time()
+    atrasadas: list[str] = []
+    ilegibles = False
+    for ruta in rutas:
+        try:
+            estado = json.loads(ruta.read_text())
+            nombre, fin, cada = str(estado["nombre"]), float(estado["fin"]), float(estado["cada"])
+        except (OSError, ValueError, KeyError, TypeError):
+            print(f"ERROR: no pude leer el estado {ruta.name}", file=sys.stderr)
+            ilegibles = True
+            continue
+        if ahora - fin > 1.5 * cada * 3600 + GRACIA_S:
+            atrasadas.append(nombre)
+    if atrasadas:
+        texto = mensaje_revisa(atrasadas)
+        if seco:
+            print(re.sub(r"</?b>", "", html.unescape(texto)))
+        elif not avisar(texto, env, api):
+            return 2
+    if ilegibles:
+        return 2
+    return 1 if atrasadas else 0
+
+
 def main(argv: list[str]) -> int:
     if "--" in argv:
         i = argv.index("--")
@@ -150,10 +201,16 @@ def main(argv: list[str]) -> int:
     p.add_argument("--nombre")
     p.add_argument("--cada", type=float)
     p.add_argument("--tras", type=int, default=1)
+    p.add_argument("--revisa", action="store_true")
+    p.add_argument("--seco", action="store_true")
     a = p.parse_args(propios)
     carpeta = Path(os.environ.get("CRON_AVISA_ESTADO", "/var/lib/goncloud-cron"))
     env = Path(os.environ.get("CRON_AVISA_ENV", "/mnt/data/appdata/orbit/secrets/accounting.env"))
     api = os.environ.get("CRON_AVISA_API", "https://api.telegram.org")
+    if a.revisa:
+        return revisa(a.seco, carpeta, env, api)
+    if a.seco:
+        p.error("--seco solo va con --revisa")
     if not a.nombre or not a.cada or a.cada <= 0 or a.tras < 1 or not comando:
         p.error("uso: --nombre <frase> --cada <horas> [--tras N] -- <comando…>")
     return envuelve(a.nombre, a.cada, a.tras, comando, carpeta, env, api)
