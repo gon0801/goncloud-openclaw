@@ -156,7 +156,8 @@ cp "$T/pl.ok" "$PL"
 bash "$D/checklist.sh" >/dev/null 2>&1 || fail "checklist: debía volver a pasar"
 echo "ok 4b checklist: ruta borrada y 127"
 
-# (5) rollback: descarga el agente, borra el plist y reactiva claw; repetirlo no falla
+# (5) rollback sin .anterior: descarga el agente, borra el plist y reactiva claw; repetirlo no falla
+rm -rf "$T/raiz/shopify-token.anterior"
 bash "$D/rollback.sh" >"$T/out" 2>&1 || fail "rollback debía salir 0: $(cat "$T/out")"
 [ ! -e "$FAKE_LOADED" ] || fail "rollback: el agente seguía cargado"
 [ ! -e "$PL" ] || fail "rollback: no borró el plist"
@@ -189,4 +190,23 @@ PY
 "$T/bin/launchctl" print "gui/$(id -u)/ai.goncloud.shopify-token" | grep -q 'last exit code = 0$' \
   || fail "copia desaparece: kickstart no dejó last exit code = 0"
 echo "ok 8 la copia del motor desaparece"
+# (9) rollback con .anterior: vuelve a la receta anterior, plist recargado, claw sigue off
+reset; despliega >/dev/null 2>&1 || fail "rollback .anterior: primer desplegar falló"
+echo v1 > "$INST/version"
+copia_motor "$T/mc"; echo v2 > "$COPIA/version"
+bash "$COPIA/desplegar.sh" >/dev/null 2>&1 || fail "rollback .anterior: segundo desplegar falló"
+[ "$(cat "$INST/version")" = v2 ] && [ "$(cat "$T/raiz/shopify-token.anterior/version")" = v1 ] || fail "rollback .anterior: desplegar no guardó la anterior"
+: > "$FAKE_LC_LOG"
+bash "$D/rollback.sh" >"$T/out" 2>&1 || fail "rollback .anterior debía salir 0: $(cat "$T/out")"
+[ "$(cat "$INST/version")" = v1 ] || fail "rollback .anterior: no devolvió la receta anterior"
+[ ! -e "$T/raiz/shopify-token.anterior" ] || fail "rollback .anterior: dejó el directorio .anterior"
+python3 -I - "$PL" "$INST/renueva.sh" <<'PY' || fail "rollback .anterior: el plist no apunta a \$INSTALADO/renueva.sh existente"
+import os, plistlib, sys
+a = plistlib.load(open(sys.argv[1], "rb"))["ProgramArguments"]
+assert a == ["/bin/bash", sys.argv[2]] and os.path.exists(a[1])
+PY
+grep -q '^bootout ' "$FAKE_LC_LOG" && grep -q '^bootstrap ' "$FAKE_LC_LOG" || fail "rollback .anterior: no hizo bootout y bootstrap"
+[ -f "$FAKE_LOADED" ] || fail "rollback .anterior: el agente quedó descargado"
+[ "$(cat "$FAKE_CLAW")" = off ] || fail "rollback .anterior: tocó el cron de claw"
+echo "ok 9 rollback con .anterior"
 echo "PASS test-shopify-token-crontab"
