@@ -1,0 +1,226 @@
+#!/usr/bin/env python3
+"""Envoltorio que avisa cuando una tarea del cron falla o deja de correr (/usr/local/bin/cron-avisa).
+
+    cron-avisa --nombre "<frase llana>" --cada <horas> [--tras N] -- <comando…>
+
+Corre el comando, deja pasar su salida y sale con su mismo código. Guarda cómo le fue en
+`<estado>/<slug del nombre>.json`. Avisa por Telegram solo cuando algo cambia: al llegar a N fallos
+seguidos (por omisión 1) y cuando vuelve a salir 0 después de haber avisado. El código 75 es
+"saltada porque otra corrida tenía el candado": no cuenta como fallo ni como éxito y no toca el estado.
+Si el aviso no sale, lo anota en la salida y el código del comando no cambia.
+
+    cron-avisa --revisa [--seco]
+
+Avisa, en un solo mensaje, de cada tarea cuyo último fin es más viejo que 1.5 × `cada` + 1 h.
+`--seco` imprime y no avisa. Sale 0 si no hay nada, 1 si hay algo y 2 si no pudo leer o avisar.
+
+Variables para probarlo sin tocar nada real: CRON_AVISA_ESTADO (carpeta de estados), CRON_AVISA_ENV
+(claves del bot) y CRON_AVISA_API (base de la API de Telegram). El token del bot nunca se imprime.
+"""
+
+from __future__ import annotations
+
+import argparse
+import html
+import json
+import math
+import os
+import re
+import subprocess
+import sys
+import tempfile
+import time
+import unicodedata
+from pathlib import Path
+
+SALTADA = 75
+MAX_LINEAS = 8
+GRACIA_S = 3600
+ENCABEZADO = "En el servidor · Tareas programadas:"
+CIERRE = "Pídele a tu asistente que lo revise; lo demás sigue trabajando."
+
+
+def leer_env(ruta: Path) -> dict[str, str]:
+    claves = {}
+    for linea in ruta.read_text().splitlines():
+        linea = linea.strip()
+        if not linea or linea.startswith("#"):
+            continue
+        k, _, v = linea.partition("=")
+        k = k.strip()
+        if k.startswith("export "):
+            k = k[len("export ") :].strip()
+        claves[k] = v.strip().strip("'\"")
+    return claves
+
+
+def enviar(texto: str, env: Path, api: str) -> None:
+    claves = leer_env(env)
+    token = claves.get("TELEGRAM_BOT_TOKEN")
+    chat = claves.get("TELEGRAM_CHAT_ID")
+    if not token or not chat:
+        raise RuntimeError(f"faltan TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID en {env}")
+    import urllib.request
+
+    cuerpo = json.dumps({"chat_id": chat, "text": texto, "parse_mode": "HTML"}).encode()
+    req = urllib.request.Request(
+        f"{api}/bot{token}/sendMessage", data=cuerpo, headers={"Content-Type": "application/json"}
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=30) as r:
+            respuesta = json.load(r)
+    except Exception as e:
+        raise RuntimeError(f"{type(e).__name__}: {str(e).replace(token, '***')}") from None
+    if not respuesta.get("ok"):
+        raise RuntimeError("Telegram no aceptó el mensaje")
+
+
+def avisar(texto: str, env: Path, api: str) -> bool:
+    try:
+        enviar(texto, env, api)
+    except Exception as e:  # noqa: BLE001 - el aviso que no sale se anota, nunca cambia el código
+        print(f"ERROR: no se pudo avisar por Telegram: {e}", file=sys.stderr)
+        return False
+    return True
+
+
+def slug(nombre: str) -> str:
+    plano = unicodedata.normalize("NFKD", nombre).encode("ascii", "ignore").decode()
+    return re.sub(r"[^a-z0-9]+", "-", plano.lower()).strip("-") or "tarea"
+
+
+def leer_estado(ruta: Path) -> dict:
+    try:
+        estado = json.loads(ruta.read_text())
+    except (OSError, ValueError):
+        return {}
+    return estado if isinstance(estado, dict) else {}
+
+
+def racha(previo: dict) -> int:
+    fallos = previo.get("fallos", 0)
+    return fallos if isinstance(fallos, int) and not isinstance(fallos, bool) and fallos >= 0 else 0
+
+
+def guardar_estado(ruta: Path, estado: dict) -> None:
+    ruta.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=ruta.parent, prefix=ruta.name + ".", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w") as f:
+            json.dump(estado, f, ensure_ascii=False)
+        os.replace(tmp, ruta)
+    except BaseException:
+        Path(tmp).unlink(missing_ok=True)
+        raise
+
+
+def corre(comando: list[str]) -> int:
+    try:
+        codigo = subprocess.run(comando, check=False).returncode
+    except OSError as e:
+        print(f"cron-avisa: no pude correr el comando: {e.strerror or type(e).__name__}", file=sys.stderr)
+        return 127 if isinstance(e, FileNotFoundError) else 126
+    return 128 - codigo if codigo < 0 else codigo
+
+
+def envuelve(nombre: str, cada: float, tras: int, comando: list[str], carpeta: Path, env: Path, api: str) -> int:
+    inicio = time.time()
+    codigo = corre(comando)
+    if codigo == SALTADA:
+        return codigo
+    ruta = carpeta / f"{slug(nombre)}.json"
+    previo = leer_estado(ruta)
+    fallos = racha(previo) + 1 if codigo else 0
+    avisado = bool(previo.get("avisado", False))
+    nombre_html = html.escape(nombre, quote=False)
+    if codigo and fallos >= tras and not avisado:
+        avisado = avisar(f"• {nombre_html}: su última corrida falló.", env, api)
+    elif not codigo and avisado:
+        avisado = not avisar(f"• {nombre_html}: ya volvió a correr bien.", env, api)
+    try:
+        guardar_estado(
+            ruta,
+            {
+                "nombre": nombre,
+                "inicio": int(inicio),
+                "fin": int(time.time()),
+                "codigo": codigo,
+                "cada": cada,
+                "fallos": fallos,
+                "avisado": avisado,
+            },
+        )
+    except OSError as e:
+        print(f"ERROR: no se pudo guardar el estado: {e.strerror or type(e).__name__}", file=sys.stderr)
+    return codigo
+
+
+def mensaje_revisa(atrasadas: list[str]) -> str:
+    if len(atrasadas) <= MAX_LINEAS:
+        lineas = [f"• {html.escape(n, quote=False)}: no está corriendo." for n in atrasadas]
+    else:
+        nombres = ", ".join(html.escape(n, quote=False) for n in atrasadas[:3])
+        lineas = [f"• {len(atrasadas)} tareas: {nombres} y otras no están corriendo."]
+    return "\n".join([f"<b>{ENCABEZADO}</b>", *lineas, CIERRE])
+
+
+def revisa(seco: bool, carpeta: Path, env: Path, api: str) -> int:
+    try:
+        rutas = sorted(carpeta / n for n in os.listdir(carpeta) if n.endswith(".json"))
+    except OSError as e:
+        print(f"ERROR: no pude leer {carpeta}: {e.strerror or type(e).__name__}", file=sys.stderr)
+        return 2
+    if not carpeta.is_dir():
+        print(f"ERROR: no existe la carpeta de estados {carpeta}", file=sys.stderr)
+        return 2
+    ahora = time.time()
+    atrasadas: list[str] = []
+    ilegibles = False
+    for ruta in rutas:
+        try:
+            estado = json.loads(ruta.read_text())
+            nombre, fin, cada = str(estado["nombre"]), float(estado["fin"]), float(estado["cada"])
+        except (OSError, ValueError, KeyError, TypeError):
+            print(f"ERROR: no pude leer el estado {ruta.name}", file=sys.stderr)
+            ilegibles = True
+            continue
+        if ahora - fin > 1.5 * cada * 3600 + GRACIA_S:
+            atrasadas.append(nombre)
+    if atrasadas:
+        texto = mensaje_revisa(atrasadas)
+        if seco:
+            print(html.unescape(re.sub(r"</?b>", "", texto)))
+        elif not avisar(texto, env, api):
+            return 2
+    if ilegibles:
+        return 2
+    return 1 if atrasadas else 0
+
+
+def main(argv: list[str]) -> int:
+    if "--" in argv:
+        i = argv.index("--")
+        propios, comando = argv[:i], argv[i + 1 :]
+    else:
+        propios, comando = argv, []
+    p = argparse.ArgumentParser(prog="cron-avisa", add_help=True)
+    p.add_argument("--nombre")
+    p.add_argument("--cada", type=float)
+    p.add_argument("--tras", type=int, default=1)
+    p.add_argument("--revisa", action="store_true")
+    p.add_argument("--seco", action="store_true")
+    a = p.parse_args(propios)
+    carpeta = Path(os.environ.get("CRON_AVISA_ESTADO", "/var/lib/goncloud-cron"))
+    env = Path(os.environ.get("CRON_AVISA_ENV", "/mnt/data/appdata/orbit/secrets/accounting.env"))
+    api = os.environ.get("CRON_AVISA_API", "https://api.telegram.org")
+    if a.revisa:
+        return revisa(a.seco, carpeta, env, api)
+    if a.seco:
+        p.error("--seco solo va con --revisa")
+    if not a.nombre or not a.cada or not math.isfinite(a.cada) or a.cada <= 0 or a.tras < 1 or not comando:
+        p.error("uso: --nombre <frase> --cada <horas> [--tras N] -- <comando…>")
+    return envuelve(a.nombre, a.cada, a.tras, comando, carpeta, env, api)
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
