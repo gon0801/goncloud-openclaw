@@ -82,9 +82,14 @@ for d, texto in destinos.items():
         if any(f in partes[2] for f, _ in m.NO_ENVOLVER):
             usados.update(f for f, _ in m.NO_ENVOLVER if f in partes[2])
             esperadas.append(linea)
+        elif d == "usuario:root" and "spapi_vigilante" in partes[2]:
+            continue
         else:
             esperadas.append(None)
     salida = nuevo.splitlines()
+    if d == "usuario:root":
+        check("spapi:vigilante" not in nuevo, "root: queda el comentario del duplicado")
+        esperadas = [e for e in esperadas if e is None or "spapi:vigilante" not in e]
     check(len(salida) == len(esperadas), f"{d}: se esperaban {len(esperadas)} líneas y salieron {len(salida)}")
     for obtenida, esperada in zip(salida, esperadas):
         partes = m._partir(obtenida, cron_d)
@@ -125,6 +130,23 @@ check(envueltas_total >= 40, f"se envolvieron solo {envueltas_total} líneas de 
 for fragmento, motivo in m.NO_ENVOLVER:
     check(motivo.strip(), f"NO_ENVOLVER {fragmento}: sin motivo")
     check(fragmento in usados, f"NO_ENVOLVER {fragmento}: ninguna línea de la copia real lo usa")
+
+# 4. B.2: spapi_vigilante queda solo en el crontab de gon
+root = m.envuelve(destinos["usuario:root"], "usuario:root")
+gon = m.envuelve(destinos["usuario:gon"], "usuario:gon")
+check("spapi_vigilante" not in root, "B.2: root conserva spapi_vigilante")
+check(len(re.findall(r"spapi_vigilante", gon)) == 1, "B.2: gon no tiene exactamente un spapi_vigilante")
+check(
+    "spapi-vigilante.lock" in gon and "spapi-vigilante.log" in gon,
+    "B.2: la de gon perdió el candado o el log",
+)
+check(m.transforma(destinos["usuario:root"], "usuario:root")[2] == 1, "B.2: debía quitar exactamente una línea")
+check(m.transforma(destinos["usuario:gon"], "usuario:gon")[2] == 0, "B.2: no debe quitar nada del crontab de gon")
+check(
+    "spapi_vigilante" in m.envuelve("30 7 * * * docker exec x python -m app.cli spapi_vigilante\n", "cron.d:otro"),
+    "B.2: solo se quita del crontab de root",
+)
+
 
 # 5. bordes sintéticos
 def una(linea, destino="usuario:gon"):

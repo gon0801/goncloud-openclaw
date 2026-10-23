@@ -85,7 +85,15 @@ NOMBRES = (
     ("vigila-respaldos", "Vigía de respaldos"),
 )
 
-DUPLICADAS: tuple[tuple[str, str, str, str], ...] = ()
+# (destino, fragmento de la línea, fragmento del comentario que la acompaña, motivo)
+DUPLICADAS = (
+    (
+        "usuario:root",
+        "spapi_vigilante",
+        "spapi:vigilante",
+        "está igual en el crontab de gon, con el mismo candado y el mismo log",
+    ),
+)
 
 TRAS = 3
 CADAS = (1, 6, 24, 168)
