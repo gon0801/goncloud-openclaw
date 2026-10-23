@@ -34,7 +34,7 @@ echo "crontab $*" >> "$FAKE_LOG"
 case $op in
   -l) [ -s "$FAKE_CRON/$u" ] && cat "$FAKE_CRON/$u" || { echo "no crontab for $u" >&2; exit 1; } ;;
   -r) rm -f "$FAKE_CRON/$u" ;;
-  -) cat > "$FAKE_CRON/$u" ;;
+  -) if [ -n "${FAKE_CORRUPT:-}" ]; then echo basura > "$FAKE_CRON/$u"; else cat > "$FAKE_CRON/$u"; fi ;;
 esac
 SH
 cat > "$T/bin/chown" <<'SH'
@@ -48,8 +48,14 @@ cat > "$T/bin/stat" <<'SH'
 modo=$(python3 -I -c 'import os,sys; print(oct(os.stat(sys.argv[1]).st_mode & 0o7777)[2:])' "$3")
 echo "$(cat "$FAKE_OWNER") $modo"
 SH
+cat > "$T/bin/su" <<'SH'
+#!/bin/bash
+# su -s /bin/sh gon -c 'test -r <env>': lee o no según FAKE_SU_DENY
+echo "su $*" >> "$FAKE_LOG"
+[ ! -e "$FAKE_SU_DENY" ]
+SH
 chmod +x "$T/bin/"*
-export PATH="$T/bin:$PATH" FAKE_CRON="$T/cron" FAKE_LOG="$T/log" FAKE_OWNER="$T/owner"
+export PATH="$T/bin:$PATH" FAKE_CRON="$T/cron" FAKE_LOG="$T/log" FAKE_OWNER="$T/owner" FAKE_SU_DENY="$T/su-niega"
 export CA_BIN="$T/BIN" CA_ESTADO="$T/ESTADO" CA_RESPALDO="$T/RESP" CA_CROND="$T/CROND" CA_LOG="$T/instala.log"
 export CRON_AVISA_ESTADO="$T/ESTADO" MOTOR_SHA=prueba
 : > "$FAKE_LOG"; echo "desconocido:desconocido" > "$FAKE_OWNER"
@@ -85,7 +91,12 @@ grep -q 'sha=prueba' "$T/salida-instala" || fail "el log no lleva MOTOR_SHA"
 grep -q envueltas "$T/instala.log" || fail "el log del despliegue en el servidor quedó vacío"
 
 [ "$(correr checklist)" = 0 ] || { cat "$T/salida-checklist"; fail "el checklist falló con todo instalado"; }
-[ "$(grep -c '^OK:' "$T/salida-checklist")" = 4 ] || fail "el checklist no reporta los cuatro puntos"
+[ "$(grep -c '^OK:' "$T/salida-checklist")" = 5 ] || fail "el checklist no reporta los cinco puntos"
+grep -q 'CRON_AVISA_ENV", "/etc/goncloud/accounting.env"' "$G/cron-avisa" || fail "cron-avisa debe leer por omisión /etc/goncloud/accounting.env, legible por gon"
+grep -q "test -r '/etc/goncloud/accounting.env'" "$FAKE_LOG" || fail "el checklist no probó la lectura de gon sobre el env por omisión"
+: > "$T/su-niega"
+[ "$(correr checklist)" != 0 ] && grep -q 'gon no puede leer /etc/goncloud/accounting.env' "$T/salida-checklist" || fail "el checklist no vio que gon no lee el env"
+rm -f "$T/su-niega"
 cp "$T/cron/gon" "$T/gon.bueno"; cp "$T/cron/root" "$T/root.bueno"
 printf '0 5 * * * /mnt/data/appdata/accounting/scripts/audit_postage.py >> /l 2>&1\n' >> "$T/cron/gon"
 [ "$(correr checklist)" != 0 ] && grep -q 'sin envolver' "$T/salida-checklist" || fail "el checklist no vio una línea sin envolver"
@@ -121,17 +132,41 @@ cp "$T/cron/root" "$T/root.malo"
 cmp -s "$T/cron/root" "$T/root.malo" || fail "quitó la única vigilante"
 cp "$T/gon.bueno" "$T/cron/gon"; cp "$T/root.bueno" "$T/cron/root"
 
+sed 's/^\([^#].*spapi_vigilante.*\)$/#\1/' "$T/gon.bueno" > "$T/cron/gon"
+grep -q '^#.*spapi_vigilante' "$T/cron/gon" || fail "la prueba no pudo comentar la vigilante de gon"
+printf '30 7 * * * /usr/bin/flock -n /tmp/spapi-vigilante.lock docker exec orbit-app-1 python -m app.cli spapi_vigilante >> /l 2>&1\n' >> "$T/cron/root"
+cp "$T/cron/root" "$T/root.malo"; cp "$T/cron/gon" "$T/gon.comentada"
+[ "$(correr instala)" != 0 ] && grep -q 'no quito la única copia' "$T/salida-instala" || fail "con la vigilante de gon comentada debía negarse a quitar la de root"
+cmp -s "$T/cron/root" "$T/root.malo" && cmp -s "$T/cron/gon" "$T/gon.comentada" || fail "escribió pese a la vigilante comentada"
+cp "$T/gon.bueno" "$T/cron/gon"; cp "$T/root.bueno" "$T/cron/root"
+
 printf '0 5 * * * /x/algo_nuevo.sh >> /l 2>&1\n' >> "$T/cron/gon"; cp "$T/cron/gon" "$T/gon.malo"
 [ "$(correr instala)" != 0 ] || fail "una línea sin frase no detuvo la instalación"
+grep -q 'algo_nuevo' "$T/salida-instala" || fail "el error no dice qué línea falta: $(tail -3 "$T/salida-instala")"
 cmp -s "$T/cron/gon" "$T/gon.malo" || fail "escribió pese a la línea sin frase"
 cp "$T/gon.bueno" "$T/cron/gon"
 
+sleep 1
+cp "$T/root.bueno" "$T/cron/root"; cp "$T/gon.bueno" "$T/cron/gon"
+printf '0 5 * * * /mnt/data/appdata/accounting/scripts/audit_postage.py >> /l 2>&1\n' >> "$T/cron/gon"
+cp "$T/cron/gon" "$T/gon.medio"
+[ "$(correr instala)" = 0 ] || { cat "$T/salida-instala"; fail "la instalación con un cambio en medio falló"; }
+[ "$(ls "$T/RESP" | wc -l | tr -d ' ')" = 2 ] || fail "debía haber dos respaldos"
+cmp -s "$T/cron/gon" "$T/gon.medio" && fail "la instalación del medio no envolvió la línea nueva"
 [ "$(correr rollback)" = 0 ] || { cat "$T/salida-rollback"; fail "el rollback no salió 0"; }
+cmp -s "$T/cron/gon" "$T/gon.medio" || fail "el rollback no tomó el respaldo más reciente"
+rm -rf "$T/RESP/$(ls "$T/RESP" | tail -1)"
+[ "$(correr rollback)" = 0 ] || { cat "$T/salida-rollback"; fail "el segundo rollback no salió 0"; }
 cmp -s "$T/cron/root" "$FX/root.crontab" || fail "el rollback no restauró el crontab de root"
 cmp -s "$T/cron/gon" "$FX/gon.crontab" || fail "el rollback no restauró el crontab de gon"
 cmp -s "$T/CROND/goncloud_odoo_backup" "$FX/cron.d/goncloud_odoo_backup" || fail "el rollback no restauró goncloud_odoo_backup"
 [ -e "$T/CROND/cron-avisa" ] && fail "el rollback no quitó /etc/cron.d/cron-avisa"
 [ -x "$T/BIN/cron-avisa" ] || fail "el rollback no debe tocar el binario"
+[ "$(FAKE_CORRUPT=1 correr instala)" != 0 ] && grep -q 'no quedó como esperaba' "$T/salida-instala" || fail "instala no verificó el crontab escrito"
+rm -rf "$T/RESP"; mkdir -p "$T/RESP/20990101-000000"
+: > "$T/RESP/20990101-000000/crontab-root"; cp "$FX/gon.crontab" "$T/RESP/20990101-000000/crontab-gon"
+[ "$(correr rollback)" = 0 ] || fail "el rollback con crontab de root vacío falló"
+grep -q 'crontab -r -u root' "$FAKE_LOG" && [ ! -e "$T/cron/root" ] || fail "el rollback de un crontab vacío debía usar crontab -r"
 rm -rf "$T/RESP"; mkdir "$T/RESP"
 [ "$(correr rollback)" != 0 ] || fail "el rollback sin respaldo debe fallar"
 

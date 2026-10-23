@@ -29,13 +29,13 @@ for o in $(objetivos); do
   f=${f/usuario\//crontab-}
   vivo "$o" > "$S/viejo/$f"
   if ! envuelve --destino "$o" --cuenta < "$S/viejo/$f" > "$S/nuevo/$f" 2> "$S/cuenta"; then
-    log "ERROR: no pude envolver $o; no cambié nada"
+    log "ERROR: no pude envolver $o; no cambié nada: $(tail -1 "$S/cuenta")"
     exit 1
   fi
   cmp -s "$S/viejo/$f" "$S/nuevo/$f" || echo "$o" >> "$S/cambian"
   printf '%s %s\n' "$o" "$(cat "$S/cuenta")" >> "$S/resumen"
 done
-if grep -q spapi_vigilante "$S/viejo/crontab-root" && ! grep -q spapi_vigilante "$S/nuevo/crontab-gon"; then
+if grep -q spapi_vigilante "$S/viejo/crontab-root" && ! { grep -v '^[[:space:]]*#' "$S/nuevo/crontab-gon" | grep -q spapi_vigilante; }; then
   log "ERROR: root tiene spapi_vigilante y gon no; no quito la única copia"
   exit 1
 fi

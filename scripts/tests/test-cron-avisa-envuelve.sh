@@ -7,7 +7,7 @@ set -u
 cd "$(dirname "$0")/../.." || exit 1
 [ -f scripts/gonserver/cron-avisa-envuelve.py ] || { echo "FAIL: falta cron-avisa-envuelve.py"; exit 1; }
 
-python3 -I - "$PWD" <<'PY'
+python3 -I -B - "$PWD" <<'PY'
 import importlib.util
 import os
 import re

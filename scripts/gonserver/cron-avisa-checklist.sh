@@ -1,6 +1,7 @@
 #!/bin/bash
 # Sale 0 solo si: el binario está, la carpeta de estado es root:gon 2775, ninguna línea activa
-# fuera de NO_ENVOLVER queda sin envolver y `cron-avisa --revisa --seco` sale 0 o 1.
+# fuera de NO_ENVOLVER queda sin envolver, `cron-avisa --revisa --seco` sale 0 o 1 y gon puede
+# leer el archivo de credenciales de los avisos.
 # Solo lee; no corre ninguna tarea del cron.
 set -eu
 . "$(dirname "$0")/cron-avisa-comun.sh"
@@ -32,6 +33,15 @@ done
 rc=0
 "$BIN/cron-avisa" --revisa --seco > "$D/revisa" 2>&1 || rc=$?
 if [ "$rc" = 0 ] || [ "$rc" = 1 ]; then ok "cron-avisa --revisa --seco salió $rc"; else no "cron-avisa --revisa --seco salió $rc"; head -3 "$D/revisa"; fi
+
+ENV=$(sed -n 's/.*"CRON_AVISA_ENV", "\([^"]*\)".*/\1/p' "$D/cron-avisa")
+if [ -z "$ENV" ]; then
+  no "no encontré el CRON_AVISA_ENV por omisión en cron-avisa"
+elif su -s /bin/sh gon -c "test -r '$ENV'"; then
+  ok "gon puede leer $ENV, así que sus avisos de fallo llegan"
+else
+  no "gon no puede leer $ENV; sus tareas envueltas no avisarían cuando fallan"
+fi
 
 exit "$mal"
 REMOTO
