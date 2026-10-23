@@ -1,0 +1,1 @@
+10 1 * * * root /usr/local/bin/bridge_report_derived_zero.sh

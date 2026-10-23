@@ -1,0 +1,1 @@
+0 9 * * * root /usr/local/bin/vigila-respaldos >> /var/log/vigila-respaldos.log 2>&1

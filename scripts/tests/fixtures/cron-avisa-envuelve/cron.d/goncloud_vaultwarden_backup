@@ -1,0 +1,11 @@
+# GONCLOUD Vaultwarden — Backup diario
+# Respalda db.sqlite3 (credenciales encriptadas), rsa_key.pem (firma JWT)
+# y docker-compose.yml. Permisos del backup: 600 (contiene secretos).
+# Se ejecuta a las 02:15 UTC, intercalado con los backups de bridge (02:00)
+# y el WAL checkpoint (02:30).
+
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
+
+# min  hour  dom  month  dow   user  command
+15     2     *    *      *     root  /mnt/data/appdata/vaultwarden/vaultwarden_backup.sh >> /mnt/data/appdata/vaultwarden/backup.log 2>&1

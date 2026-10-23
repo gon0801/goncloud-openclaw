@@ -1,0 +1,38 @@
+# Observabilidad del bridge (D5.8, D6.9, D6.10 de la auditoria 2026-05-08).
+#
+# Va versionado en el repo a proposito. La leccion del apagon del 2026-08-24:
+# la infra que vive solo en el servidor se pierde en el siguiente recreate y
+# falla en silencio. Instalar con:
+#   cp tools/cron.d/goncloud_bridge_observability /etc/cron.d/
+#
+# Los scripts se despliegan a /mnt/data/appdata/bridge/tools/ y deben ser
+# ejecutables (chmod +x).
+
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
+
+# D5.8 — muestreo de recursos por contenedor, con rotacion a 10k lineas.
+*/5 * * * * root /mnt/data/appdata/bridge/tools/docker_stats_log.sh >> /mnt/data/appdata/bridge/data/docker_stats.log 2>&1
+
+# D6.10 — prueba mensual de restore: integrity_check + conteo de tablas y filas
+# sobre el backup mas reciente. Un backup que nunca se restauro no es un backup.
+# Corre el dia 1 a las 04:00 UTC, despues del backup diario de las 02:00.
+0 4 1 * * root /mnt/data/appdata/bridge/tools/bridge_restore_test.sh >> /mnt/data/appdata/bridge/data/restore_test.log 2>&1
+
+# Ventas de marketplace facturadas en $0. Amazon devuelve OrderTotal=0 en las
+# Flex MX `Pending` y lo llena despues sin cambiar de estado; si el segundo
+# evento no llega, el SO queda en cero para siempre. Dos de junio de 2026
+# estuvieron TRES MESES asi y se encontraron de casualidad.
+# Umbral 7 dias: p99 de la espera normal = 4.1d (1 falso positivo en 103).
+0 13 * * * root docker exec bridge-api python3 /data/odoo_sos_en_cero.py >> /mnt/data/appdata/bridge/data/sos_en_cero.log 2>&1
+
+# D6.9 — sync offsite. Usa el remote `onedrive` que ya existe y esta
+# autenticado, en vez de crear uno nuevo: no habia motivo para pedir
+# credenciales nuevas solo por el nombre.
+#
+# Son ~16 GiB la primera corrida y ~2.4 GiB por noche. El script usa `sync`,
+# asi que el remoto espeja la ventana de 7 dias del backup local y queda
+# acotado en ~17 GiB en vez de crecer sin tope.
+#
+# 03:30 UTC, despues del backup local de las 02:00.
+30 3 * * * root RCLONE_REMOTE=onedrive /mnt/data/appdata/bridge/tools/bridge_backup_offsite.sh >> /mnt/data/appdata/bridge/data/backup_offsite.log 2>&1

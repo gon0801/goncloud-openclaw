@@ -1,0 +1,5 @@
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+# Refresh token ML cada 6 horas (00:05, 06:05, 12:05, 18:05 UTC)
+5 */6 * * * gon /mnt/data/appdata/bridge/tools/meli_refresh_tokens.sh >> /mnt/data/appdata/bridge/data/meli_token_refresh.log 2>&1

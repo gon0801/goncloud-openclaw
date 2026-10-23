@@ -211,7 +211,7 @@ def main(argv: list[str]) -> int:
     p.add_argument("--seco", action="store_true")
     a = p.parse_args(propios)
     carpeta = Path(os.environ.get("CRON_AVISA_ESTADO", "/var/lib/goncloud-cron"))
-    env = Path(os.environ.get("CRON_AVISA_ENV", "/mnt/data/appdata/orbit/secrets/accounting.env"))
+    env = Path(os.environ.get("CRON_AVISA_ENV", "/etc/goncloud/accounting.env"))
     api = os.environ.get("CRON_AVISA_API", "https://api.telegram.org")
     if a.revisa:
         return revisa(a.seco, carpeta, env, api)
