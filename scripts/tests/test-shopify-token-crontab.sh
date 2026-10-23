@@ -74,39 +74,49 @@ chmod +x "$T"/bin/* "$T/renueva.sh"
 export FAKE_STATE=$T/lcstate SHOPIFY_TOKEN_RAIZ=$T/raiz
 export FAKE_LOADED=$T/loaded FAKE_LC_LOG=$T/lc.log FAKE_CRON_TRAMPA=$T/trampa
 export FAKE_CLAW=$T/claw FAKE_CLAW_LOG=$T/claw.log FAKE_RENUEVA_LOG=$T/renueva.log
-export PATH="$T/bin:$PATH" OPENCLAW_BIN=$T/bin/openclaw LAUNCHCTL_BIN=$T/bin/launchctl RENUEVA=$T/renueva.sh
+export PATH="$T/bin:$PATH" OPENCLAW_BIN=$T/bin/openclaw LAUNCHCTL_BIN=$T/bin/launchctl SHOPIFY_TOKEN_ESPERA=3
 export LAUNCH_AGENTS_DIR=$T/LA
 export SHOPIFY_TOKEN_FILE=$T/token.txt SHOPIFY_APP_JSON=$T/app.json SHOPIFY_TOKEN_LOG=$T/shopify.log
 printf '{"store":"tienda-falsa.myshopify.com"}' > "$T/app.json"
 printf 'tok' > "$T/token.txt"
 PL=$T/LA/ai.goncloud.shopify-token.plist
-reset() { rm -f "$FAKE_LOADED" "$PL"; echo on > "$FAKE_CLAW"; : > "$FAKE_LC_LOG"; : > "$FAKE_CLAW_LOG"
+INST=$T/raiz/shopify-token
+copia_motor() {
+  local m=$1/.motor/tmp/despliega-shopify-token-02-A/scripts/mac
+  rm -rf "$1"; mkdir -p "$m"; cp -R "$D" "$m/shopify-token"; cp "$D/../ai.goncloud.shopify-token.plist" "$m/"
+  cp "$T/renueva.sh" "$m/shopify-token/renueva.sh"
+}
+COPIA=$T/mc/.motor/tmp/despliega-shopify-token-02-A/scripts/mac/shopify-token
+despliega() { copia_motor "$T/mc"; bash "$COPIA/desplegar.sh"; }
+reset() { rm -f "$FAKE_LOADED" "$PL" "$FAKE_STATE"/runs "$FAKE_STATE"/rc; rm -rf "$T/raiz"; echo on > "$FAKE_CLAW"; : > "$FAKE_LC_LOG"; : > "$FAKE_CLAW_LOG"
           : > "$FAKE_RENUEVA_LOG"; unset FAKE_RENUEVA_RC FAKE_HTTP; }
 cargas() { grep -c '^bootstrap ' "$FAKE_LC_LOG"; }
 
 # (1) desplegar: plist con 00:05 y 12:05 que corre renueva.sh, cargado, renueva corrió, claw off
 reset
-bash "$D/desplegar.sh" >"$T/out" 2>&1 || fail "desplegar debía salir 0: $(cat "$T/out")"
+despliega >"$T/out" 2>&1 || fail "desplegar debía salir 0: $(cat "$T/out")"
 [ -f "$PL" ] || fail "desplegar: no escribió el plist"
 plutil -lint "$PL" >/dev/null 2>&1 || ! command -v plutil >/dev/null || fail "desplegar: plist inválido"
 grep -q '__HOME__\|__RENUEVA__' "$PL" && fail "desplegar: quedaron marcadores sin llenar"
-python3 -I - "$PL" "$T/renueva.sh" <<'PY' || fail "desplegar: el plist no tiene Label/horario/programa esperados"
+python3 -I - "$PL" "$INST/renueva.sh" <<'PY' || fail "desplegar: el plist no tiene Label/horario/programa esperados"
 import plistlib, sys
 d = plistlib.load(open(sys.argv[1], "rb"))
 assert d["Label"] == "ai.goncloud.shopify-token"
 assert sorted((x["Hour"], x["Minute"]) for x in d["StartCalendarInterval"]) == [(0, 5), (12, 5)]
-assert sys.argv[2] in d["ProgramArguments"]
+assert d["ProgramArguments"] == ["/bin/bash", sys.argv[2]]
 PY
 [ -f "$FAKE_LOADED" ] || fail "desplegar: no cargó el agente"
 grep -q "^bootstrap gui/$(id -u) $PL" "$FAKE_LC_LOG" || fail "desplegar: no llamó a launchctl bootstrap gui/<uid> <plist>"
-[ "$(wc -l < "$FAKE_RENUEVA_LOG" | tr -d " ")" = 1 ] || fail "desplegar: renueva.sh debía correr una vez"
+grep -q '^kickstart -k gui/' "$FAKE_LC_LOG" || fail "desplegar: no llamó a launchctl kickstart -k"
+[ "$(wc -l < "$FAKE_RENUEVA_LOG" | tr -d " ")" = 1 ] || fail "desplegar: renueva.sh debía correr una vez (por launchd)"
+[ -f "$INST/renueva.sh" ] || fail "desplegar: no instaló la receta en $INST"
 [ "$(cat "$FAKE_CLAW")" = off ] || fail "desplegar: no desactivó el cron de claw"
 grep -q 'cron disable dbc3eee3-28d4-4043-bee9-8fd584341bf8' "$FAKE_CLAW_LOG" || fail "desplegar: no llamó a openclaw cron disable con el id"
 echo "ok 1 desplegar"
 
 # (2) idempotencia: ya cargado → bootout y bootstrap, una sola carga viva, mismo plist
 cp "$PL" "$T/pl1"; : > "$FAKE_LC_LOG"
-bash "$D/desplegar.sh" >"$T/out" 2>&1 || fail "desplegar (2da) debía salir 0: $(cat "$T/out")"
+despliega >"$T/out" 2>&1 || fail "desplegar (2da) debía salir 0: $(cat "$T/out")"
 grep -q '^bootout ' "$FAKE_LC_LOG" || fail "idempotencia: no hizo bootout del agente ya cargado"
 [ "$(cargas)" = 1 ] || fail "idempotencia: debía hacer un bootstrap"
 [ -f "$FAKE_LOADED" ] || fail "idempotencia: el agente quedó descargado"
@@ -140,7 +150,7 @@ bash "$D/rollback.sh" >/dev/null 2>&1 || fail "rollback repetido debía salir 0"
 echo "ok 5 rollback"
 
 # (6) si renueva.sh falla, desplegar sale ≠0 y NO desactiva el cron de claw
-reset; FAKE_RENUEVA_RC=1 bash "$D/desplegar.sh" >/dev/null 2>&1 && fail "desplegar: debía salir ≠0 si renueva falla"
+reset; FAKE_RENUEVA_RC=1 despliega >/dev/null 2>&1 && fail "desplegar: debía salir ≠0 si renueva falla"
 [ "$(cat "$FAKE_CLAW")" = on ] || fail "desplegar: desactivó claw aunque renueva falló"
 echo "ok 6 renueva falla"
 
@@ -149,14 +159,8 @@ echo "ok 6 renueva falla"
 echo "ok 7 sin crontab"
 
 # (8) la copia del motor desaparece: el plist no depende de ella
-copia_motor() {
-  local m=$1/.motor/tmp/despliega-shopify-token-02-A/scripts/mac
-  mkdir -p "$m"; cp -R "$D" "$m/shopify-token"; cp "$D/../ai.goncloud.shopify-token.plist" "$m/"
-  cp "$T/renueva.sh" "$m/shopify-token/renueva.sh"
-}
-reset; unset RENUEVA; rm -rf "$T/raiz" "$T/mc"; : > "$FAKE_STATE/out"; rm -f "$FAKE_STATE"/runs "$FAKE_STATE"/rc
-copia_motor "$T/mc"
-bash "$T/mc/.motor/tmp/despliega-shopify-token-02-A/scripts/mac/shopify-token/desplegar.sh" >"$T/out" 2>&1 \
+reset; unset RENUEVA
+despliega >"$T/out" 2>&1 \
   || fail "copia desaparece: desplegar debía salir 0: $(cat "$T/out")"
 rm -rf "$T/mc"
 python3 -I - "$PL" <<'PY' || fail "copia desaparece: el plist apunta a rutas que no existen o dentro de /.motor/"

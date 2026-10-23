@@ -2,7 +2,7 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <!--
   Renovación automática del token de Shopify (scripts/mac/shopify-token/renueva.sh), 00:05 y 12:05
-  hora de la Mac. Plantilla: __HOME__ y __RENUEVA__ los llena scripts/mac/shopify-token/desplegar.sh,
+  hora de la Mac. Plantilla: __HOME__ y __RENUEVA__ (la ruta en $RAIZ/shopify-token) los llena scripts/mac/shopify-token/desplegar.sh,
   que lo carga con `launchctl bootstrap gui/$(id -u)`. No usa crontab (en macOS se queda esperando
   un permiso de privacidad que nadie contesta).
   Remove: scripts/mac/shopify-token/rollback.sh
