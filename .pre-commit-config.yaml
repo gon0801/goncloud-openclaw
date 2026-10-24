@@ -1,54 +1,13 @@
-# Generado y mantenido por quality-kit (init-repo.ps1) -- QUALITY-KIT MANAGED.
-# Si este archivo es EXACTAMENTE igual a lo que init-repo.ps1 generaria hoy
-# para el stack detectado, es seguro de volver a generar cada vez que
-# corre. Si le agregaste algo propio directo aca (una linea "exclude:", un
-# comentario explicandola, un hook nuevo, args editados), init-repo.ps1 lo
-# va a detectar y va a dejar el archivo tal cual esta, avisando -- nunca
-# se pisa una personalizacion en silencio. Para sumar algo propio de forma
-# permanente, agregalo directo en este archivo (no hace falta un archivo
-# aparte: pre-commit no fusiona varios archivos de config de todas formas).
-#
-# Este bloque base (pre-commit-hooks) se incluye SIEMPRE, sin importar el
-# stack detectado -- son chequeos genericos de higiene de archivo que
-# tienen sentido en cualquier repo.
 repos:
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1
+    hooks:
+      - id: gitleaks
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
     hooks:
-      # exclude agregado 2026-09-12: `workspace-*/memory/` y `agents/*/sessions/` no son
-      # archivos escritos por nadie — el cron "auto: snapshot .openclaw" los vuelca desde el
-      # gateway cada ~2 h. Arreglarles el whitespace no sirve: el proximo snapshot los
-      # reescribe igual y el hook vuelve a fallar. Medido: 6 corpus de memoria dejaban el CI
-      # en rojo por esto, sin ninguna relacion con el cambio que se estaba revisando.
-      # Es la misma trampa que el SKILL.md desviado: no se corrige el artefacto generado,
-      # se corrige el generador o se lo excluye.
-      # exclude ampliado 2026-09-18: `tls/` es la misma trampa. El snapshot del gateway
-      # volco ahi el binario de lego (66 MB), su zip, su CHANGELOG y la cuenta ACME. El
-      # CHANGELOG trae whitespace sobrante y el account.json no termina en salto de linea,
-      # asi que los dos hooks los "arreglaban" y dejaban el CI en rojo. Medido: tres
-      # corridas seguidas de main en rojo por esto, incluidas las de dos PRs ajenos que se
-      # integraron despues y no tenian nada que ver. Son artefactos vendidos y generados,
-      # no archivos que alguien escriba: se excluyen, no se corrigen. Quitarlos del repo
-      # los borraria del disco del gateway en el siguiente pull y con ellos la renovacion
-      # de certificados, asi que siguen versionados a proposito.
-      - id: trailing-whitespace
-        exclude: '^(workspace-[^/]+/memory/|agents/[^/]+/sessions/|tls/)'
-      - id: end-of-file-fixer
-        exclude: '^(workspace-[^/]+/memory/|agents/[^/]+/sessions/|tls/)'
       - id: check-merge-conflict
       - id: check-added-large-files
         exclude: '^tls/'
       - id: check-json
       - id: check-yaml
-  # Hook propio, agregado 2026-10-13 (SUA-00). Lint y formato solo para los modulos
-  # nuevos de SUA. `files` lo acota: el legado de scripts/ no se reformatea. El alcance
-  # se repite en ruff.toml (`include`) para que `ruff check` a mano mire lo mismo.
-  # La version es la del ruff instalado en la Mac, para que el hook y la corrida a
-  # mano formateen igual.
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.16.8
-    hooks:
-      - id: ruff-check
-        files: ^(scripts/sistema_agentes/|scripts/tests/test-sistema-agentes-(contrato|importar|sombra|derivar)\.py|scripts/agent-work/(contexto|avisar|reporte|merge|proyeccion)\.py|scripts/tests/test-agent-work-(contexto|avisar|reporte|merge|proyeccion)\.py)
-      - id: ruff-format
-        files: ^(scripts/sistema_agentes/|scripts/tests/test-sistema-agentes-(contrato|importar|sombra|derivar)\.py|scripts/agent-work/(contexto|avisar|reporte|merge|proyeccion)\.py|scripts/tests/test-agent-work-(contexto|avisar|reporte|merge|proyeccion)\.py)
