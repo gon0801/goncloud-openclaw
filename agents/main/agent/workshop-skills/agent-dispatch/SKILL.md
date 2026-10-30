@@ -9,7 +9,7 @@ Route work to this Gateway's agents and collect complete results. Main orchestra
 
 ## Chain dispatch (brief / "-saikit" lane)
 
-This chain (`sessions_spawn` to implementer, verifier and reviewer) is how work is dispatched; it runs on this Mini.
+Choose the agents and checks that provide useful evidence about the requested behavior or its risk. The examples below describe earlier runs; their role counts and review limits do not impose a quota on this task. The change is reviewed by a model different from its implementer. Dispatch runs on this Mini.
 
 0. Multi-PR rounds need delivery sequencing: an external reviewer re-reading an OLD brief can race the implementer's push (it re-read the unchanged brief file, saw old PR heads, and re-stamped its previous verdict instead of reviewing the fixes — verified 2026-09-13). Write the brief file pointing at the NEW head SHAs, list the per-finding commits, and only then deliver; if a reviewer reports "nothing new", compare the PR heads it cites against the actual pushed heads before dispatching fixes.
 
@@ -25,9 +25,9 @@ This chain (`sessions_spawn` to implementer, verifier and reviewer) is how work 
 3. Reviewer reviews and reports; it never applies a fix. A defect it finds reopens the previous role — say so in the dispatch. Never let one role silently redo another's work, and never substitute a role you consider broken.
    - Completion: the reply is a verdict (approved / approved with observations / rejected) with file:line, or the reopened role's new commit.
 
-4. Require evidence in the repo, not in the reply: mutation tables, logs, revalidation notes under `.saikit/scratch/<task>/`, with the module under test left identical to the commit.
+4. Keep the evidence that helps assess the changed behavior or its risk, using the location agreed for the task. Record the revision it supports.
    - Always unmark a session whose chain ended or was abandoned (`set-environment -t <session> -u OPENCLAW_WATCH`): a marked session that outlives its chain keeps waking you for nothing.
-   - A late fix commit (a review-round patch) invalidates the evidence written before it: refresh the evidence to the final tree — re-run the battery with the repo hook and regenerate the blast with the literal new output (blast-21.4.json precedent, 2026-09-13), update the README/TSV counts, keep TSV rows append-only (new row, never rewrite). A reviewer rejects evidence that still describes the pre-fix tree (verified: 21.4r1 patch touched hook+tests but not README/blast/TSV; the refresh commit was the reviewer's required correction).
+   - A late fix commit (a review-round patch) invalidates evidence affected by that fix: refresh the evidence affected by the fix with checks that provide useful information about the final tree. A reviewer rejects evidence that still describes the pre-fix tree (verified: 21.4r1 patch touched hook+tests but not README/blast/TSV; the refresh commit was the reviewer's required correction).
    - Completion: evidence files exist and `git diff --quiet <module>` is clean at the end.
 
 5. On a PR-extension task, have the role confirm the working branch is the PR's head branch (`git branch --show-current`) before committing: a commit on another branch does not extend the PR, and the mistake is silent.

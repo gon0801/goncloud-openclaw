@@ -45,8 +45,8 @@ Corre `<cli> --help` antes de usar un flag que no hayas visto en este turno.
 **Disciplina de tipos.** Cuándo: un estado ilegal es representable en tu tipo. Regla: hazlo irrepresentable; parsea en la frontera; nada de `any` sin justificación escrita.
 **Idempotencia.** Cuándo: la operación escribe, envía o muta. Regla: pregunta "¿si corre dos veces?", "¿si murió a la mitad?" y "¿y si corre dos veces al mismo tiempo (concurrencia)?" — el segundo run no debe duplicar ni corromper.
 **Migra llamadores y borra lo viejo.** Cuándo: cambias la forma de una API o función. Regla: migra todos los llamadores y borra la API vieja en la misma ola; sin shims.
-**Arregla la causa raíz.** Cuándo: un bug (de lógica o un crash). Regla: reproduce primero; arregla la causa raíz; nada de nil-checks que silencian el crash. Cada bug arreglado incluye, en el mismo cambio, la prueba que lo habría atrapado (la regla de hierro del repo); un "check enfocado" de lint o tipos no la sustituye.
-**Unidades verificables.** Cuándo: después de un cambio. Regla: un cambio chico + un check enfocado por unidad; la ceremonia y la batería completa se corren UNA vez al final.
+**Arregla la causa raíz.** Cuándo: un bug (de lógica o un crash). Regla: reproduce primero; arregla la causa raíz; nada de nil-checks que silencian el crash. Usa una prueba de regresión cuando aporte evidencia útil del arreglo.
+**Unidades verificables.** Cuándo: después de un cambio. Regla: comprueba el comportamiento y el riesgo de cada cambio con las pruebas que aporten evidencia útil.
 **Escribe primero cómo lo usa el llamador.** Cuándo: diseñas una API. Regla: escribe la llamada del consumidor antes que la implementación — el uso define la forma.
 **Señales rojas de diseño.** Cuándo: parámetros que se pasan sin usarse, o flags booleanos que se multiplican. Regla: son señales de que el modelo está mal; rediseña.
 **Fricción repetida = rediseña, no parches.** Cuándo: topas con el mismo problema por segunda vez. Regla: el problema es la estructura, no el patch; rediseña.
@@ -59,7 +59,7 @@ Never assume a toolchain. Read the repo to learn how it checks itself, then use 
 - Lockfile tells you the package manager (`bun.lock` → bun, `pnpm-lock.yaml` → pnpm, `package-lock.json` → npm, `yarn.lock` → yarn, etc.).
 - CI config (`.github/workflows`, `.gitlab-ci.yml`, etc.) is the source of truth for the commands that must pass.
 
-From those, identify the repo's own **type-check / build / test / lint** commands: run focused checks while editing; leave the full battery to the verifier.
+From those, identify the repo's own **type-check / build / test / lint** commands: choose checks that provide useful evidence about the behavior and risk of the change.
 
 ## Batch your evidence
 

@@ -42,7 +42,7 @@ No afirmes exito sin evidencia. Pega el comando y su salida.
 
 ## Verification
 
-Do NOT re-run the full test suite: the verifier already did and its evidence is in the turn. Re-run ONLY a check whose result you have concrete reason to distrust, and say why. Your job is the diff: correctness, consistency, reuse, security. For schema/data-model changes, confirm a corresponding migration was generated and that it matches intent (no destructive drops unless deliberate).
+Use the verifier's evidence and run further checks when they provide useful evidence about the changed behavior or its risk. Your job is the diff: correctness, consistency, reuse, security. For schema/data-model changes, confirm a corresponding migration was generated and that it matches intent (no destructive drops unless deliberate).
 
 ## What to verify
 

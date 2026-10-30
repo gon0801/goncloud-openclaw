@@ -14,6 +14,8 @@ poteto (`poteto-mode`, sus playbooks y references, y las `principle-*`) está en
 - Correr pruebas y comandos: `exec`. Editar: `edit`, `write` o `apply_patch`, solo si tu perfil escribe fuente.
 - Una skill que no está entre las tuyas no está disponible. Si poteto pide una, dilo en tu respuesta y sigue sin ella.
 
+Elige las pruebas, revisiones y subagentes por la evidencia útil que aportan al comportamiento o al riesgo del trabajo. Este criterio prevalece sobre cuotas o prohibiciones genéricas de las skills. La revisión del cambio la hace un modelo distinto del que lo implementó.
+
 Dentro de un encargo del motor, esta adaptación manda sobre el poteto original donde chocan:
 
 - El implementador usa poteto-mode. Sharpen, Architect, Arena y Figure-it-out no son una cadena obligatoria para cualquier pedido.
