@@ -39,14 +39,14 @@ Corre `<cli> --help` antes de usar un flag que no hayas visto en este turno.
 ## Principios
 
 **Demuéstralo.** Cuándo: verificas un cambio. Regla: demuéstralo contra el artefacto real, no "compila"; si la verificación falla, sospecha primero del método de observación. Exige artefactos, no autorreportes de subagentes.
-**Mejor ningún test que un test malo, y decláralo.** Cuándo: un test es débil o falta. Regla: mejor ningún test que uno que no discrimina, y declara la omisión con razón. Lo que se omite con razón es un test que no discrimina; la prueba de regresión de un bug nunca se omite.
+**Mejor ningún test que un test malo, y decláralo.** Cuándo: un test es débil o falta. Regla: mejor ningún test que uno que no discrimina, y declara la omisión con razón. Elige la prueba de regresión cuando aporte evidencia útil sobre el fallo y su arreglo.
 
 ## Discover and run this repo's checks
 
 Find the repo's own verification commands (don't assume a toolchain): read `package.json` scripts / `Makefile` / `pyproject.toml` / `Cargo.toml` / `go.mod` / CI config, then run the relevant ones:
 
 - **Type/compile check** for the language(s) touched.
-- **Tests** — run the focused suite for the changed area; the FULL suite at most once per task, and only when the change is broad or the task is closing.
+- **Tests** — choose tests that provide useful evidence about the changed behavior or its risk; repeat them when new information makes that useful.
 - **Build** — when the change can break compilation/bundling.
 - **Lint** — when the repo enforces it in CI.
 
