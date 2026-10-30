@@ -47,11 +47,11 @@ class Manifiesto(unittest.TestCase):
         manifiesto, _ = real()
         generaciones = contexto.leer_json(contexto.GENERACIONES)
         contexto.comprobar_generacion(manifiesto, generaciones)
-        # La generación vigente es la 2 (G5d); la 1 queda fijada como historia.
+        # La generación vigente es la 3; la 1 y la 2 quedan fijadas como historia.
         self.assertEqual(
             (manifiesto["generation"], manifiesto["source"]),
             (
-                2,
+                3,
                 {
                     "repo": "https://github.com/poteto/pstack-claude",
                     "commit": "990cd7b02ac6f3e8f825716f7c72e2f06d8f4a92",
@@ -68,11 +68,11 @@ class Manifiesto(unittest.TestCase):
             contexto.GeneracionSinSubir, "ya está fijada con otro contenido: sube"
         ):
             contexto.comprobar_generacion(otro, generaciones)
-        otro["generation"] = 3
+        otro["generation"] = 4
         otro["digest"] = contexto.digest_de(otro)
-        with self.assertRaisesRegex(contexto.GeneracionSinSubir, "la generación 3 no está fijada"):
+        with self.assertRaisesRegex(contexto.GeneracionSinSubir, "la generación 4 no está fijada"):
             contexto.comprobar_generacion(otro, generaciones)
-        contexto.comprobar_generacion(otro, {**generaciones, "3": otro["digest"]})
+        contexto.comprobar_generacion(otro, {**generaciones, "4": otro["digest"]})
 
     def test_the_texts_of_g_are_the_ones_the_manifest_pins(self):
         manifiesto, _ = real()
