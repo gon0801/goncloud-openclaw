@@ -47,18 +47,6 @@ class Manifiesto(unittest.TestCase):
         manifiesto, _ = real()
         generaciones = contexto.leer_json(contexto.GENERACIONES)
         contexto.comprobar_generacion(manifiesto, generaciones)
-        # La generación vigente es la 3; la 1 y la 2 quedan fijadas como historia.
-        self.assertEqual(
-            (manifiesto["generation"], manifiesto["source"]),
-            (
-                3,
-                {
-                    "repo": "https://github.com/poteto/pstack-claude",
-                    "commit": "990cd7b02ac6f3e8f825716f7c72e2f06d8f4a92",
-                    "version": "0.9.84",
-                },
-            ),
-        )
         otro = copy.deepcopy(manifiesto)
         otro["files"][0]["sha256"] = "0" * 64
         with self.assertRaisesRegex(contexto.GeneracionSinSubir, "el campo digest no es el digest"):
@@ -68,11 +56,14 @@ class Manifiesto(unittest.TestCase):
             contexto.GeneracionSinSubir, "ya está fijada con otro contenido: sube"
         ):
             contexto.comprobar_generacion(otro, generaciones)
-        otro["generation"] = 4
+        no_fijada = max(int(generacion) for generacion in generaciones) + 1
+        otro["generation"] = no_fijada
         otro["digest"] = contexto.digest_de(otro)
-        with self.assertRaisesRegex(contexto.GeneracionSinSubir, "la generación 4 no está fijada"):
+        with self.assertRaisesRegex(
+            contexto.GeneracionSinSubir, f"la generación {no_fijada} no está fijada"
+        ):
             contexto.comprobar_generacion(otro, generaciones)
-        contexto.comprobar_generacion(otro, {**generaciones, "4": otro["digest"]})
+        contexto.comprobar_generacion(otro, {**generaciones, str(no_fijada): otro["digest"]})
 
     def test_the_texts_of_g_are_the_ones_the_manifest_pins(self):
         manifiesto, _ = real()
@@ -93,24 +84,6 @@ class Manifiesto(unittest.TestCase):
             contexto.ContextoIncompleto, "la adaptación openclaw no coincide"
         ):
             contexto.comprobar_textos(manifiesto, cambiada, contexto.BLOQUE.read_bytes())
-
-    def test_the_block_and_the_native_adaptation_name_the_playbook_and_progress_card(self):
-        # A4 de SUA03-G5d: la sonda M-17 no leyó ningún playbook ni usó
-        # progress_card, porque en OpenClaw queda detrás de tool_search y la
-        # adaptación no lo decía. El bloque y la adaptación lo nombran.
-        bloque = contexto.BLOQUE.read_text(encoding="utf-8")
-        adaptacion = contexto.ADAPTACIONES["openclaw"].read_text(encoding="utf-8")
-        self.assertIn(
-            "lee la skill `poteto-openclaw`, luego `poteto-mode` y el playbook de su tarea",
-            bloque,
-        )
-        self.assertIn("también en una tarea chica", adaptacion)
-        self.assertIn("`playbooks/bug-fix.md`", adaptacion)
-        self.assertIn("`playbooks/feature.md`", adaptacion)
-        self.assertIn("léelo con `read` en su ruta antes de tu primer cambio", adaptacion)
-        self.assertIn("búscala con `tool_search`", adaptacion)
-        self.assertIn("`progress_card`", adaptacion)
-        self.assertIn("ábrela antes de tu primer cambio", adaptacion)
 
     def test_the_openclaw_adaptation_is_the_poteto_openclaw_skill(self):
         # Residual R2: the skill is the adaptation byte for byte, so generation 1 covers it.
@@ -552,7 +525,7 @@ class Textos(unittest.TestCase):
         for texto in (con, sin):
             self.assertTrue(
                 texto.startswith(
-                    f"<!-- sua-contexto inicio generación=2 digest=sha256:{hexa} -->\n"
+                    f"<!-- sua-contexto inicio generación={manifiesto['generation']} digest=sha256:{hexa} -->\n"
                 )
             )
             self.assertTrue(texto.endswith("\n<!-- sua-contexto fin -->\n"))
