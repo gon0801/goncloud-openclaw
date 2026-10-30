@@ -88,7 +88,7 @@ OpenBot no tiene recepción bidireccional comprobada (`recepcion` falsa en `dire
 
 ## Poteto
 
-Elige las pruebas, revisiones y subagentes por la evidencia útil que aportan al comportamiento o al riesgo del trabajo. Este criterio prevalece sobre cuotas o prohibiciones genéricas de las skills. La revisión del cambio la hace un modelo distinto del que lo implementó.
+Elige las pruebas, revisiones y subagentes por la evidencia útil que aportan al comportamiento o al riesgo del trabajo. Este criterio se aplica a las cantidades y cadenas de pruebas, revisiones y subagentes de las skills. Las reglas de seguridad, permisos y secretos se conservan. La revisión del cambio la hace un modelo distinto del que lo implementó.
 
 El implementador usa poteto-mode. Sharpen, Architect, Arena y Figure-it-out se usan cuando el trabajo los necesita; no son una cadena obligatoria ni hace falta un runbook previo. Una hipótesis del plan no es una prohibición. Solo una prohibición expresa, o una decisión que David se reservó, necesita su respuesta. Una nota de redacción no devuelve el encargo.
 

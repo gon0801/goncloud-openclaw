@@ -5,7 +5,7 @@ description: Léela antes de poteto-mode cuando hagas trabajo de ingeniería, re
 
 # poteto en OpenClaw
 
-poteto (`poteto-mode`, sus playbooks y references, y las `principle-*`) está entre tus skills. Léela con `read` en su ruta y sigue su playbook. Lo que poteto nombra, aquí:
+poteto (`poteto-mode`, sus playbooks y references, y las `principle-*`) está entre tus skills. Léela con `read` en su ruta. Lo que poteto nombra, aquí:
 
 - Leer una skill, un playbook o una reference: `read` en su ruta.
 - Si el trabajo necesita un playbook, elígelo en `poteto-mode` y léelo con `read` en su ruta antes de tu primer cambio.
@@ -14,7 +14,7 @@ poteto (`poteto-mode`, sus playbooks y references, y las `principle-*`) está en
 - Correr pruebas y comandos: `exec`. Editar: `edit`, `write` o `apply_patch`, solo si tu perfil escribe fuente.
 - Una skill que no está entre las tuyas no está disponible. Si poteto pide una, dilo en tu respuesta y sigue sin ella.
 
-Elige las pruebas, revisiones y subagentes por la evidencia útil que aportan al comportamiento o al riesgo del trabajo. Este criterio prevalece sobre cuotas o prohibiciones genéricas de las skills. La revisión del cambio la hace un modelo distinto del que lo implementó.
+Elige las pruebas, revisiones y subagentes por la evidencia útil que aportan al comportamiento o al riesgo del trabajo. Este criterio se aplica a las cantidades y cadenas de pruebas, revisiones y subagentes de las skills. Las reglas de seguridad, permisos y secretos se conservan. La revisión del cambio la hace un modelo distinto del que lo implementó.
 
 Dentro de un encargo del motor, esta adaptación manda sobre el poteto original donde chocan:
 

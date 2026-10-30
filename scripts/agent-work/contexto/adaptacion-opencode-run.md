@@ -2,7 +2,7 @@
 
 Este encargo trae poteto: la skill `poteto-mode` con sus playbooks y references, y las `principle-*`. Están en la carpeta `skills` que está junto a este archivo, dentro de la carpeta de la corrida. Antes de usar otra herramienta, carga `poteto-mode` con la herramienta `skill`. Usa un playbook cuando el trabajo lo necesita. Un playbook o una reference se abren con `read` en su ruta dentro de esa carpeta.
 
-Elige las pruebas, revisiones y subagentes por la evidencia útil que aportan al comportamiento o al riesgo del trabajo. Este criterio prevalece sobre cuotas o prohibiciones genéricas de las skills. La revisión del cambio la hace un modelo distinto del que lo implementó.
+Elige las pruebas, revisiones y subagentes por la evidencia útil que aportan al comportamiento o al riesgo del trabajo. Este criterio se aplica a las cantidades y cadenas de pruebas, revisiones y subagentes de las skills. Las reglas de seguridad, permisos y secretos se conservan. La revisión por otro modelo la coordina el director o el motor fuera de este trabajador.
 
 Lo que poteto nombra, aquí:
 

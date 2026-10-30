@@ -1,6 +1,6 @@
 {
   "schema": "agent-work.poteto.v1",
-  "generation": 5,
+  "generation": 6,
   "source": {
     "repo": "https://github.com/poteto/pstack-claude",
     "commit": "990cd7b02ac6f3e8f825716f7c72e2f06d8f4a92",
@@ -333,13 +333,13 @@
     },
     {
       "path": "skills/poteto-openclaw/SKILL.md",
-      "sha256": "2ed03e97d376ee153e471535d50f554bfed1bda9d56c7020632ef8c7df44921e"
+      "sha256": "a93e575b731a96e9f288ba487f1487a8bd68181c2c410b53805f8341bf7066fe"
     }
   ],
   "adaptations": {
-    "openclaw": "2ed03e97d376ee153e471535d50f554bfed1bda9d56c7020632ef8c7df44921e",
-    "opencode-run": "1709f8e6de79c2a135c41f00ed7d26edc5279c84c4914c1025c7b3d5e00ae7be"
+    "openclaw": "a93e575b731a96e9f288ba487f1487a8bd68181c2c410b53805f8341bf7066fe",
+    "opencode-run": "64d6cec04a78ae2db778ccb083d61961e508d5f121f0f92263e30e428405cb31"
   },
   "block": "1200b0e4012256ead39226c86fab657ad78d8fb8945f72eb0955364105256069",
-  "digest": "sha256:6ad7b8449820b6880f149b84440cb32569bc9b07359bb69e79beea5f54dbbcd0"
+  "digest": "sha256:347bedc57c21892768b77c267488c6cbee07ff283f83c46b0004f89e4280c205"
 }
