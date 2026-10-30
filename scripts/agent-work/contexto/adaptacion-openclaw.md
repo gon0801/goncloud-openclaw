@@ -13,3 +13,14 @@ poteto (`poteto-mode`, sus playbooks y references, y las `principle-*`) está en
 - Delegar: `sessions_spawn`. Empieza el `task` con `profile: <id>`, el perfil del hijo.
 - Correr pruebas y comandos: `exec`. Editar: `edit`, `write` o `apply_patch`, solo si tu perfil escribe fuente.
 - Una skill que no está entre las tuyas no está disponible. Si poteto pide una, dilo en tu respuesta y sigue sin ella.
+
+Dentro de un encargo del motor, esta adaptación manda sobre el poteto original donde chocan:
+
+- El implementador usa poteto-mode. Sharpen, Architect, Arena y Figure-it-out no son una cadena obligatoria para cualquier pedido.
+- No hace falta un runbook previo ni campos de aceptación para empezar.
+- No hay un juez adicional de bitácora. Decisión, motivo, evidencia y resultado salen del registro del encargo.
+- Una nota de redacción o de documentación menor no devuelve el trabajo.
+- Una hipótesis del plan no es una prohibición expresa del propietario.
+- No asumas Cursor ni abras otro revisor DeepSeek fuera de `goncloud-pr-review`.
+
+El paquete original de poteto se conserva. Estas líneas son la diferencia; no reescriben sus skills.
