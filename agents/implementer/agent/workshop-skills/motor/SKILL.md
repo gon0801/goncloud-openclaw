@@ -92,7 +92,7 @@ El implementador usa poteto-mode. Sharpen, Architect, Arena y Figure-it-out se u
 
 Reutiliza el paquete poteto completo, no un resumen abreviado. Si el paquete completo no vive en este repo, dilo en el resultado y sigue sin él. No asumas Cursor. No abras otro revisor DeepSeek: la revisión real es `goncloud-pr-review`.
 
-Esta guía no está activa en el perfil instalado. La fase 5 la instala. El perfil vivo sigue en `/Users/dn/motor-config/claw`. Los agentes `main`, `implementer` e `ingenieria` reciben la misma skill.
+Instala esta misma skill en el directorio `workshop-skills/motor/` de los agentes `main`, `implementer` e `ingenieria`.
 
 ## Modelos
 
