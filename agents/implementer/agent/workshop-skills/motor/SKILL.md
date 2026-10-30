@@ -27,11 +27,14 @@ python3 -B -m motor director encargar \
   --director claw \
   --canal <canal-de-origen> \
   --clave <id-del-mensaje> \
+  --sesion <id-de-la-conversacion> \
   --base <base-del-motor> \
   --archivo <plan-o-pedido.txt>
 ```
 
-Sin archivo, el mismo encargo lleva `--texto "<pedido>"`. `claw`, `hermes` y `openbot` son los directores válidos. La clave identifica el pedido: retransmitir con la misma clave no duplica el encargo.
+Sin archivo, el mismo encargo lleva `--texto "<pedido>"`. Pasa también lo que David sí dijo: `--restriccion` por cada prohibición expresa, `--repo` y `--base-rama` si hay repositorio, y `--responsable` / `--revisor` si eligió modelos. No inventes esos campos. `claw`, `hermes` y `openbot` son los directores válidos. La clave identifica el pedido: retransmitir con la misma clave no duplica el encargo.
+
+Si el pedido es código con GitHub y David no pidió dejarlo local, añade `--entrega pr` o omite `--entrega`. Con `--repo` y sin nivel explícito el motor no cierra en local. Un pedido expresamente local lleva `--entrega terminado`. Integrar o desplegar solo si lo autorizó (`integrado` o `desplegado`).
 
 ## Consultar, parar, continuar, cancelar y promover
 
@@ -61,11 +64,35 @@ El resultado vuelve al canal de origen aunque este turno cierre. Si el aviso fal
 python3 -B -m motor director avisar --base <base-del-motor>
 ```
 
-Cuando David pregunta "¿cómo va?", consulta con `ver` y contesta en una o dos frases de usuario.
+Cuando David pregunta "¿cómo va?", consulta con `ver` y contesta en una o dos frases de usuario. `ver` trae `seguimiento` (fase actual, resultado, necesidad pendiente, última decisión, revisión y PR) y `bitacora` (decisión, motivo, evidencia y resultado). Esa bitácora sale del registro. No hay otro juez.
+
+`avisar` manda solo un cambio real. Un aviso con `novedad` falsa no se vuelve a contar. `entregado` verdadero exige recibo del transporte. Un archivo local no es un mensaje entregado. Si no hay novedad, no llames a un modelo para decir que sigue igual. Una espera trae su causa en `seguimiento.espera`; el trabajo queda en el mismo encargo.
+
+## Responder en el mismo encargo
+
+Una pregunta del puente llega en un aviso `tipo` `pregunta`, con `solicitud`. La respuesta usa el mismo encargo y el canal de origen. No abras otro encargo.
+
+```sh
+python3 -B -m motor director responder <encargo> \
+  --base <base-del-motor> \
+  --solicitud <id-de-la-pregunta> \
+  --respuesta "<texto de David>" \
+  --clave "<id-del-mensaje>" \
+  --canal <canal-de-origen> \
+  --sesion <id-de-la-conversacion>
+```
+
+La misma clave no repite el efecto. Una respuesta tardía no autoriza otra pregunta. Si el canal no coincide, el motor la rechaza.
+
+OpenBot no tiene recepción bidireccional comprobada (`recepcion` falsa en `director capacidades-openbot`). En ese director la vía para responder al mismo registro es este comando CLI. No presentes un archivo de `canal/` como si David ya lo hubiera recibido.
 
 ## Poteto
 
-Reutiliza el paquete poteto completo, no un resumen abreviado. Si el paquete completo no vive en este repo, dilo en el resultado y sigue sin él. No conviertas el pedido en bloques ni exijas un plan ejecutable para empezar.
+El implementador usa poteto-mode. Sharpen, Architect, Arena y Figure-it-out se usan cuando el trabajo los necesita; no son una cadena obligatoria ni hace falta un runbook previo. Una hipótesis del plan no es una prohibición. Solo una prohibición expresa, o una decisión que David se reservó, necesita su respuesta. Una nota de redacción no devuelve el encargo.
+
+Reutiliza el paquete poteto completo, no un resumen abreviado. Si el paquete completo no vive en este repo, dilo en el resultado y sigue sin él. No asumas Cursor. No abras otro revisor DeepSeek: la revisión real es `goncloud-pr-review`.
+
+Instala esta misma skill en el directorio `workshop-skills/motor/` de los agentes `main`, `implementer` e `ingenieria`.
 
 ## Modelos
 
