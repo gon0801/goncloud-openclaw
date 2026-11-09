@@ -37,6 +37,8 @@ delivery-queue-media/
 completions/
 
 # Instalado/regenerable
+mausbot-equipo/
+scripts/mausbot/salida/
 skills/
 plugin-skills/
 extensions/
