@@ -179,6 +179,7 @@ poner "$F" openclaw openclaw-backup-20261014.tar.gz 1000 25
 poner "$F" openclaw openclaw-backup-20261015.tar.gz 900 1
 poner "$F" openclaw openclaw-extras-20261015.tar.gz 100 1
 poner "$F" hermes hermes-backup-20261015.tar.gz 500 35
+poner "$F" openbot openbot-backup-20261015.tar.gz 800 1
 vigilar "$F"; rc=$?
 [ "$rc" -eq 0 ] || fail "con todo al día salió $rc: $(cat "$SB/vout" "$SB/verr")"
 [ -s "$SB/vout" ] || [ -s "$SB/verr" ] && fail "con todo al día imprimió algo: $(cat "$SB/vout" "$SB/verr")"
@@ -189,6 +190,7 @@ M="$SB/mal<&>"
 poner "$M" openclaw openclaw-backup-20261014.tar.gz 1000 25
 poner "$M" openclaw openclaw-backup-20261015.tar.gz 400 1
 poner "$M" hermes hermes-backup-20261013.tar.gz 500 40
+poner "$M" openbot openbot-backup-20261015.tar.gz 800 1
 vigilar "$M"; rc=$?
 [ "$rc" -eq 1 ] || fail "con problemas no salió 1 (rc=$rc): $(cat "$SB/verr")"
 [ "$(envios)" = 1 ] || fail "esperaba un solo aviso, hubo $(envios)"
