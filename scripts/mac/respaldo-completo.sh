@@ -44,18 +44,11 @@ exec >>"$RC_LOG" 2>&1
 log() { printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*"; }
 FALLAS=""
 falla() { FALLAS="${FALLAS:+$FALLAS; }$*"; log "FALLA: $*"; }
-# En segundo plano y con `wait` para que una señal a la corrida se atienda en el acto y
-# no al terminar el hijo (una subida puede durar 30 min). `<&0` le pasa el stdin que el
-# `&` cambiaría por /dev/null. El 2>/dev/null de `wait` calla el "Alarm clock" que bash
-# imprime al vencer el tope, para que no se mezcle con el error de ssh.
-HIJO=""
-con_tope() {
-  local rc
-  /usr/bin/perl -e 'alarm shift; exec @ARGV or exit 127' "$@" <&0 &
-  HIJO=$!; wait "$HIJO" 2>/dev/null; rc=$?; HIJO=""
-  return "$rc"
-}
-sha256() { shasum -a 256 "$1" | cut -d' ' -f1; }
+# Subida con tope y reintentos, lock, limpieza y señales: lo mismo que el respaldo de
+# OpenBot, en scripts/mac/respaldo-comun.sh.
+LIB="$(dirname "$0")/respaldo-comun.sh"
+[ -r "$LIB" ] || { printf 'falta %s\n' "$LIB"; exit 1; }
+. "$LIB"
 
 avisar() {
   local texto="El respaldo completo de la Mac mini a gonserver falló: $1. Revisa $RC_LOG."
@@ -69,73 +62,15 @@ avisar() {
   fi
   log "no se pudo avisar"
 }
-# El aviso sale una vez, al terminar, con todas las causas. El lock de otra corrida
-# viva (3) no es una falla del respaldo. Lo pesado se borra antes de avisar: tras un
-# SIGTERM, launchd manda SIGKILL a los 20 s.
-al_salir() {
-  local rc=$?
-  [ -z "$HIJO" ] || kill "$HIJO" 2>/dev/null
-  rm -rf "${TMP:-}" "${LOCK_PROPIO:-}"
-  case "$rc" in 0|3) ;; *) avisar "${FALLAS:-salida inesperada (rc=$rc)}" ;; esac
-}
 trap al_salir EXIT
-for senal in HUP INT TERM; do
-  # shellcheck disable=SC2064  # la señal se fija al poner la trampa
-  trap "falla 'corrida interrumpida por SIG$senal'; exit 1" "$senal"
-done
+trampas_de_senal
 
-LOCK="$RC_DIR/.lock"
-# Identidad de un proceso = PID + hora de inicio: tras un reinicio el PID de una
-# corrida muerta puede tenerlo otro proceso vivo, y eso no es dueño del lock.
-identidad() { printf '%s %s' "$1" "$(ps -o lstart= -p "$1" 2>/dev/null | tr -s ' ')"; }
-if ! mkdir "$LOCK" 2>/dev/null; then
-  dueno="$(cat "$LOCK/dueno" 2>/dev/null)"
-  pid="${dueno%% *}"
-  if [ -n "$pid" ] && [ "$(identidad "$pid")" = "$dueno" ]; then
-    log "ABORTO: otra corrida (pid $pid) tiene el lock $LOCK"; exit 3
-  fi
-  log "lock huérfano (${dueno:-sin dueño}); se recupera"
-  rm -rf "$LOCK"
-  mkdir "$LOCK" 2>/dev/null || { log "ABORTO: no se pudo tomar el lock $LOCK"; exit 3; }
-fi
-identidad $$ > "$LOCK/dueno"
-LOCK_PROPIO="$LOCK"
-# Con el lock tomado, un temporal que quede es de una corrida que murió sin limpiar
+tomar_lock || exit $?
+# Un temporal que quede con el lock tomado es de una corrida que murió sin limpiar
 # (SIGKILL o apagón) y puede pesar 3.9 GB.
-for viejo in "$RC_DIR"/.tmp.*; do
-  [ -e "$viejo" ] || continue
-  rm -rf "$viejo"; log "temporal de una corrida anterior borrado: $(basename "$viejo")"
-done
+limpiar_temporales
 TMP="$(mktemp -d "$RC_DIR/.tmp.XXXXXX")"
 log "inicio $RC_FECHA"
-
-# $1 archivo local. Lo sube con su nombre y compara el sha256 que contesta el servidor.
-# StrictHostKeyChecking=yes: known_hosts de la Mini tiene que traer la llave de las dos
-# direcciones de RC_SERVIDORES (cómo agregarla, en el runbook).
-subir() {
-  local archivo="$1" nombre local_sha remoto rc intento=1 host causa
-  nombre="$(basename "$archivo")"; local_sha="$(sha256 "$archivo")"
-  while :; do
-    host="$(echo "$RC_SERVIDORES" | awk -v i="$intento" '{ print $((i - 1) % NF + 1) }')"
-    con_tope "$RC_TOPE" "$RC_SSH" -i "$RC_LLAVE" -o IdentitiesOnly=yes -o BatchMode=yes \
-      -o StrictHostKeyChecking=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 \
-      -o ServerAliveCountMax=4 "$RC_USUARIO@$host" "$nombre" < "$archivo" > "$TMP/ssh.out" 2> "$TMP/ssh.err"
-    rc=$?; remoto="$(cat "$TMP/ssh.out")"
-    if [ "$rc" -eq 0 ] && [ "$remoto" = "$local_sha" ]; then
-      log "$nombre: subido a $host ($(du -h "$archivo" | cut -f1), sha256 $local_sha)"; return 0
-    elif [ "$rc" -eq 0 ]; then
-      causa="el sha256 no coincide (servidor: ${remoto:-vacío})"
-    else
-      causa="$(tr '\n' ' ' < "$TMP/ssh.err" | sed 's/ *$//' | cut -c1-160)"
-      [ -n "$causa" ] || causa="sin respuesta en ${RC_TOPE}s"
-    fi
-    if [ "$intento" -ge "$RC_INTENTOS" ]; then
-      falla "$nombre no se subió tras $intento intento(s): $causa"; return 1
-    fi
-    log "$nombre: intento $intento a $host falló ($causa); otro en ${RC_ESPERA}s"
-    intento=$((intento + 1)); sleep "$RC_ESPERA"
-  done
-}
 
 # 1. ~/.openclaw con el respaldo nativo, verificado.
 crear_backup() {
