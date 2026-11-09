@@ -348,6 +348,34 @@ class Generar(unittest.TestCase):
             self.generar()
         self.assertFalse(self.salida.exists())
 
+    def test_a_multi_line_soul_the_reader_cannot_preserve_stops_the_generator(self):
+        original = (
+            "    soul: |-\n"
+            "      ===== AGENTS.md =====\n"
+            "      linea uno\n"
+            "      linea dos\n"
+        )
+        formas = {
+            "plegado": "    soul: >-\n      linea uno\n      linea dos\n",
+            "plegado simple": "    soul: >\n      linea uno\n",
+            "plegado con chomping": "    soul: >+\n      linea uno\n",
+            "sangria explicita": "    soul: |2-\n      sangria explicita\n",
+            "escalar simple continuado": (
+                "    soul: Eres un bot muy largo\n      que hace mas cosas\n"
+            ),
+            "escalar entre comillas continuado": (
+                '    soul: "Eres un bot\n      muy largo"\n'
+            ),
+        }
+        for nombre, reemplazo in formas.items():
+            with self.subTest(nombre=nombre):
+                self.export.write_text(
+                    EXPORT.replace(original, reemplazo), encoding="utf-8"
+                )
+                with self.assertRaises(ValueError):
+                    self.generar()
+                self.assertFalse(self.salida.exists(), nombre)
+
 
 class Secretos(unittest.TestCase):
     def test_prose_is_not_a_token_and_a_long_key_is(self):
