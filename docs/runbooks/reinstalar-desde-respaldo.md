@@ -9,7 +9,7 @@ Este runbook cubre el respaldo diario de la Mac mini donde corre el gateway de O
 | Archivo | Contenido | En gonserver | En la Mini |
 |---|---|---|---|
 | `openclaw-backup-AAAAMMDD.tar.gz` | `openclaw backup create --verify`: todo `~/.openclaw` (configuración, `state/openclaw.sqlite`, agentes, `credentials/`, `.env`, perfil del navegador `browser/claw`) | `/mnt/data/backups/openclaw/`, los 2 más nuevos | `~/respaldo-completo/`, los 2 más nuevos |
-| `openclaw-extras-AAAAMMDD.tar.gz` | Lo que vive fuera de `~/.openclaw`. Requeridos: `~/Library/LaunchAgents/ai.openclaw.*.plist` (al menos uno), `~/goncloud-autoupdate/`, `~/.ssh/`, `~/.zshrc` y el script instalado. Opcionales: `~/Library/LaunchAgents/ai.goncloud.*.plist`, `~/.claude/`, `~/.claude.json`, `~/.openclaw-state/` y `~/.local/bin/` | igual | igual |
+| `openclaw-extras-AAAAMMDD.tar.gz` | Lo que vive fuera de `~/.openclaw`. Requeridos: `~/Library/LaunchAgents/ai.openclaw.*.plist` (al menos uno), `~/goncloud-autoupdate/`, `~/.ssh/`, `~/.zshrc`, el script instalado y su librería `respaldo-comun.sh`. Opcionales: `~/Library/LaunchAgents/ai.goncloud.*.plist`, `~/.claude/`, `~/.claude.json`, `~/.openclaw-state/` y `~/.local/bin/` | igual | igual |
 
 Dentro del archivo de extras, `Users/gon/respaldo-completo/RESPALDO-EXTRAS.txt` trae la salida de `openclaw --version` y `node --version` de ese día, y lo que faltaba. Si falta un requerido, la corrida falla y avisa, pero igual sube lo que hay. Si falta un opcional, solo queda anotado (`~/.openclaw-state/` no existía en la Mini el 2026-10-15).
 
@@ -24,7 +24,7 @@ Cada subida tiene 3 intentos de hasta 30 minutos, alternando WireGuard (`10.13.1
 
 El receptor rechaza un nombre cuya fecha no cae entre hoy-60 y hoy según el reloj de gonserver (UTC; con dos copias, una fecha futura por un reloj mal puesto borraría una buena) (sale 2), una subida de más de 20 GiB (sale 4) y un día más viejo que los que se guardan, que la poda quitaría al instante (sale 5). En los tres casos no escribe nada.
 
-En gonserver, `vigila-respaldos` revisa todos los días a las 09:00 que `openclaw-backup`, `openclaw-extras` y `hermes-backup` tengan un archivo de menos de 36 h que pese al menos la mitad del anterior. Si no, avisa por Telegram con el bot de Orbit. Las 09:00 son de la zona horaria de gonserver (`timedatectl | grep 'Time zone'`), no de la Mini.
+En gonserver, `vigila-respaldos` revisa todos los días a las 09:00 que `openclaw-backup`, `openclaw-extras` y `hermes-backup` tengan un archivo de menos de 36 h que pese al menos la mitad del anterior. Para `openbot-backup` el tope es 72 h, porque la MacBook puede pasar una noche dormida; el encogimiento a la mitad se revisa igual. Si no, avisa por Telegram con el bot de Orbit. Las 09:00 son de la zona horaria de gonserver (`timedatectl | grep 'Time zone'`), no de la Mini.
 
 Nadie vigila al vigía. Si hay un problema y el archivo de claves falta o Telegram rechaza el envío, el aviso no sale. El vigía sale con 2 y el error solo queda en `/var/log/vigila-respaldos.log`. Para revisarlo, como root en gonserver:
 
@@ -45,15 +45,18 @@ Se hace una vez, como root en gonserver, desde una copia de este repo. La cuenta
    ```sh
    scp scripts/gonserver/recibe-respaldo scripts/gonserver/vigila-respaldos gonserver:/tmp/
    ssh gonserver 'install -m 755 -o root -g root /tmp/recibe-respaldo /tmp/vigila-respaldos /usr/local/bin/ &&
-     install -d -o clawbackup -g clawbackup -m 700 /mnt/data/backups/openclaw /mnt/data/backups/hermes'
+     install -d -o clawbackup -g clawbackup -m 700 /mnt/data/backups/openclaw /mnt/data/backups/hermes /mnt/data/backups/openbot'
    ```
 
-2. En `/var/lib/clawbackup/.ssh/authorized_keys` deja estas dos líneas. La primera es la llave que la Mini ya usa para la cuenta `claw` (`~/.ssh/claw_goncloud.pub` en la Mini, comentario `claw@OPENCLAW-goncloud`). La segunda reemplaza el `command=` de la línea de Hermes que ya existe:
+2. En `/var/lib/clawbackup/.ssh/authorized_keys` deja estas tres líneas. La primera es la llave que la Mini ya usa para la cuenta `claw` (`~/.ssh/claw_goncloud.pub` en la Mini, comentario `claw@OPENCLAW-goncloud`). La segunda reemplaza el `command=` de la línea de Hermes que ya existe. La tercera es la llave propia de la MacBook (`~/.ssh/openbot_goncloud.pub`):
 
    ```text
    restrict,from="100.73.187.5,10.13.13.6",command="/usr/local/bin/recibe-respaldo openclaw" ssh-ed25519 <clave de claw_goncloud.pub> claw@OPENCLAW-goncloud
    restrict,command="/usr/local/bin/recibe-respaldo hermes" ssh-ed25519 <clave existente> claw-backup@Gon
+   restrict,from="<IP WireGuard de la MacBook>,<IP Tailscale de la MacBook>",command="/usr/local/bin/recibe-respaldo openbot" ssh-ed25519 <clave de openbot_goncloud.pub> openbot@MacBook
    ```
+
+   Sustituye las dos IP de la tercera línea por las de la MacBook, como se hizo con las de la Mini en la primera. Sin `from=` la llave sirve desde cualquier host.
 
    La familia `hermes` sigue aceptando el nombre viejo `claw-backup-AAAAMMDD.tar.gz` en `/mnt/data/backups/claw/` (guarda 8). Por eso el script actual de la PC sigue funcionando aunque cambie la línea. Deja `/usr/local/bin/recibe-claw-backup` hasta que nada lo use.
 
@@ -118,7 +121,7 @@ Como `gon`, desde una copia de este repo:
 ```sh
 NODE_BIN="$(dirname "$(ls -d ~/.openclaw/tools/node-v*/bin/node | tail -1)")"
 mkdir -p ~/bin ~/Library/Logs/goncloud
-cp scripts/mac/respaldo-completo.sh ~/bin/
+cp scripts/mac/respaldo-completo.sh scripts/mac/respaldo-comun.sh ~/bin/
 sed -e "s|__HOME__|$HOME|g" -e "s|__NODE_BIN__|$NODE_BIN|g" \
   scripts/mac/ai.goncloud.respaldo-completo.plist > ~/Library/LaunchAgents/ai.goncloud.respaldo-completo.plist
 launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/ai.goncloud.respaldo-completo.plist
@@ -272,6 +275,59 @@ Cada comprobación tiene su resultado esperado:
 ```
 
 Manda un mensaje a claw por Telegram y espera su respuesta. Por último, corre el respaldo una vez con `launchctl kickstart gui/$(id -u)/ai.goncloud.respaldo-completo` y revisa que el log termine en `terminado sin fallas`.
+
+## OpenBot
+
+OpenBot corre solo en la MacBook de David. Su estado vive en `~/Library/Application Support/OpenBot` (unos 1.9 GB, de los que `provider-runtimes` es 1.7 GB regenerable). `scripts/mac/respaldo-openbot.sh` corre a las 03:45 con el LaunchAgent `ai.goncloud.respaldo-openbot` y sube `openbot-backup-AAAAMMDD.tar.gz` a `/mnt/data/backups/openbot/` (los 2 más nuevos). El archivo pesa unos 150 a 200 MB; si pasa de 1 GB, la corrida falla y avisa porque entró algo regenerable. Si la MacBook está dormida, launchd lo corre al despertar. Una falla avisa con una notificación local de macOS; el aviso remoto lo da `vigila-respaldos` a las 72 h.
+
+### Instalar el respaldo en la MacBook
+
+Primero deja la llave pública de la MacBook en `~clawbackup` con la línea `command="/usr/local/bin/recibe-respaldo openbot"` y `restrict` que está en [Instalar el receptor en gonserver](#instalar-el-receptor-en-gonserver), y la llave del servidor en `~/.ssh/known_hosts` para `10.13.13.1` y `100.127.167.103`. La llave privada vive en `~/.ssh/openbot_goncloud` (se cambia con `OB_LLAVE`).
+
+Como David, desde una copia de este repo:
+
+```sh
+mkdir -p ~/bin ~/Library/Logs/goncloud
+cp scripts/mac/respaldo-openbot.sh scripts/mac/respaldo-comun.sh ~/bin/
+sed -e "s|__HOME__|$HOME|g" \
+  scripts/mac/ai.goncloud.respaldo-openbot.plist > ~/Library/LaunchAgents/ai.goncloud.respaldo-openbot.plist
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/ai.goncloud.respaldo-openbot.plist
+launchctl kickstart gui/$(id -u)/ai.goncloud.respaldo-openbot
+```
+
+Termina bien cuando el log cierra en `terminado sin fallas` y gonserver tiene el archivo del día:
+
+```sh
+tail -5 ~/Library/Logs/goncloud/respaldo-openbot.log
+ssh gonserver 'ls -l /mnt/data/backups/openbot/'
+```
+
+### Restaurar OpenBot en otra Mac
+
+1. Cierra OpenBot. Luego trae el archivo más nuevo y comprueba su sha256:
+
+   ```sh
+   ssh gonserver 'ls -l /mnt/data/backups/openbot/'
+   F=AAAAMMDD
+   ssh gonserver "cd /mnt/data/backups/openbot && sha256sum openbot-backup-$F.tar.gz"
+   mkdir -p ~/restauracion && cd ~/restauracion
+   scp "gonserver:/mnt/data/backups/openbot/openbot-backup-$F.tar.gz" .
+   shasum -a 256 "openbot-backup-$F.tar.gz"
+   ```
+
+2. Desempaca sobre el estado de OpenBot. Si ya hay una instalación, muévela antes a un lado:
+
+   ```sh
+   [ -e "$HOME/Library/Application Support/OpenBot" ] && \
+     mv "$HOME/Library/Application Support/OpenBot" "$HOME/Library/Application Support/OpenBot.antes"
+   mkdir -p "$HOME/Library/Application Support/OpenBot"
+   tar -xzf ~/restauracion/openbot-backup-$F.tar.gz -C "$HOME/Library/Application Support/OpenBot"
+   sqlite3 "$HOME/Library/Application Support/OpenBot/openbot.db" 'pragma integrity_check'
+   ```
+
+   El `integrity_check` tiene que imprimir `ok`.
+
+3. Abre OpenBot y, desde la app, reinstala los runtimes de proveedores (`provider-runtimes` no está en el archivo porque se regenera). Vuelve a iniciar sesión en los proveedores que lo pidan.
 
 ## Hermes
 

@@ -2,8 +2,9 @@
 """Vigía de frescura de los respaldos en gonserver (/usr/local/bin/vigila-respaldos).
 
 Corre en el cron de root a las 09:00. Por cada familia revisa el archivo más reciente y
-avisa por Telegram si falta, si tiene más de 36 h o si pesa menos de la mitad del
-anterior. Callado cuando todo está al día.
+avisa por Telegram si falta, si pasa de su tope de antigüedad (36 h, y 72 h para OpenBot,
+que corre en una laptop que puede pasar una noche cerrada) o si pesa menos de la mitad
+del anterior. Callado cuando todo está al día.
 
 Salida: 0 todo al día, 1 hubo problemas y el aviso salió, 2 hubo problemas y el aviso no
 salió. El token del bot nunca se imprime.
@@ -23,16 +24,16 @@ import urllib.request
 from pathlib import Path
 
 FAMILIAS = (
-    ("openclaw", "openclaw-backup"),
-    ("openclaw", "openclaw-extras"),
-    ("hermes", "hermes-backup"),
+    ("openclaw", "openclaw-backup", 36),
+    ("openclaw", "openclaw-extras", 36),
+    ("hermes", "hermes-backup", 36),
+    ("openbot", "openbot-backup", 72),
 )
-HORAS_MAX = 36
 
 
 def problemas(base: Path, ahora: float) -> list[str]:
     salida = []
-    for carpeta, prefijo in FAMILIAS:
+    for carpeta, prefijo, horas_max in FAMILIAS:
         archivos = sorted(
             (base / carpeta).glob(f"{prefijo}-*.tar.gz"),
             key=lambda p: p.stat().st_mtime,
@@ -43,7 +44,7 @@ def problemas(base: Path, ahora: float) -> list[str]:
             continue
         nuevo = archivos[0]
         horas = (ahora - nuevo.stat().st_mtime) / 3600
-        if horas > HORAS_MAX:
+        if horas > horas_max:
             salida.append(f"{prefijo}: el más reciente ({nuevo.name}) tiene {horas:.0f} h")
         if len(archivos) > 1:
             actual, previo = nuevo.stat().st_size, archivos[1].stat().st_size

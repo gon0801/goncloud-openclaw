@@ -7,7 +7,7 @@
   Install, en la Mini como gon:
     NODE_BIN="$(dirname "$(ls -d ~/.openclaw/tools/node-v*/bin/node | tail -1)")"
     mkdir -p ~/bin ~/Library/Logs/goncloud &&
-    cp scripts/mac/respaldo-completo.sh ~/bin/ &&
+    cp scripts/mac/respaldo-completo.sh scripts/mac/respaldo-comun.sh ~/bin/ &&
     sed -e "s|__HOME__|$HOME|g" -e "s|__NODE_BIN__|$NODE_BIN|g" \
       scripts/mac/ai.goncloud.respaldo-completo.plist > ~/Library/LaunchAgents/ai.goncloud.respaldo-completo.plist &&
     launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/ai.goncloud.respaldo-completo.plist

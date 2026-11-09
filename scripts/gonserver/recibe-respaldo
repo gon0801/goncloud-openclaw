@@ -10,6 +10,7 @@
 #   hermes    hermes-backup-AAAAMMDD.tar.gz en $RECIBE_BASE/hermes (2), y el nombre viejo
 #             claw-backup-AAAAMMDD.tar.gz en $RECIBE_BASE/claw (8) para que el script
 #             anterior de la PC siga funcionando hasta que lo reemplacen.
+#   openbot   openbot-backup-AAAAMMDD.tar.gz en $RECIBE_BASE/openbot (2).
 #
 # La fecha del nombre tiene que caer entre hoy-60 y hoy según el reloj del servidor (UTC,
 # adelante de la Mini y la PC, así que un cliente sano nunca manda una fecha futura):
@@ -38,6 +39,7 @@ case "$familia:$nombre" in
     dir="$BASE/openclaw"; guardar=2 ;;
   hermes:hermes-backup-$D8.tar.gz) dir="$BASE/hermes"; guardar=2 ;;
   hermes:claw-backup-$D8.tar.gz) dir="$BASE/claw"; guardar=8 ;;
+  openbot:openbot-backup-$D8.tar.gz) dir="$BASE/openbot"; guardar=2 ;;
   *) echo "ERROR: nombre invalido para la familia '$familia'" >&2; exit 2 ;;
 esac
 prefijo="${nombre%-*}"
