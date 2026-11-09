@@ -129,6 +129,7 @@ crear_archivo() {
   tam="$(wc -c < "$destino" | tr -d ' ')"
   log "archivo creado: $destino ($(du -h "$destino" | cut -f1), $tam bytes)"
   if [ "$tam" -gt "$OB_MAX_BYTES" ]; then
+    rm -f "$destino"
     falla "openbot-backup-$OB_FECHA.tar.gz pesa $tam bytes, más del tope $OB_MAX_BYTES: entró algo regenerable"
     return 1
   fi

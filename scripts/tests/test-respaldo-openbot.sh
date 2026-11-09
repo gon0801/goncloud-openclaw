@@ -203,6 +203,7 @@ correr OB_MAX_BYTES=100; rc=$?
 grep -q "OpenBot a gonserver falló: openbot-backup-$F.tar.gz pesa .* más del tope 100" "$SB/avisos" \
   || fail "el aviso no dice que pasó el tope: $(cat "$SB/avisos")"
 [ -e "$SV/openbot-backup-$F.tar.gz" ] && fail "se subió un archivo que pasó el tope"
+[ -e "$L/openbot-backup-$F.tar.gz" ] && fail "quedó local el archivo que pasó el tope y desplazaría a uno válido"
 
 # 6
 cat > "$SB/tg.py" <<'PY'
