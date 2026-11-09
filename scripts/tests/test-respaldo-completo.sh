@@ -137,6 +137,7 @@ done
 grep -q "com.apple.otro.plist" "$SB/extras.txt" && fail "los extras traen un plist ajeno"
 grep -q "\.ssh/s\$" "$SB/extras.txt" && fail "los extras traen un socket"
 grep -qx "${S#/}" "$SB/extras.txt" || fail "los extras no traen el script instalado"
+grep -qx "$(dirname "${S#/}")/respaldo-comun.sh" "$SB/extras.txt" || fail "los extras no traen la librería que el script carga"
 grep -qx "${L#/}/RESPALDO-EXTRAS.txt" "$SB/extras.txt" || fail "los extras no traen su nota"
 tar -xzOf "$L/openclaw-extras-$F.tar.gz" "${L#/}/RESPALDO-EXTRAS.txt" | grep -qx "omitido (no existe): ~/.openclaw-state" \
   || fail "la nota no dice qué faltó"

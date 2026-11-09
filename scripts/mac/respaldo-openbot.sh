@@ -122,17 +122,19 @@ crear_archivo() {
       log "omitido (no existe): $nombre"
     fi
   done
-  if ! tar -czf "$destino" -C "$arbol" . 2> "$TMP/tar.err"; then
-    rm -f "$destino"
+  local temporal="$TMP/openbot-backup-$OB_FECHA.tar.gz"
+  if ! tar -czf "$temporal" -C "$arbol" . 2> "$TMP/tar.err"; then
+    rm -f "$temporal"
     falla "tar falló: $(tr '\n' ' ' < "$TMP/tar.err" | cut -c1-200)"; return 1
   fi
-  tam="$(wc -c < "$destino" | tr -d ' ')"
-  log "archivo creado: $destino ($(du -h "$destino" | cut -f1), $tam bytes)"
+  tam="$(wc -c < "$temporal" | tr -d ' ')"
   if [ "$tam" -gt "$OB_MAX_BYTES" ]; then
-    rm -f "$destino"
+    rm -f "$temporal"
     falla "openbot-backup-$OB_FECHA.tar.gz pesa $tam bytes, más del tope $OB_MAX_BYTES: entró algo regenerable"
     return 1
   fi
+  mv -f "$temporal" "$destino"
+  log "archivo creado: $destino ($(du -h "$destino" | cut -f1), $tam bytes)"
   subir "$destino"
 }
 

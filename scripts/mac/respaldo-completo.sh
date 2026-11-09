@@ -100,8 +100,9 @@ crear_backup() {
 # leer el backup con openclaw.
 VERSIONES=""
 listar_extras() { # $1 nota, $2 lista
-  local patron ruta yo tipo patrones
+  local patron ruta yo lib tipo patrones
   case "$0" in /*) yo="$0" ;; *) yo="$PWD/$0" ;; esac
+  lib="$(dirname "$yo")/respaldo-comun.sh"
   if [ -z "$VERSIONES" ]; then
     VERSIONES="openclaw: $(con_tope 60 "$OPENCLAW_BIN" --version 2>/dev/null | head -1)
 node: $(con_tope 60 node --version 2>/dev/null) ($(command -v node))"
@@ -109,6 +110,7 @@ node: $(con_tope 60 node --version 2>/dev/null) ($(command -v node))"
   printf 'Extras de %s, %s. Rutas relativas a /.\n%s\n' "$(hostname)" "$RC_FECHA" "$VERSIONES" > "$1"
   printf '%s\n' "$1" > "$2"
   if [ -f "$yo" ]; then printf '%s\n' "$yo" >> "$2"; else printf 'falta (requerido): %s\n' "$yo" >> "$1"; fi
+  if [ -f "$lib" ]; then printf '%s\n' "$lib" >> "$2"; else printf 'falta (requerido): %s\n' "$lib" >> "$1"; fi
   for tipo in requerido opcional; do
     if [ "$tipo" = requerido ]; then patrones="$EXTRAS_REQUERIDOS"; else patrones="$EXTRAS_OPCIONALES"; fi
     for patron in $patrones; do

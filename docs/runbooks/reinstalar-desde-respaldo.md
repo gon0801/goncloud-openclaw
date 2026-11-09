@@ -9,7 +9,7 @@ Este runbook cubre el respaldo diario de la Mac mini donde corre el gateway de O
 | Archivo | Contenido | En gonserver | En la Mini |
 |---|---|---|---|
 | `openclaw-backup-AAAAMMDD.tar.gz` | `openclaw backup create --verify`: todo `~/.openclaw` (configuración, `state/openclaw.sqlite`, agentes, `credentials/`, `.env`, perfil del navegador `browser/claw`) | `/mnt/data/backups/openclaw/`, los 2 más nuevos | `~/respaldo-completo/`, los 2 más nuevos |
-| `openclaw-extras-AAAAMMDD.tar.gz` | Lo que vive fuera de `~/.openclaw`. Requeridos: `~/Library/LaunchAgents/ai.openclaw.*.plist` (al menos uno), `~/goncloud-autoupdate/`, `~/.ssh/`, `~/.zshrc` y el script instalado. Opcionales: `~/Library/LaunchAgents/ai.goncloud.*.plist`, `~/.claude/`, `~/.claude.json`, `~/.openclaw-state/` y `~/.local/bin/` | igual | igual |
+| `openclaw-extras-AAAAMMDD.tar.gz` | Lo que vive fuera de `~/.openclaw`. Requeridos: `~/Library/LaunchAgents/ai.openclaw.*.plist` (al menos uno), `~/goncloud-autoupdate/`, `~/.ssh/`, `~/.zshrc`, el script instalado y su librería `respaldo-comun.sh`. Opcionales: `~/Library/LaunchAgents/ai.goncloud.*.plist`, `~/.claude/`, `~/.claude.json`, `~/.openclaw-state/` y `~/.local/bin/` | igual | igual |
 
 Dentro del archivo de extras, `Users/gon/respaldo-completo/RESPALDO-EXTRAS.txt` trae la salida de `openclaw --version` y `node --version` de ese día, y lo que faltaba. Si falta un requerido, la corrida falla y avisa, pero igual sube lo que hay. Si falta un opcional, solo queda anotado (`~/.openclaw-state/` no existía en la Mini el 2026-10-15).
 
@@ -53,8 +53,10 @@ Se hace una vez, como root en gonserver, desde una copia de este repo. La cuenta
    ```text
    restrict,from="100.73.187.5,10.13.13.6",command="/usr/local/bin/recibe-respaldo openclaw" ssh-ed25519 <clave de claw_goncloud.pub> claw@OPENCLAW-goncloud
    restrict,command="/usr/local/bin/recibe-respaldo hermes" ssh-ed25519 <clave existente> claw-backup@Gon
-   restrict,command="/usr/local/bin/recibe-respaldo openbot" ssh-ed25519 <clave de openbot_goncloud.pub> openbot@MacBook
+   restrict,from="<IP WireGuard de la MacBook>,<IP Tailscale de la MacBook>",command="/usr/local/bin/recibe-respaldo openbot" ssh-ed25519 <clave de openbot_goncloud.pub> openbot@MacBook
    ```
+
+   Sustituye las dos IP de la tercera línea por las de la MacBook, como se hizo con las de la Mini en la primera. Sin `from=` la llave sirve desde cualquier host.
 
    La familia `hermes` sigue aceptando el nombre viejo `claw-backup-AAAAMMDD.tar.gz` en `/mnt/data/backups/claw/` (guarda 8). Por eso el script actual de la PC sigue funcionando aunque cambie la línea. Deja `/usr/local/bin/recibe-claw-backup` hasta que nada lo use.
 
