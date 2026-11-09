@@ -63,6 +63,23 @@ INCLUIR=(
   remote-desktop-runtime
 )
 
+# Lo regenerable se excluye por nombre a cualquier profundidad: en Electron las cachés
+# viven dentro de Partitions/<partición>/. tar las salta al copiar, así tampoco intenta
+# leer una caché que la app abierta está creando y borrando.
+EXCLUIR=(
+  --exclude=Cache
+  --exclude='Code Cache'
+  --exclude=GPUCache
+  --exclude='*Dawn*'
+  --exclude='*Graphite*'
+  --exclude='Shared Dictionary'
+  --exclude=blob_storage
+  --exclude=logs
+  --exclude=Crashpad
+  --exclude='Singleton*'
+  --exclude=DevToolsActivePort
+)
+
 mkdir -p "$(dirname "$OB_LOG")" "$OB_DIR"
 exec >>"$OB_LOG" 2>&1
 
@@ -94,7 +111,8 @@ TMP="$(mktemp -d "$RC_DIR/.tmp.XXXXXX")"
 log "inicio $OB_FECHA"
 
 # Arma el archivo en un árbol temporal: openbot.db sale de `sqlite3 .backup` y se copia
-# solo lo que la lista pide, así no hace falta excluir provider-runtimes ni cachés.
+# solo lo que la lista pide, salvo lo regenerable. Las cachés de Electron viven dentro de
+# Partitions/<partición>/, así que EXCLUIR las quita a cualquier profundidad.
 crear_archivo() {
   local destino="$OB_DIR/openbot-backup-$OB_FECHA.tar.gz"
   local arbol="$TMP/arbol" nombre origen tam
@@ -116,7 +134,10 @@ crear_archivo() {
   for nombre in "${INCLUIR[@]}"; do
     origen="$OB_RAIZ/$nombre"
     if [ -e "$origen" ] || [ -L "$origen" ]; then
-      cp -pR "$origen" "$arbol/" || { falla "no se pudo copiar $nombre"; return 1; }
+      if ! tar -cf - -C "$OB_RAIZ" "${EXCLUIR[@]}" "$nombre" 2> "$TMP/copia.err" \
+          | tar -xf - -C "$arbol" 2>> "$TMP/copia.err"; then
+        falla "no se pudo copiar $nombre: $(tr '\n' ' ' < "$TMP/copia.err" | cut -c1-200)"; return 1
+      fi
       log "incluido: $nombre"
     else
       log "omitido (no existe): $nombre"
