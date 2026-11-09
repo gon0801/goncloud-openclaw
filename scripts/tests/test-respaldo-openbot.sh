@@ -11,7 +11,8 @@
 #      familia; openbot guarda los 2 más nuevos.
 #   4. Reintento alternando servidores; sha256 distinto falla; tope por intento; lock
 #      vivo sale 3 sin aviso.
-#   5. Archivo sobre el tope (bajo por entorno) falla y avisa.
+#   5. Archivo sobre el tope (bajo por entorno) falla y avisa, y no queda local.
+#   5b. Un fallo al mover el archivo al destino final falla y avisa.
 #   6. Vigía: openbot a 71 h no avisa y a 73 h sí; claw/Hermes siguen avisando a 37 h;
 #      el encogimiento a la mitad aplica a openbot.
 #   7. El plist, con la plantilla llena, es válido: 03:45 y apunta al script.
@@ -318,4 +319,4 @@ assert d["StandardOutPath"] == "/Users/gon/Library/Logs/goncloud/respaldo-openbo
 assert not d.get("KeepAlive") and not d.get("RunAtLoad")
 E
 
-echo "ok: OpenBot respaldado con openbot.db consistente, sin regenerables, retención, reintentos, tope, aviso y vigía de 72 h"
+echo "ok: OpenBot respaldado con openbot.db consistente, sin regenerables, retención, reintentos, tope, mv, aviso y vigía de 72 h"
