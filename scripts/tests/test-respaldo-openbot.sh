@@ -345,7 +345,6 @@ aviso_contiene "openbot-backup: openbot-backup-20261015.tar.gz pesa 400 bytes, m
 # 7
 sed -e "s|__HOME__|/Users/gon|g" "$P" > "$SB/p.plist"
 grep -q '__' "$SB/p.plist" && fail "la plantilla tiene un marcador que la instalación no llena"
-plutil -lint "$SB/p.plist" > /dev/null || fail "plutil -lint rechazó el plist"
 python3 - "$SB/p.plist" <<'E' || fail "plist inválido o con otro horario o script"
 import plistlib, sys
 d = plistlib.load(open(sys.argv[1], "rb"))
