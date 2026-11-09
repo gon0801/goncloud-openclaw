@@ -1,6 +1,6 @@
 {
   "schema": "agent-work.poteto.v1",
-  "generation": 6,
+  "generation": 7,
   "source": {
     "repo": "https://github.com/poteto/pstack-claude",
     "commit": "990cd7b02ac6f3e8f825716f7c72e2f06d8f4a92",
@@ -337,9 +337,10 @@
     }
   ],
   "adaptations": {
+    "mausbot": "95491ed0ab63c9232bfb4cf58c0f2760528080f975e2ec1589b4080ed03e98a1",
     "openclaw": "a93e575b731a96e9f288ba487f1487a8bd68181c2c410b53805f8341bf7066fe",
     "opencode-run": "64d6cec04a78ae2db778ccb083d61961e508d5f121f0f92263e30e428405cb31"
   },
   "block": "1200b0e4012256ead39226c86fab657ad78d8fb8945f72eb0955364105256069",
-  "digest": "sha256:347bedc57c21892768b77c267488c6cbee07ff283f83c46b0004f89e4280c205"
+  "digest": "sha256:51ef230d400b1fcc2e10d512ec14a958466b4a0454176884a686af44de6cb3d2"
 }
