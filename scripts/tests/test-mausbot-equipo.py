@@ -116,6 +116,32 @@ bots:
 """
 
 
+class Export(unittest.TestCase):
+    def test_nested_first_field_scalar_lists_and_inline_maps(self):
+        documento = equipo._yaml_equipo(
+            "version: 1\n"
+            "bots:\n"
+            "  - name: uno\n"
+            "    manages:\n"
+            "      - amazon\n"
+            "      - meli\n"
+            "    tools: {allow: [read, exec]}\n"
+            "rooms:\n"
+            "  - members:\n"
+            "      - amazon\n"
+            "    name: sala\n"
+        )
+        self.assertEqual(
+            documento["bots"][0],
+            {
+                "name": "uno",
+                "manages": ["amazon", "meli"],
+                "tools": {"allow": ["read", "exec"]},
+            },
+        )
+        self.assertEqual(documento["rooms"][0], {"members": ["amazon"], "name": "sala"})
+
+
 class Generar(unittest.TestCase):
     def setUp(self):
         temp = tempfile.TemporaryDirectory()

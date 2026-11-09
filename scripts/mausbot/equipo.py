@@ -282,6 +282,22 @@ def _yaml_bloque(
     return texto, indice
 
 
+def _yaml_campo(
+    lineas: list[str], indice: int, indentacion: int, valor: str
+) -> tuple[object, int]:
+    if valor.strip() in ("|", "|-", "|+"):
+        return _yaml_bloque(lineas, indice + 1, indentacion, valor.strip())
+    if (
+        not valor.strip()
+        and indice + 1 < len(lineas)
+        and _indent(lineas[indice + 1]) > indentacion
+    ):
+        if lineas[indice + 1].lstrip().startswith("-"):
+            return _yaml_lista(lineas, indice + 1, indentacion + 2)
+        return _yaml_mapa(lineas, indice + 1, indentacion + 2)
+    return _yaml_valor(valor), indice + 1
+
+
 def _yaml_mapa(lineas: list[str], indice: int, indentacion: int) -> tuple[dict, int]:
     mapa: dict = {}
     while indice < len(lineas):
@@ -299,28 +315,8 @@ def _yaml_mapa(lineas: list[str], indice: int, indentacion: int) -> tuple[dict, 
         if not separador:
             indice += 1
             continue
-        clave = clave.strip()
-        if valor.strip() in ("|", "|-", "|+"):
-            bloque, indice = _yaml_bloque(lineas, indice + 1, actual, valor.strip())
-            mapa[clave] = bloque
-        elif (
-            not valor.strip()
-            and indice + 1 < len(lineas)
-            and _indent(lineas[indice + 1]) > actual
-            and lineas[indice + 1].lstrip().startswith("-")
-        ):
-            sublista, indice = _yaml_lista(lineas, indice + 1, actual + 2)
-            mapa[clave] = sublista
-        elif (
-            not valor.strip()
-            and indice + 1 < len(lineas)
-            and _indent(lineas[indice + 1]) > actual
-        ):
-            submapa, indice = _yaml_mapa(lineas, indice + 1, actual + 2)
-            mapa[clave] = submapa
-        else:
-            mapa[clave] = _yaml_valor(valor)
-            indice += 1
+        valor, indice = _yaml_campo(lineas, indice, actual, valor)
+        mapa[clave.strip()] = valor
     return mapa, indice
 
 
@@ -342,12 +338,14 @@ def _yaml_lista(lineas: list[str], indice: int, indentacion: int) -> tuple[list,
         if resto:
             clave, separador, valor = resto.partition(":")
             if separador:
-                item[clave.strip()] = _yaml_valor(valor)
+                valor, indice = _yaml_campo(lineas, indice, actual + 2, valor)
+                item[clave.strip()] = valor
             else:
                 items.append(_yaml_valor(resto))
                 indice += 1
                 continue
-        indice += 1
+        else:
+            indice += 1
         while indice < len(lineas):
             linea2 = lineas[indice]
             if not linea2.strip():
@@ -364,32 +362,8 @@ def _yaml_lista(lineas: list[str], indice: int, indentacion: int) -> tuple[list,
             if not separador:
                 indice += 1
                 continue
-            clave = clave.strip()
-            if valor.strip() in ("|", "|-", "|+"):
-                bloque, indice = _yaml_bloque(
-                    lineas, indice + 1, _indent(linea2), valor.strip()
-                )
-                item[clave] = bloque
-            elif (
-                not valor.strip()
-                and indice + 1 < len(lineas)
-                and _indent(lineas[indice + 1]) > _indent(linea2)
-                and lineas[indice + 1].lstrip().startswith("-")
-            ):
-                sublista, indice = _yaml_lista(
-                    lineas, indice + 1, _indent(linea2) + 2
-                )
-                item[clave] = sublista
-            elif (
-                not valor.strip()
-                and indice + 1 < len(lineas)
-                and _indent(lineas[indice + 1]) > _indent(linea2)
-            ):
-                submapa, indice = _yaml_mapa(lineas, indice + 1, _indent(linea2) + 2)
-                item[clave] = submapa
-            else:
-                item[clave] = _yaml_valor(valor)
-                indice += 1
+            valor, indice = _yaml_campo(lineas, indice, _indent(linea2), valor)
+            item[clave.strip()] = valor
         items.append(item)
     return items, indice
 
