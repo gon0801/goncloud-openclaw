@@ -132,6 +132,49 @@ def _escalar(valor: str):
     return _unquote(texto)
 
 
+def _partir_inline(texto: str) -> list[str]:
+    partes: list[str] = []
+    actual: list[str] = []
+    comillas: str | None = None
+    profundidad = 0
+    for caracter in texto:
+        if comillas:
+            actual.append(caracter)
+            if caracter == comillas:
+                comillas = None
+        elif caracter in ("'", '"'):
+            comillas = caracter
+            actual.append(caracter)
+        elif caracter in "[{":
+            profundidad += 1
+            actual.append(caracter)
+        elif caracter in "]}":
+            profundidad -= 1
+            actual.append(caracter)
+        elif caracter == "," and profundidad == 0:
+            partes.append("".join(actual).strip())
+            actual = []
+        else:
+            actual.append(caracter)
+    if actual:
+        partes.append("".join(actual).strip())
+    return partes
+
+
+def _yaml_valor(valor: str):
+    texto = valor.strip()
+    if texto.startswith("[") and texto.endswith("]"):
+        return [_yaml_valor(parte) for parte in _partir_inline(texto[1:-1])]
+    if texto.startswith("{") and texto.endswith("}"):
+        mapa = {}
+        for parte in _partir_inline(texto[1:-1]):
+            clave, separador, contenido = parte.partition(":")
+            if separador:
+                mapa[clave.strip()] = _yaml_valor(contenido)
+        return mapa
+    return _escalar(texto)
+
+
 def _plataformas(valor: str) -> list[str]:
     texto = valor.strip()
     if texto.startswith("[") and texto.endswith("]"):
@@ -239,6 +282,48 @@ def _yaml_bloque(
     return texto, indice
 
 
+def _yaml_mapa(lineas: list[str], indice: int, indentacion: int) -> tuple[dict, int]:
+    mapa: dict = {}
+    while indice < len(lineas):
+        linea = lineas[indice]
+        if not linea.strip() or linea.lstrip().startswith("#"):
+            indice += 1
+            continue
+        actual = _indent(linea)
+        if actual < indentacion:
+            break
+        if actual != indentacion:
+            indice += 1
+            continue
+        clave, separador, valor = linea.strip().partition(":")
+        if not separador:
+            indice += 1
+            continue
+        clave = clave.strip()
+        if valor.strip() in ("|", "|-", "|+"):
+            bloque, indice = _yaml_bloque(lineas, indice + 1, actual, valor.strip())
+            mapa[clave] = bloque
+        elif (
+            not valor.strip()
+            and indice + 1 < len(lineas)
+            and _indent(lineas[indice + 1]) > actual
+            and lineas[indice + 1].lstrip().startswith("-")
+        ):
+            sublista, indice = _yaml_lista(lineas, indice + 1, actual + 2)
+            mapa[clave] = sublista
+        elif (
+            not valor.strip()
+            and indice + 1 < len(lineas)
+            and _indent(lineas[indice + 1]) > actual
+        ):
+            submapa, indice = _yaml_mapa(lineas, indice + 1, actual + 2)
+            mapa[clave] = submapa
+        else:
+            mapa[clave] = _yaml_valor(valor)
+            indice += 1
+    return mapa, indice
+
+
 def _yaml_lista(lineas: list[str], indice: int, indentacion: int) -> tuple[list, int]:
     items: list = []
     while indice < len(lineas):
@@ -257,7 +342,11 @@ def _yaml_lista(lineas: list[str], indice: int, indentacion: int) -> tuple[list,
         if resto:
             clave, separador, valor = resto.partition(":")
             if separador:
-                item[clave.strip()] = _escalar(valor)
+                item[clave.strip()] = _yaml_valor(valor)
+            else:
+                items.append(_yaml_valor(resto))
+                indice += 1
+                continue
         indice += 1
         while indice < len(lineas):
             linea2 = lineas[indice]
@@ -291,8 +380,15 @@ def _yaml_lista(lineas: list[str], indice: int, indentacion: int) -> tuple[list,
                     lineas, indice + 1, _indent(linea2) + 2
                 )
                 item[clave] = sublista
+            elif (
+                not valor.strip()
+                and indice + 1 < len(lineas)
+                and _indent(lineas[indice + 1]) > _indent(linea2)
+            ):
+                submapa, indice = _yaml_mapa(lineas, indice + 1, _indent(linea2) + 2)
+                item[clave] = submapa
             else:
-                item[clave] = _escalar(valor)
+                item[clave] = _yaml_valor(valor)
                 indice += 1
         items.append(item)
     return items, indice

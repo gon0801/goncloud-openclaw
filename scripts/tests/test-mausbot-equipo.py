@@ -83,6 +83,13 @@ bots:
     model: claude/claude-opus-5-5
     effort: high
     approval: full
+    browser:
+      enabled: true
+      profile: claw
+    tools:
+      allow:
+        - read
+        - exec
     skills:
       - file: skills/ingenieria/viejo/SKILL.md
   - name: Implementer
@@ -96,6 +103,9 @@ bots:
       - file: skills/implementer/viejo/SKILL.md
   - name: MausBot
     chief: true
+    manages:
+      - amazon
+      - meli
     model: claude/claude-sonnet-5
     approval: full
   - name: Tienda The Glam Wedding
@@ -254,6 +264,11 @@ class Generar(unittest.TestCase):
         self.assertEqual(bots["MausBot"]["approval"], "full")
         self.assertNotIn("effort", bots["MausBot"])
         self.assertNotIn("soul", bots["MausBot"])
+        self.assertEqual(bots["MausBot"]["manages"], ["amazon", "meli"])
+        self.assertEqual(
+            bots["ingenieria"]["browser"], {"enabled": True, "profile": "claw"}
+        )
+        self.assertEqual(bots["ingenieria"]["tools"], {"allow": ["read", "exec"]})
 
     def test_every_bot_gets_this_computer(self):
         self.generar()
