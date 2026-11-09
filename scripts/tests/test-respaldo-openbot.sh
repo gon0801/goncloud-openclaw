@@ -5,7 +5,8 @@
 #
 #   1. Corrida buena: el archivo llega al servidor con el sha256 local, trae openbot.db
 #      íntegro con la fila que solo estaba en el WAL, y las carpetas pedidas; deja fuera
-#      provider-runtimes, cachés, logs, Crashpad y Singleton*. Sin aviso.
+#      provider-runtimes, cachés (también las anidadas en Partitions/<partición>/), logs,
+#      Crashpad y Singleton*. Sin aviso.
 #   2. Una carpeta que no existe se anota y la corrida sigue.
 #   3. El receptor rechaza el nombre de otra familia en openbot y el de openbot en otra
 #      familia; openbot guarda los 2 más nuevos.
@@ -53,6 +54,19 @@ for d in automation agent-api-keys provider-state provider-handoffs provider-too
 done
 for f in Preferences "Local State" Cookies custom-agents.json otro.json cosa.bin SingletonLock; do
   printf '%s\n' "$f" > "$RAIZ/$f"
+done
+# Dentro de una partición de Electron las cachés viven junto al estado que sí se
+# respalda. Se crean las dos cosas para comprobar el filtro a cualquier profundidad.
+for d in "Partitions/openbot/Cache/Cache_Data" "Partitions/openbot/Code Cache/js" \
+         "Partitions/openbot/GPUCache" "Partitions/openbot/DawnWebGPUCache" \
+         "Partitions/openbot/GraphiteDawnCache" "Partitions/openbot/Shared Dictionary" \
+         "Partitions/openbot/blob_storage"; do
+  mkdir -p "$RAIZ/$d"
+  printf 'regenerable\n' > "$RAIZ/$d/f"
+done
+for d in "Partitions/openbot/Local Storage/leveldb" "Partitions/openbot/IndexedDB"; do
+  mkdir -p "$RAIZ/$d"
+  printf 'estado\n' > "$RAIZ/$d/f"
 done
 "$SQLITE3" "$RAIZ/openbot.db" 'create table notas(x text); insert into notas values ("fila-en-el-principal");' \
   || fail "no se pudo crear openbot.db"
@@ -141,13 +155,24 @@ for r in openbot.db Preferences "Local State" Cookies custom-agents.json otro.js
          provider-work-steps/marca.txt local-skills/marca.txt Partitions/marca.txt \
          IndexedDB/marca.txt "Local Storage/marca.txt" "Session Storage/marca.txt" \
          WebStorage/marca.txt avatars/marca.txt themes/marca.txt \
-         remote-desktop-runtime/marca.txt; do
+         remote-desktop-runtime/marca.txt \
+         "Partitions/openbot/Local Storage/leveldb/f" "Partitions/openbot/IndexedDB/f"; do
   grep -qxF "$r" "$SB/lista" || fail "el archivo no trae $r"
 done
-for r in provider-runtimes Cache "Code Cache" GPUCache DawnCache GraphiteDawnCache logs Crashpad; do
-  grep -q "^$r/" "$SB/lista" && fail "el archivo trae lo regenerable $r"
-done
-grep -qxF "SingletonLock" "$SB/lista" && fail "el archivo trae SingletonLock"
+# Nada regenerable en ningún nivel: una caché nueva bajo Partitions/<partición>/ también
+# tiene que quedar fuera.
+python3 - "$SB/lista" <<'E' || fail "el archivo trae algo regenerable"
+import fnmatch, sys
+patrones = ["Cache", "Code Cache", "GPUCache", "*Dawn*", "*Graphite*",
+            "Shared Dictionary", "blob_storage", "provider-runtimes",
+            "logs", "Crashpad", "Singleton*", "DevToolsActivePort"]
+for linea in open(sys.argv[1]):
+    ruta = linea.rstrip("\n")
+    for parte in ruta.split("/"):
+        if any(fnmatch.fnmatchcase(parte, p) for p in patrones):
+            print("regenerable en el archivo:", ruta)
+            raise SystemExit(1)
+E
 
 # 2
 mv "$RAIZ/themes" "$SB/themes.guardado"
@@ -319,4 +344,4 @@ assert d["StandardOutPath"] == "/Users/gon/Library/Logs/goncloud/respaldo-openbo
 assert not d.get("KeepAlive") and not d.get("RunAtLoad")
 E
 
-echo "ok: OpenBot respaldado con openbot.db consistente, sin regenerables, retención, reintentos, tope, mv, aviso y vigía de 72 h"
+echo "ok: OpenBot respaldado con openbot.db consistente, sin regenerables en ningún nivel, retención, reintentos, tope, mv, aviso y vigía de 72 h"
