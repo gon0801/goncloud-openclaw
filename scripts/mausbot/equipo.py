@@ -34,6 +34,8 @@ MOTOR = ROOT / "agents/ingenieria/agent/workshop-skills/motor/SKILL.md"
 DIRECTORES_CON_MOTOR = {"mausbot", "ingenieria"}
 PLATAFORMAS_MAC = {"macos", "darwin", "osx"}
 NOMBRE_SKILL = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+INDICADOR_BLOQUE = re.compile(r"^[|>](?:[1-9][+-]?|[+-][1-9]?)?$")
+BLOQUES_SOPORTADOS = frozenset({"|", "|-", "|+"})
 SKILL_MAX_BYTES = 262_144
 DESCRIPCION_MAX = 1024
 HERMES_NOMBRES = {
@@ -161,8 +163,16 @@ def _partir_inline(texto: str) -> list[str]:
     return partes
 
 
+def _es_indicador_bloque(texto: str) -> bool:
+    return bool(INDICADOR_BLOQUE.fullmatch(texto))
+
+
 def _yaml_valor(valor: str):
     texto = valor.strip()
+    if _es_indicador_bloque(texto):
+        raise ValueError(
+            f"el export usa el escalar de bloque {texto!r}; este lector no lo conserva"
+        )
     if texto.startswith("[") and texto.endswith("]"):
         return [_yaml_valor(parte) for parte in _partir_inline(texto[1:-1])]
     if texto.startswith("{") and texto.endswith("}"):
@@ -282,19 +292,45 @@ def _yaml_bloque(
     return texto, indice
 
 
+def _rechazar_continuacion(
+    lineas: list[str], indice: int, indentacion: int, valor: str
+) -> None:
+    texto = valor.strip()
+    if texto[:1] in ("'", '"') and not (len(texto) >= 2 and texto.endswith(texto[0])):
+        raise ValueError(
+            "el export trae un escalar entre comillas sin cerrar; este lector no lo conserva"
+        )
+    siguiente = indice + 1
+    while siguiente < len(lineas) and not lineas[siguiente].strip():
+        siguiente += 1
+    if siguiente >= len(lineas):
+        return
+    linea = lineas[siguiente]
+    if _indent(linea) > indentacion and not linea.lstrip().startswith("#"):
+        raise ValueError(
+            "el export trae un escalar de varias líneas; este lector no lo conserva"
+        )
+
+
 def _yaml_campo(
     lineas: list[str], indice: int, indentacion: int, valor: str
 ) -> tuple[object, int]:
-    if valor.strip() in ("|", "|-", "|+"):
-        return _yaml_bloque(lineas, indice + 1, indentacion, valor.strip())
+    marca = valor.strip()
+    if marca in BLOQUES_SOPORTADOS:
+        return _yaml_bloque(lineas, indice + 1, indentacion, marca)
+    if _es_indicador_bloque(marca):
+        raise ValueError(
+            f"el export usa el escalar de bloque {marca!r}; este lector no lo conserva"
+        )
     if (
-        not valor.strip()
+        not marca
         and indice + 1 < len(lineas)
         and _indent(lineas[indice + 1]) > indentacion
     ):
         if lineas[indice + 1].lstrip().startswith("-"):
             return _yaml_lista(lineas, indice + 1, indentacion + 2)
         return _yaml_mapa(lineas, indice + 1, indentacion + 2)
+    _rechazar_continuacion(lineas, indice, indentacion, valor)
     return _yaml_valor(valor), indice + 1
 
 

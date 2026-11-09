@@ -79,5 +79,8 @@ Si se usa una salida dentro del repo, `.gitignore` cubre `mausbot-equipo/` y
   `apple/`.
 - Una fuente de poteto que no coincide: apunta `--poteto-fuente` a la carpeta que tenga los mismos
   archivos que `scripts/agent-work/contexto/poteto.v1.json`.
+- Un `soul` que el export escribe plegado (`>-`), con indicador de sangría (`|2-`) o como escalar de
+  varias líneas: el generador se detiene con rc 3 y no deja salida, en vez de copiar un texto
+  cortado. Escribe ese `soul` en un bloque literal (`|-`) o en una sola línea y vuelve a generar.
 - Un cambio de `poteto.v1.json`: sube la generación en `generaciones.json` y vuelve a fijar el
   digest. Las pruebas de `scripts/tests/test-agent-work-contexto.py` lo comprueban.
