@@ -5,8 +5,9 @@
 #
 #   1. Corrida buena: el archivo llega al servidor con el sha256 local, trae openbot.db
 #      íntegro con la fila que solo estaba en el WAL, y las carpetas pedidas; deja fuera
-#      provider-runtimes, cachés (también las anidadas en Partitions/<partición>/), logs,
-#      Crashpad y Singleton*. Sin aviso.
+#      provider-runtimes, cachés (también las anidadas en Partitions/<partición>/) y los
+#      regenerables de la raíz. Conserva el estado legítimo fuera de Partitions aunque su
+#      nombre coincida con un patrón de caché. Sin aviso.
 #   2. Una carpeta que no existe se anota y la corrida sigue.
 #   3. El receptor rechaza el nombre de otra familia en openbot y el de openbot en otra
 #      familia; openbot guarda los 2 más nuevos.
@@ -67,6 +68,12 @@ done
 for d in "Partitions/openbot/Local Storage/leveldb" "Partitions/openbot/IndexedDB"; do
   mkdir -p "$RAIZ/$d"
   printf 'estado\n' > "$RAIZ/$d/f"
+done
+# Estado legítimo fuera de Partitions con nombres que el filtro de caché de Electron no
+# debe tocar: si las exclusiones se aplicaran a toda entrada, esto se perdería en silencio.
+for d in automation/Cache local-skills/logs; do
+  mkdir -p "$RAIZ/$d"
+  printf 'estado\n' > "$RAIZ/$d/estado.txt"
 done
 "$SQLITE3" "$RAIZ/openbot.db" 'create table notas(x text); insert into notas values ("fila-en-el-principal");' \
   || fail "no se pudo crear openbot.db"
@@ -156,21 +163,27 @@ for r in openbot.db Preferences "Local State" Cookies custom-agents.json otro.js
          IndexedDB/marca.txt "Local Storage/marca.txt" "Session Storage/marca.txt" \
          WebStorage/marca.txt avatars/marca.txt themes/marca.txt \
          remote-desktop-runtime/marca.txt \
-         "Partitions/openbot/Local Storage/leveldb/f" "Partitions/openbot/IndexedDB/f"; do
+         "Partitions/openbot/Local Storage/leveldb/f" "Partitions/openbot/IndexedDB/f" \
+         "automation/Cache/estado.txt" "local-skills/logs/estado.txt"; do
   grep -qxF "$r" "$SB/lista" || fail "el archivo no trae $r"
 done
-# Nada regenerable en ningún nivel: una caché nueva bajo Partitions/<partición>/ también
-# tiene que quedar fuera.
-python3 - "$SB/lista" <<'E' || fail "el archivo trae algo regenerable"
+for r in provider-runtimes Cache "Code Cache" GPUCache DawnCache GraphiteDawnCache logs Crashpad; do
+  grep -q "^$r/" "$SB/lista" && fail "el archivo trae lo regenerable de la raíz $r"
+done
+grep -qxF "SingletonLock" "$SB/lista" && fail "el archivo trae SingletonLock"
+# Las cachés de Electron se excluyen dentro de Partitions/<partición>/, a cualquier
+# profundidad, y en ninguna otra entrada.
+python3 - "$SB/lista" <<'E' || fail "Partitions trae una caché"
 import fnmatch, sys
 patrones = ["Cache", "Code Cache", "GPUCache", "*Dawn*", "*Graphite*",
-            "Shared Dictionary", "blob_storage", "provider-runtimes",
-            "logs", "Crashpad", "Singleton*", "DevToolsActivePort"]
+            "Shared Dictionary", "blob_storage"]
 for linea in open(sys.argv[1]):
     ruta = linea.rstrip("\n")
+    if not ruta.startswith("Partitions/"):
+        continue
     for parte in ruta.split("/"):
         if any(fnmatch.fnmatchcase(parte, p) for p in patrones):
-            print("regenerable en el archivo:", ruta)
+            print("cache en Partitions:", ruta)
             raise SystemExit(1)
 E
 
