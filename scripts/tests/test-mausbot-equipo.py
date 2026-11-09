@@ -121,7 +121,9 @@ class Export(unittest.TestCase):
         documento = equipo._yaml_equipo(
             "version: 1\n"
             "bots:\n"
-            "  - name: uno\n"
+            "  - browser:\n"
+            "      enabled: true\n"
+            "    name: uno\n"
             "    manages:\n"
             "      - amazon\n"
             "      - meli\n"
@@ -130,16 +132,26 @@ class Export(unittest.TestCase):
             "  - members:\n"
             "      - amazon\n"
             "    name: sala\n"
+            "teams:\n"
+            "  - brief: |-\n"
+            "      linea uno\n"
+            "      linea dos\n"
+            "    name: equipo\n"
         )
         self.assertEqual(
             documento["bots"][0],
             {
+                "browser": {"enabled": True},
                 "name": "uno",
                 "manages": ["amazon", "meli"],
                 "tools": {"allow": ["read", "exec"]},
             },
         )
         self.assertEqual(documento["rooms"][0], {"members": ["amazon"], "name": "sala"})
+        self.assertEqual(
+            documento["teams"][0],
+            {"brief": "linea uno\nlinea dos", "name": "equipo"},
+        )
 
 
 class Generar(unittest.TestCase):
