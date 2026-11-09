@@ -133,7 +133,10 @@ crear_archivo() {
     falla "openbot-backup-$OB_FECHA.tar.gz pesa $tam bytes, más del tope $OB_MAX_BYTES: entró algo regenerable"
     return 1
   fi
-  mv -f "$temporal" "$destino"
+  if ! mv -f "$temporal" "$destino"; then
+    rm -f "$temporal"
+    falla "no se pudo mover $temporal a $destino"; return 1
+  fi
   log "archivo creado: $destino ($(du -h "$destino" | cut -f1), $tam bytes)"
   subir "$destino"
 }

@@ -89,16 +89,23 @@ cat > "$SB/osascript" <<EOS
 printf '%s\n' "\$*" >> "$SB/avisos"
 EOS
 chmod +x "$SB/osascript"
+mkdir -p "$SB/bin"
+cat > "$SB/bin/mv" <<'EOS'
+#!/bin/sh
+[ -n "${FAKE_MV_FALLA:-}" ] && exit 1
+exec /bin/mv "$@"
+EOS
+chmod +x "$SB/bin/mv"
 
 correr() {
   rm -f "$SB/ssh-n"
-  env HOME="$H" OB_RAIZ="$RAIZ" OB_DIR="$SB/local" OB_LOG="$SB/log" OB_FECHA="$F" \
+  env HOME="$H" PATH="$SB/bin:$PATH" OB_RAIZ="$RAIZ" OB_DIR="$SB/local" OB_LOG="$SB/log" OB_FECHA="$F" \
     OB_SSH="$SB/ssh" OB_ESPERA=0 OB_LLAVE="$H/.ssh/openbot_goncloud" \
     OB_OSASCRIPT="$SB/osascript" OB_SQLITE3="$SQLITE3" "$@" /bin/bash "$S"
 }
 lanzar() {
   rm -f "$SB/ssh-n" "$SB/ssh-pid"
-  env HOME="$H" OB_RAIZ="$RAIZ" OB_DIR="$SB/local" OB_LOG="$SB/log" OB_FECHA="$F" \
+  env HOME="$H" PATH="$SB/bin:$PATH" OB_RAIZ="$RAIZ" OB_DIR="$SB/local" OB_LOG="$SB/log" OB_FECHA="$F" \
     OB_SSH="$SB/ssh" OB_ESPERA=0 OB_LLAVE="$H/.ssh/openbot_goncloud" \
     OB_OSASCRIPT="$SB/osascript" OB_SQLITE3="$SQLITE3" "$@" /bin/bash "$S" &
   PID=$!
@@ -204,6 +211,15 @@ grep -q "OpenBot a gonserver falló: openbot-backup-$F.tar.gz pesa .* más del t
   || fail "el aviso no dice que pasó el tope: $(cat "$SB/avisos")"
 [ -e "$SV/openbot-backup-$F.tar.gz" ] && fail "se subió un archivo que pasó el tope"
 [ -e "$L/openbot-backup-$F.tar.gz" ] && fail "quedó local el archivo que pasó el tope y desplazaría a uno válido"
+
+# 5b
+rm -rf "$SB/servidor" "$L"; rm -f "$SB/avisos"
+correr FAKE_MV_FALLA=1; rc=$?
+[ "$rc" -eq 1 ] || fail "un fallo al mover el archivo no hizo fallar la corrida (rc=$rc)"
+[ "$(avisos)" = 1 ] || fail "un fallo al mover no avisó exactamente una vez: $(avisos)"
+grep -q "OpenBot a gonserver falló: no se pudo mover .* a .*openbot-backup-$F.tar.gz" "$SB/avisos" \
+  || fail "el aviso no dice que no se pudo mover: $(cat "$SB/avisos")"
+[ -e "$SV/openbot-backup-$F.tar.gz" ] && fail "se subió algo tras fallar el mv"
 
 # 6
 cat > "$SB/tg.py" <<'PY'
