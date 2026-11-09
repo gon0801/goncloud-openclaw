@@ -391,7 +391,10 @@ def cargar_comun(fuente: Path, manifiesto_path: Path) -> list[Skill]:
             raise contexto.ContextoIncompleto(f"{ruta}: {error or problema}")
         skills.append(Skill(nombre=nombre, texto=texto, origen=ruta))
     adaptacion = contexto.ADAPTACIONES["mausbot"]
-    texto = adaptacion.read_text(encoding="utf-8")
+    datos = adaptacion.read_bytes()
+    if contexto.sha256(datos) != manifiesto.get("adaptations", {}).get("mausbot"):
+        raise contexto.ContextoIncompleto("la adaptación mausbot no coincide con el manifiesto")
+    texto = datos.decode("utf-8")
     meta, error = _leer_frontmatter(texto)
     nombre = str(meta.get("name", ""))
     problema = _validar_skill(nombre, str(meta.get("description", "")), texto)

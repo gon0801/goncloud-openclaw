@@ -72,7 +72,9 @@ Si se usa una salida dentro del repo, `.gitignore` cubre `mausbot-equipo/` y
 ## Qué revisar si algo falla
 
 - Una skill excluida con motivo de Hermes que sí debería servir: revisa el nombre y el cuerpo. El
-  generador excluye las que invocan `hermes cron`, `hermes config` o rutas como `~/.hermes`.
+  generador excluye las que usan rutas como `~/.hermes/.../skills/`, `cronjob(...)`, o que
+  invocan el CLI de Hermes (`hermes cron`, `hermes config` y similares) dos o más veces. Una ruta
+  de scratch como `~/.hermes/cache/scratch` no excluye.
 - Una skill de macOS que no se excluyó: su cabecera debe declarar `platforms: [macos]` o vivir bajo
   `apple/`.
 - Una fuente de poteto que no coincide: apunta `--poteto-fuente` a la carpeta que tenga los mismos

@@ -275,6 +275,16 @@ class Generar(unittest.TestCase):
         }
         self.assertEqual(primero, segundo)
 
+    def test_a_tampered_mausbot_adaptation_is_refused(self):
+        manifiesto = json.loads(self.manifiesto.read_text(encoding="utf-8"))
+        manifiesto["adaptations"]["mausbot"] = "0" * 64
+        manifiesto["digest"] = contexto.digest_de(manifiesto)
+        self.manifiesto.write_text(
+            json.dumps(manifiesto, ensure_ascii=False), encoding="utf-8"
+        )
+        with self.assertRaisesRegex(contexto.ContextoIncompleto, "adaptación mausbot"):
+            self.generar()
+
     def test_a_skill_with_a_token_stops_the_generator(self):
         escribir_perfil(
             self.perfiles,
