@@ -649,10 +649,11 @@ def _escribir(salida: Path, documento: dict, archivos: dict[str, str], forzar: b
         respaldo = Path(tempfile.mkdtemp(prefix=".mausbot-viejo-", dir=str(salida.parent)))
         os.rmdir(respaldo)
         os.rename(salida, respaldo)
-        _heredar_permisos(respaldo, recursivo=True)
     salida.parent.mkdir(parents=True, exist_ok=True)
     temporal = Path(tempfile.mkdtemp(prefix=".mausbot-", dir=str(salida.parent)))
     try:
+        if respaldo is not None:
+            _heredar_permisos(respaldo, recursivo=True)
         _heredar_permisos(temporal)
         for relativa, texto in archivos.items():
             destino = temporal / relativa
