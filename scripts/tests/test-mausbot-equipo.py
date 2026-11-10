@@ -8,6 +8,7 @@ import inspect
 import io
 import json
 import os
+import shutil
 import stat
 import subprocess
 import sys
@@ -413,6 +414,9 @@ class Generar(unittest.TestCase):
 
     @unittest.skipUnless(os.name == "nt", "la comparación de ACL requiere Windows")
     def test_the_output_folder_acl_inherits_the_parent_accounts_on_windows(self):
+        padre = Path(tempfile.gettempdir())
+        self.salida = padre / ("mausbot-equipo-acl-" + os.urandom(4).hex())
+        self.addCleanup(shutil.rmtree, self.salida, ignore_errors=True)
         self.generar()
         faltan = _cuentas_de_acl(self.salida.parent) - _cuentas_de_acl(self.salida)
         self.assertFalse(
@@ -697,6 +701,30 @@ class Aplicar(unittest.TestCase):
         self.assertEqual(len(self.lineas()), 2, "la corrida de prueba y la aplicación se corren")
         self.assertNotEqual(codigo, 0, "una aplicación sin plan parece bien")
         self.assertIn("Plan:", errores.getvalue(), "no se dice que la aplicación no trae plan")
+
+    def test_the_apply_phase_says_the_app_already_applied_when_the_plan_is_missing(self):
+        self.reescribir_falso(
+            "#!/usr/bin/env python3\n"
+            "import json, os, sys\n"
+            "with open(os.environ['FAKE_OPENMAUSBOT_LOG'], 'a', encoding='utf-8') as fh:\n"
+            "    fh.write(json.dumps(sys.argv[1:]) + '\\n')\n"
+            "if '--dry-run' in sys.argv:\n"
+            "    print('Plan: 0 to create, 0 to change, 0 unchanged, 0 to delete.')\n"
+        )
+        salida, errores = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(salida), contextlib.redirect_stderr(errores):
+            codigo = self.correr(aplicar_ahora=True)
+        self.assertNotEqual(codigo, 0, "una aplicación sin plan parece bien")
+        self.assertIn(
+            "ya aplicó",
+            errores.getvalue(),
+            "no se dice que la aplicación ya corrió",
+        )
+        self.assertNotIn(
+            "no se sigue",
+            errores.getvalue(),
+            "el mensaje dice que no se siguió cuando la aplicación ya corrió",
+        )
 
 
 if __name__ == "__main__":
