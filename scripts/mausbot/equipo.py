@@ -868,11 +868,20 @@ def aplicar(
             for linea in ((resultado.stdout or "") + "\n" + (resultado.stderr or "")).splitlines()
         )
         if not planificado:
-            print(
-                "error: la app no trae una línea 'Plan:'; el plan no se puede leer, no se sigue",
-                file=sys.stderr,
-                flush=True,
-            )
+            if "--dry-run" in extra:
+                print(
+                    "error: la app no trae una línea 'Plan:'; "
+                    "el plan no se puede leer, no se sigue",
+                    file=sys.stderr,
+                    flush=True,
+                )
+            else:
+                print(
+                    "error: la aplicación no trae una línea 'Plan:'; "
+                    "OpenMausBot ya aplicó y no se puede confirmar el resultado",
+                    file=sys.stderr,
+                    flush=True,
+                )
             return 4
         return 0
 
