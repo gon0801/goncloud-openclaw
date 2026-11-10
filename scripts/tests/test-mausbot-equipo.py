@@ -3,9 +3,14 @@
 
 from __future__ import annotations
 
+import contextlib
+import inspect
+import io
 import json
 import os
+import shutil
 import stat
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -114,6 +119,23 @@ bots:
     model: opencodeGo/deepseek/deepseek-flash
     approval: full
 """
+
+
+def _cuentas_de_acl(ruta: Path) -> set[str]:
+    """Las cuentas que icacls lista en la ACL de una carpeta (Windows)."""
+    texto = subprocess.run(
+        ["icacls", str(ruta)], check=True, capture_output=True, text=True
+    ).stdout
+    prefijo = f"{ruta} "
+    cuentas = set()
+    for linea in texto.splitlines():
+        linea = linea.strip()
+        if linea.startswith(prefijo):
+            linea = linea[len(prefijo):]
+        cuenta, _, ace = linea.partition(":(")
+        if ace:
+            cuentas.add(cuenta.strip())
+    return cuentas
 
 
 class Export(unittest.TestCase):
@@ -351,6 +373,58 @@ class Generar(unittest.TestCase):
         }
         self.assertEqual(primero, segundo)
 
+    def modo(self, ruta: Path) -> int:
+        return stat.S_IMODE(os.stat(ruta).st_mode)
+
+    def bajo_umask_022(self) -> None:
+        anterior = os.umask(0o022)
+        self.addCleanup(os.umask, anterior)
+
+    @unittest.skipIf(os.name == "nt", "los modos POSIX no aplican en Windows")
+    def test_the_output_folder_permissions_match_a_plain_mkdir(self):
+        self.bajo_umask_022()
+        control = self.tmp / "control-mkdir"
+        control.mkdir()
+        self.generar()
+        self.assertEqual(
+            self.modo(self.salida),
+            self.modo(control),
+            "la salida no queda con los permisos de una carpeta hecha con mkdir",
+        )
+        self.assertEqual(self.modo(self.salida), 0o755, "la salida no queda 0755 con umask 022")
+        self.assertEqual(
+            self.modo(self.salida / "skills" / "ingenieria"),
+            0o755,
+            "la subcarpeta de la salida no queda 0755 con umask 022",
+        )
+
+    @unittest.skipIf(os.name == "nt", "los modos POSIX no aplican en Windows")
+    def test_force_replacement_keeps_the_plain_mkdir_permissions(self):
+        self.bajo_umask_022()
+        self.generar()
+        self.generar(forzar=True)
+        self.assertEqual(
+            self.modo(self.salida), 0o755, "la salida con --force no queda 0755"
+        )
+        self.assertEqual(
+            self.modo(self.salida / "skills" / "ingenieria"),
+            0o755,
+            "la subcarpeta con --force no queda 0755",
+        )
+
+    @unittest.skipUnless(os.name == "nt", "la comparación de ACL requiere Windows")
+    def test_the_output_folder_acl_inherits_the_parent_accounts_on_windows(self):
+        padre = Path(tempfile.gettempdir())
+        self.salida = padre / ("mausbot-equipo-acl-" + os.urandom(4).hex())
+        self.addCleanup(shutil.rmtree, self.salida, ignore_errors=True)
+        self.generar()
+        faltan = _cuentas_de_acl(self.salida.parent) - _cuentas_de_acl(self.salida)
+        self.assertFalse(
+            faltan,
+            "la salida no hereda las cuentas de su carpeta padre: "
+            + ", ".join(sorted(faltan)),
+        )
+
     def test_a_tampered_mausbot_adaptation_is_refused(self):
         manifiesto = json.loads(self.manifiesto.read_text(encoding="utf-8"))
         manifiesto["adaptations"]["mausbot"] = "0" * 64
@@ -479,6 +553,10 @@ class Aplicar(unittest.TestCase):
     def lineas(self):
         return [json.loads(linea) for linea in self.log.read_text(encoding="utf-8").splitlines()]
 
+    def reescribir_falso(self, cuerpo: str) -> None:
+        self.falso.write_text(cuerpo, encoding="utf-8")
+        self.falso.chmod(self.falso.stat().st_mode | stat.S_IXUSR)
+
     def test_default_application_is_a_dry_run_and_never_prunes(self):
         self.assertEqual(self.correr(), 0)
         invocacion = self.lineas()
@@ -503,6 +581,150 @@ class Aplicar(unittest.TestCase):
         for argumentos in invocaciones:
             self.assertNotIn("--prune", argumentos)
             self.assertNotIn("--rotate-secrets", argumentos)
+
+    def test_the_plan_the_app_prints_reaches_aplicar_output(self):
+        self.reescribir_falso(
+            "#!/usr/bin/env python3\n"
+            "import sys\n"
+            "print('Plan: 1366 to create, 69 to change, 46 unchanged, 0 to delete.')\n"
+            "print('aviso de la app', file=sys.stderr)\n"
+        )
+        salida, errores = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(salida), contextlib.redirect_stderr(errores):
+            self.assertEqual(self.correr(), 0)
+        self.assertIn(
+            "Plan: 1366 to create", salida.getvalue(), "el plan de la app no llega a la salida"
+        )
+        self.assertIn("aviso de la app", errores.getvalue(), "el stderr de la app no se imprime")
+
+    def test_an_app_without_a_plan_line_is_a_visible_failure(self):
+        for nombre, cuerpo in {
+            "sin salida": "#!/usr/bin/env python3\n",
+            "salida sin plan": "#!/usr/bin/env python3\nprint('todo bien')\n",
+        }.items():
+            with self.subTest(nombre=nombre):
+                self.reescribir_falso(cuerpo)
+                salida, errores = io.StringIO(), io.StringIO()
+                with contextlib.redirect_stdout(salida), contextlib.redirect_stderr(errores):
+                    codigo = self.correr()
+                self.assertNotEqual(codigo, 0, "una app sin línea Plan: parece bien")
+                self.assertIn("Plan:", errores.getvalue(), "no se dice que falta la línea Plan:")
+
+    def test_an_app_that_never_finishes_is_a_visible_failure(self):
+        invocaciones = []
+
+        def ejecutar_que_se_cuelga(comando, **kwargs):
+            invocaciones.append(kwargs.get("timeout"))
+            if "timeout" not in kwargs:
+                return subprocess.CompletedProcess(comando, 0, stdout="", stderr="")
+            raise subprocess.TimeoutExpired(comando, kwargs["timeout"])
+
+        salida, errores = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(salida), contextlib.redirect_stderr(errores):
+            codigo = equipo.aplicar(
+                self.equipo,
+                openmausbot=self.falso,
+                cli=Path("openmausbot.js"),
+                ejecutar=ejecutar_que_se_cuelga,
+            )
+        self.assertIsNotNone(invocaciones[0], "la app corre sin tope de tiempo")
+        self.assertNotEqual(codigo, 0, "una app que no termina parece bien")
+        self.assertIn("no terminó", errores.getvalue(), "no se explica el tope de tiempo")
+
+        self.reescribir_falso("#!/usr/bin/env python3\nimport time\ntime.sleep(60)\n")
+        salida2, errores2 = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(salida2), contextlib.redirect_stderr(errores2):
+            codigo2 = equipo.aplicar(
+                self.equipo, openmausbot=self.falso, cli=Path("openmausbot.js"), tope=1
+            )
+        self.assertNotEqual(codigo2, 0, "una app que duerme más que el tope no se corta")
+        self.assertIn("no terminó", errores2.getvalue(), "no se explica el corte por tope")
+
+    def test_the_streams_printed_before_the_timeout_are_still_shown(self):
+        con_tope = "tope" in inspect.signature(equipo.aplicar).parameters
+        cuerpo = (
+            "#!/usr/bin/env python3\n"
+            "import sys\n"
+            "print('Plan: 1 to create, 0 to change, 0 unchanged, 0 to delete.', flush=True)\n"
+            "print('aviso: conexión pendiente', file=sys.stderr, flush=True)\n"
+        )
+        if con_tope:
+            cuerpo += "import time\ntime.sleep(30)\n"
+        self.reescribir_falso(cuerpo)
+        salida, errores = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(salida), contextlib.redirect_stderr(errores):
+            if con_tope:
+                codigo = equipo.aplicar(
+                    self.equipo, openmausbot=self.falso, cli=Path("openmausbot.js"), tope=1
+                )
+            else:
+                codigo = equipo.aplicar(
+                    self.equipo, openmausbot=self.falso, cli=Path("openmausbot.js")
+                )
+        if con_tope:
+            self.assertNotEqual(codigo, 0, "una app que no termina parece bien")
+            self.assertIn("no terminó", errores.getvalue(), "no se explica el corte por tope")
+            self.assertIn(
+                "Plan: 1 to create",
+                salida.getvalue(),
+                "lo que la app imprimió antes del tope se descarta",
+            )
+            self.assertIn(
+                "aviso: conexión pendiente",
+                errores.getvalue(),
+                "el stderr previo al tope se descarta",
+            )
+            return
+        self.assertIn(
+            "Plan: 1 to create",
+            salida.getvalue(),
+            "lo que la app contesta no llega a la salida",
+        )
+        self.assertIn(
+            "aviso: conexión pendiente",
+            errores.getvalue(),
+            "el stderr de la app no llega a la salida",
+        )
+
+    def test_the_real_apply_is_held_to_the_same_plan_check(self):
+        self.reescribir_falso(
+            "#!/usr/bin/env python3\n"
+            "import json, os, sys\n"
+            "with open(os.environ['FAKE_OPENMAUSBOT_LOG'], 'a', encoding='utf-8') as fh:\n"
+            "    fh.write(json.dumps(sys.argv[1:]) + '\\n')\n"
+            "if '--dry-run' in sys.argv:\n"
+            "    print('Plan: 0 to create, 0 to change, 0 unchanged, 0 to delete.')\n"
+        )
+        salida, errores = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(salida), contextlib.redirect_stderr(errores):
+            codigo = self.correr(aplicar_ahora=True)
+        self.assertEqual(len(self.lineas()), 2, "la corrida de prueba y la aplicación se corren")
+        self.assertNotEqual(codigo, 0, "una aplicación sin plan parece bien")
+        self.assertIn("Plan:", errores.getvalue(), "no se dice que la aplicación no trae plan")
+
+    def test_the_apply_phase_says_the_app_already_applied_when_the_plan_is_missing(self):
+        self.reescribir_falso(
+            "#!/usr/bin/env python3\n"
+            "import json, os, sys\n"
+            "with open(os.environ['FAKE_OPENMAUSBOT_LOG'], 'a', encoding='utf-8') as fh:\n"
+            "    fh.write(json.dumps(sys.argv[1:]) + '\\n')\n"
+            "if '--dry-run' in sys.argv:\n"
+            "    print('Plan: 0 to create, 0 to change, 0 unchanged, 0 to delete.')\n"
+        )
+        salida, errores = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(salida), contextlib.redirect_stderr(errores):
+            codigo = self.correr(aplicar_ahora=True)
+        self.assertNotEqual(codigo, 0, "una aplicación sin plan parece bien")
+        self.assertIn(
+            "ya aplicó",
+            errores.getvalue(),
+            "no se dice que la aplicación ya corrió",
+        )
+        self.assertNotIn(
+            "no se sigue",
+            errores.getvalue(),
+            "el mensaje dice que no se siguió cuando la aplicación ya corrió",
+        )
 
 
 if __name__ == "__main__":

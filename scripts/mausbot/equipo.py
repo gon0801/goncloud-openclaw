@@ -6,8 +6,9 @@
     equipo.py aplicar --equipo <archivo> [--aplicar]
 
 `generar` lee el export de OpenMausBot, copia a la salida el `SKILL.md` de cada skill que sirve
-en esta PC y escribe `equipo.json`. `aplicar` corre `team apply --dry-run` y solo aplica con
-`--aplicar`.
+en esta PC y escribe `equipo.json`. La salida y su respaldo heredan los permisos de su carpeta
+padre. `aplicar` corre `team apply --dry-run` por tubería, muestra lo que contesta la app y se
+detiene con error si no hay una línea `Plan:`; solo aplica con `--aplicar`.
 Nunca usa `--prune` ni `--rotate-secrets`.
 """
 
@@ -38,6 +39,7 @@ INDICADOR_BLOQUE = re.compile(r"^[|>](?:[1-9][+-]?|[+-][1-9]?)?$")
 BLOQUES_SOPORTADOS = frozenset({"|", "|-", "|+"})
 SKILL_MAX_BYTES = 262_144
 DESCRIPCION_MAX = 1024
+TOPE_APLICACION = 300
 HERMES_NOMBRES = {
     "hermes-agent",
     "hermes-agent-skill-authoring",
@@ -613,6 +615,29 @@ def comprobar_secretos(textos: list[tuple[str, str]]) -> None:
             raise SecretoEncontrado(f"{donde}: posible secreto")
 
 
+def _heredar_permisos(carpeta: Path, recursivo: bool = False) -> None:
+    """mkdtemp crea 0o700: en POSIX quedan 0700 sin respetar el umask y en Windows
+    os.mkdir convierte ese modo en una ACL protegida de SYSTEM, Administrators y OWNER
+    RIGHTS que el rename conserva, así que MausBot sin elevar no pudo leer la salida.
+    Aquí la carpeta vuelve a quedar como el padre: umask en POSIX y herencia con
+    icacls /reset en Windows. En el respaldo va /T porque sus hijos arrastran el ACL
+    protegido de la corrida anterior."""
+    if os.name == "nt":
+        argumentos = ["icacls", str(carpeta), "/reset"]
+        if recursivo:
+            argumentos.append("/T")
+        resultado = subprocess.run(argumentos, check=False, capture_output=True)
+        if resultado.returncode != 0:
+            raise OSError(
+                f"icacls {' '.join(argumentos[1:])} falló para {carpeta}: "
+                f"{resultado.stderr.decode('utf-8', 'replace').strip() or resultado.returncode}"
+            )
+    else:
+        umask = os.umask(0o022)
+        os.umask(umask)
+        os.chmod(carpeta, 0o777 & ~umask)
+
+
 def _escribir(salida: Path, documento: dict, archivos: dict[str, str], forzar: bool) -> None:
     salida = Path(salida)
     respaldo: Path | None = None
@@ -627,6 +652,9 @@ def _escribir(salida: Path, documento: dict, archivos: dict[str, str], forzar: b
     salida.parent.mkdir(parents=True, exist_ok=True)
     temporal = Path(tempfile.mkdtemp(prefix=".mausbot-", dir=str(salida.parent)))
     try:
+        if respaldo is not None:
+            _heredar_permisos(respaldo, recursivo=True)
+        _heredar_permisos(temporal)
         for relativa, texto in archivos.items():
             destino = temporal / relativa
             destino.parent.mkdir(parents=True, exist_ok=True)
@@ -779,6 +807,7 @@ def aplicar(
     openmausbot: Path = DEFAULT_OPENMAUSBOT,
     cli: Path = DEFAULT_CLI,
     ejecutar=subprocess.run,
+    tope: float = TOPE_APLICACION,
 ) -> int:
     equipo = Path(equipo)
     texto = equipo.read_text(encoding="utf-8")
@@ -797,16 +826,69 @@ def aplicar(
     entorno = os.environ.copy()
     entorno["ELECTRON_RUN_AS_NODE"] = "1"
 
-    def correr(extra: list[str]):
+    def correr(extra: list[str]) -> int:
         comando = [*comando_base, *extra]
         print("$ " + " ".join(comando), flush=True)
-        return ejecutar(comando, env=entorno, check=False)
+        try:
+            resultado = ejecutar(
+                comando,
+                env=entorno,
+                check=False,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=tope,
+            )
+        except subprocess.TimeoutExpired as vencido:
+            for caudal, vuelco in (
+                (sys.stdout, vencido.stdout),
+                (sys.stderr, vencido.stderr),
+            ):
+                if not vuelco:
+                    continue
+                if isinstance(vuelco, bytes):
+                    vuelco = vuelco.decode("utf-8", errors="replace")
+                print(vuelco, end="", file=caudal, flush=True)
+            print(
+                f"error: la app no terminó en {tope:g} s; no se sigue",
+                file=sys.stderr,
+                flush=True,
+            )
+            return 5
+        if resultado.stdout:
+            print(resultado.stdout, end="", flush=True)
+        if resultado.stderr:
+            print(resultado.stderr, end="", file=sys.stderr, flush=True)
+        if resultado.returncode != 0:
+            return resultado.returncode
+        planificado = any(
+            linea.strip().startswith("Plan:")
+            for linea in ((resultado.stdout or "") + "\n" + (resultado.stderr or "")).splitlines()
+        )
+        if not planificado:
+            if "--dry-run" in extra:
+                print(
+                    "error: la app no trae una línea 'Plan:'; "
+                    "el plan no se puede leer, no se sigue",
+                    file=sys.stderr,
+                    flush=True,
+                )
+            else:
+                print(
+                    "error: la aplicación no trae una línea 'Plan:'; "
+                    "OpenMausBot ya aplicó y no se puede confirmar el resultado",
+                    file=sys.stderr,
+                    flush=True,
+                )
+            return 4
+        return 0
 
     plan = correr(["--dry-run"])
-    if plan.returncode != 0 or not aplicar_ahora:
-        return plan.returncode
-    final = correr([])
-    return final.returncode
+    if plan != 0 or not aplicar_ahora:
+        return plan
+    return correr([])
 
 
 def main(argv: list[str] | None = None) -> int:
