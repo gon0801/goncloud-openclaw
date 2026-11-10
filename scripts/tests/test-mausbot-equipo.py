@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import contextlib
+import inspect
 import io
 import json
 import os
@@ -636,29 +637,49 @@ class Aplicar(unittest.TestCase):
         self.assertIn("no terminó", errores2.getvalue(), "no se explica el corte por tope")
 
     def test_the_streams_printed_before_the_timeout_are_still_shown(self):
-        self.reescribir_falso(
+        con_tope = "tope" in inspect.signature(equipo.aplicar).parameters
+        cuerpo = (
             "#!/usr/bin/env python3\n"
-            "import sys, time\n"
+            "import sys\n"
             "print('Plan: 1 to create, 0 to change, 0 unchanged, 0 to delete.', flush=True)\n"
             "print('aviso: conexión pendiente', file=sys.stderr, flush=True)\n"
-            "time.sleep(30)\n"
         )
+        if con_tope:
+            cuerpo += "import time\ntime.sleep(30)\n"
+        self.reescribir_falso(cuerpo)
         salida, errores = io.StringIO(), io.StringIO()
         with contextlib.redirect_stdout(salida), contextlib.redirect_stderr(errores):
-            codigo = equipo.aplicar(
-                self.equipo, openmausbot=self.falso, cli=Path("openmausbot.js"), tope=1
+            if con_tope:
+                codigo = equipo.aplicar(
+                    self.equipo, openmausbot=self.falso, cli=Path("openmausbot.js"), tope=1
+                )
+            else:
+                codigo = equipo.aplicar(
+                    self.equipo, openmausbot=self.falso, cli=Path("openmausbot.js")
+                )
+        if con_tope:
+            self.assertNotEqual(codigo, 0, "una app que no termina parece bien")
+            self.assertIn("no terminó", errores.getvalue(), "no se explica el corte por tope")
+            self.assertIn(
+                "Plan: 1 to create",
+                salida.getvalue(),
+                "lo que la app imprimió antes del tope se descarta",
             )
-        self.assertNotEqual(codigo, 0, "una app que no termina parece bien")
-        self.assertIn("no terminó", errores.getvalue(), "no se explica el corte por tope")
+            self.assertIn(
+                "aviso: conexión pendiente",
+                errores.getvalue(),
+                "el stderr previo al tope se descarta",
+            )
+            return
         self.assertIn(
             "Plan: 1 to create",
             salida.getvalue(),
-            "lo que la app imprimió antes del tope se descarta",
+            "lo que la app contesta no llega a la salida",
         )
         self.assertIn(
             "aviso: conexión pendiente",
             errores.getvalue(),
-            "el stderr previo al tope se descarta",
+            "el stderr de la app no llega a la salida",
         )
 
     def test_the_real_apply_is_held_to_the_same_plan_check(self):
