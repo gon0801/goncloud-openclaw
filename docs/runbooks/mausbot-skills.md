@@ -16,6 +16,9 @@ solo se leen hasta que el director corre el paso de aplicación. Nada de esto se
   `enabled: false`, incluido Implementer.
 - Cada bot queda con `computer: local`. Una corrida sin pantalla no pregunta qué computadora usar.
 - `model`, `effort`, `approval` y `soul` se copian del export. El generador no los cambia.
+- La salida y su respaldo heredan los permisos de su carpeta padre: en Windows MausBot y cualquier
+  proceso sin elevar pueden leer `equipo.json` sin un `icacls salida /reset /T` después de generar,
+  y en POSIX la carpeta queda como una hecha con `mkdir` (respeta el umask).
 - La segunda aplicación no cambia nada. El paso de aplicación nunca usa `--prune` ni
   `--rotate-secrets`.
 
@@ -48,7 +51,10 @@ carpeta que ya existe.
 
 ## Mostrar el plan y aplicar
 
-El paso de aplicación usa `--dry-run` por omisión. Muestra el plan y no toca la app.
+El paso de aplicación usa `--dry-run` por omisión. Muestra el plan y no toca la app. La salida de
+la app llega por tubería y se imprime completa; si una corrida (`--dry-run` o `--aplicar`) sale
+bien pero no trae una línea `Plan:`, el paso termina con error en vez de parecer que no cambió
+nada. Lo mismo si la app no termina dentro del tope de tiempo.
 
 ```cmd
 "C:\Users\ehven\motor-runtime\cpython-3.11.16-windows-x86_64-none\python.exe" scripts\mausbot\equipo.py aplicar --equipo C:\Users\ehven\mausbot-equipo\salida\equipo.json
@@ -82,5 +88,9 @@ Si se usa una salida dentro del repo, `.gitignore` cubre `mausbot-equipo/` y
 - Un `soul` que el export escribe plegado (`>-`), con indicador de sangría (`|2-`) o como escalar de
   varias líneas: el generador se detiene con rc 3 y no deja salida, en vez de copiar un texto
   cortado. Escribe ese `soul` en un bloque literal (`|-`) o en una sola línea y vuelve a generar.
+- Un `Access is denied` leyendo `equipo.json` con una salida vieja de antes del arreglo: esa
+  carpeta conserva los permisos solo de administradores de la corrida defectuosa. Ya no hace falta
+  arreglarlo a mano después de cada generación: bórrala y genera de nuevo, o resetéalos una vez
+  con `icacls salida /reset /T`. Las corridas nuevas ya heredan los permisos del padre.
 - Un cambio de `poteto.v1.json`: sube la generación en `generaciones.json` y vuelve a fijar el
   digest. Las pruebas de `scripts/tests/test-agent-work-contexto.py` lo comprueban.
