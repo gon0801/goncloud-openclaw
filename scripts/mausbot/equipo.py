@@ -841,7 +841,16 @@ def aplicar(
                 errors="replace",
                 timeout=tope,
             )
-        except subprocess.TimeoutExpired:
+        except subprocess.TimeoutExpired as vencido:
+            for caudal, vuelco in (
+                (sys.stdout, vencido.stdout),
+                (sys.stderr, vencido.stderr),
+            ):
+                if not vuelco:
+                    continue
+                if isinstance(vuelco, bytes):
+                    vuelco = vuelco.decode("utf-8", errors="replace")
+                print(vuelco, end="", file=caudal, flush=True)
             print(
                 f"error: la app no terminó en {tope:g} s; no se sigue",
                 file=sys.stderr,
