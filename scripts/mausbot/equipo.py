@@ -425,6 +425,9 @@ def _yaml_lista(lineas: list[str], indice: int, indentacion: int) -> tuple[list,
             indice += 1
         while indice < len(lineas):
             linea2 = lineas[indice]
+            if linea2.lstrip().startswith("#"):
+                indice += 1
+                continue
             if not linea2.strip():
                 siguiente = indice
                 while siguiente < len(lineas) and not lineas[siguiente].strip():
