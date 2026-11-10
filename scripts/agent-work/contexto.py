@@ -30,6 +30,7 @@ MANIFIESTO = CONTEXTO / "poteto.v1.json"
 GENERACIONES = CONTEXTO / "generaciones.json"
 PERFILES = CONTEXTO / "perfiles.v1.json"
 ADAPTACIONES = {
+    "mausbot": CONTEXTO / "adaptacion-mausbot.md",
     "opencode-run": CONTEXTO / "adaptacion-opencode-run.md",
     "openclaw": CONTEXTO / "adaptacion-openclaw.md",
 }
