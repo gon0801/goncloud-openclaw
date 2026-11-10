@@ -292,6 +292,23 @@ def _yaml_bloque(
     return texto, indice
 
 
+def _es_entrada_mapa(linea: str) -> bool:
+    texto = linea.strip()
+    clave, separador, resto = texto.partition(":")
+    if not separador or not clave.strip():
+        return False
+    return resto == "" or resto[0] in " \t"
+
+
+def _sangria_siguiente(lineas: list[str], indice: int) -> int | None:
+    while indice < len(lineas):
+        linea = lineas[indice]
+        if linea.strip() and not linea.lstrip().startswith("#"):
+            return _indent(linea)
+        indice += 1
+    return None
+
+
 def _rechazar_continuacion(
     lineas: list[str], indice: int, indentacion: int, valor: str
 ) -> None:
@@ -322,14 +339,23 @@ def _yaml_campo(
         raise ValueError(
             f"el export usa el escalar de bloque {marca!r}; este lector no lo conserva"
         )
-    if (
-        not marca
-        and indice + 1 < len(lineas)
-        and _indent(lineas[indice + 1]) > indentacion
-    ):
-        if lineas[indice + 1].lstrip().startswith("-"):
-            return _yaml_lista(lineas, indice + 1, indentacion + 2)
-        return _yaml_mapa(lineas, indice + 1, indentacion + 2)
+    if not marca:
+        siguiente = indice + 1
+        while siguiente < len(lineas) and (
+            not lineas[siguiente].strip()
+            or lineas[siguiente].lstrip().startswith("#")
+        ):
+            siguiente += 1
+        if siguiente < len(lineas) and _indent(lineas[siguiente]) > indentacion:
+            sangria = _indent(lineas[siguiente])
+            if lineas[siguiente].lstrip().startswith("-"):
+                return _yaml_lista(lineas, siguiente, sangria)
+            if _es_entrada_mapa(lineas[siguiente]):
+                return _yaml_mapa(lineas, siguiente, sangria)
+            raise ValueError(
+                "el export trae un escalar de varias líneas en la línea siguiente; "
+                "este lector no lo conserva"
+            )
     _rechazar_continuacion(lineas, indice, indentacion, valor)
     return _yaml_valor(valor), indice + 1
 
@@ -344,13 +370,17 @@ def _yaml_mapa(lineas: list[str], indice: int, indentacion: int) -> tuple[dict, 
         actual = _indent(linea)
         if actual < indentacion:
             break
-        if actual != indentacion:
-            indice += 1
-            continue
+        if actual > indentacion:
+            raise ValueError(
+                "el export trae una línea más sangrada de lo esperado dentro de un mapa; "
+                "este lector no la conserva"
+            )
         clave, separador, valor = linea.strip().partition(":")
-        if not separador:
-            indice += 1
-            continue
+        if not separador or not clave.strip():
+            raise ValueError(
+                "el export trae una línea que no es 'clave: valor' dentro de un mapa; "
+                "este lector no la conserva"
+            )
         valor, indice = _yaml_campo(lineas, indice, actual, valor)
         mapa[clave.strip()] = valor
     return mapa, indice
@@ -366,15 +396,26 @@ def _yaml_lista(lineas: list[str], indice: int, indentacion: int) -> tuple[list,
         actual = _indent(linea)
         if actual < indentacion:
             break
-        if actual != indentacion or not linea.lstrip().startswith("-"):
-            indice += 1
-            continue
+        if actual != indentacion:
+            raise ValueError(
+                "el export trae una línea más sangrada de lo esperado dentro de una lista; "
+                "este lector no la conserva"
+            )
+        if not linea.lstrip().startswith("-"):
+            raise ValueError(
+                "el export trae una lista con una línea que no empieza por '-'; "
+                "este lector no la conserva"
+            )
         resto = linea.lstrip()[1:].strip()
         item: dict = {}
         if resto:
             clave, separador, valor = resto.partition(":")
             if separador:
-                valor, indice = _yaml_campo(lineas, indice, actual + 2, valor)
+                despues_guion = linea[actual + 1 :]
+                columnas = len(despues_guion) - len(despues_guion.lstrip())
+                valor, indice = _yaml_campo(
+                    lineas, indice, actual + 1 + columnas, valor
+                )
                 item[clave.strip()] = valor
             else:
                 items.append(_yaml_valor(resto))
@@ -395,9 +436,11 @@ def _yaml_lista(lineas: list[str], indice: int, indentacion: int) -> tuple[list,
             if _indent(linea2) <= actual:
                 break
             clave, separador, valor = linea2.strip().partition(":")
-            if not separador:
-                indice += 1
-                continue
+            if not separador or not clave.strip():
+                raise ValueError(
+                    "el export trae una línea que no es 'clave: valor' dentro de un item; "
+                    "este lector no la conserva"
+                )
             valor, indice = _yaml_campo(lineas, indice, _indent(linea2), valor)
             item[clave.strip()] = valor
         items.append(item)
@@ -425,8 +468,13 @@ def _yaml_equipo(texto: str) -> dict:
             documento["version"] = int(valor.strip())
             indice += 1
         elif clave in ("teams", "bots", "rooms"):
-            items, indice = _yaml_lista(lineas, indice + 1, 2)
-            documento[clave] = items
+            sangria = _sangria_siguiente(lineas, indice + 1)
+            if sangria is None or sangria == 0:
+                documento[clave] = []
+                indice += 1
+            else:
+                items, indice = _yaml_lista(lineas, indice + 1, sangria)
+                documento[clave] = items
         else:
             indice += 1
     return documento
@@ -609,6 +657,13 @@ def generar(
     bots = documento_export.get("bots") or []
     if not bots:
         raise ValueError("el export no trae bots")
+    for bot in bots:
+        if isinstance(bot.get("soul"), (dict, list)):
+            nombre = bot.get("name", "?")
+            raise ValueError(
+                f"el export trae el campo soul de {nombre} como mapa o lista; "
+                "soul debe ser texto"
+            )
     comun = cargar_comun(Path(poteto_fuente), Path(manifiesto))
     motor = skill_motor(Path(repo))
     perfiles_por_nombre = _perfiles(Path(perfiles))
