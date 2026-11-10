@@ -153,6 +153,29 @@ class Export(unittest.TestCase):
             {"brief": "linea uno\nlinea dos", "name": "equipo"},
         )
 
+    def test_a_line_that_is_not_key_value_inside_a_block_is_refused(self):
+        casos = {
+            "mapa": (
+                "version: 1\n"
+                "bots:\n"
+                "  - name: uno\n"
+                "    browser:\n"
+                "      enabled: true\n"
+                "      no es una entrada\n"
+            ),
+            "campos de item": (
+                "version: 1\n"
+                "bots:\n"
+                "  - name: uno\n"
+                "    team: x\n"
+                "    linea suelta\n"
+            ),
+        }
+        for nombre, texto in casos.items():
+            with self.subTest(nombre=nombre):
+                with self.assertRaises(ValueError):
+                    equipo._yaml_equipo(texto)
+
 
 class Generar(unittest.TestCase):
     def setUp(self):
@@ -365,6 +388,15 @@ class Generar(unittest.TestCase):
             ),
             "escalar entre comillas continuado": (
                 '    soul: "Eres un bot\n      muy largo"\n'
+            ),
+            "escalar en la linea siguiente": (
+                "    soul:\n      Eres un bot muy largo\n      que sigue en otra linea\n"
+            ),
+            "comillas en la linea siguiente": (
+                '    soul:\n      "Eres un bot muy largo"\n'
+            ),
+            "mapa en la linea siguiente": (
+                "    soul:\n      Regla: no mentir\n"
             ),
         }
         for nombre, reemplazo in formas.items():
