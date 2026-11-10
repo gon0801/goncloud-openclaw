@@ -399,6 +399,7 @@ class Generar(unittest.TestCase):
     @unittest.skipIf(os.name == "nt", "los modos POSIX no aplican en Windows")
     def test_force_replacement_keeps_the_plain_mkdir_permissions(self):
         self.bajo_umask_022()
+        self.generar()
         self.generar(forzar=True)
         self.assertEqual(
             self.modo(self.salida), 0o755, "la salida con --force no queda 0755"
@@ -633,6 +634,32 @@ class Aplicar(unittest.TestCase):
             )
         self.assertNotEqual(codigo2, 0, "una app que duerme más que el tope no se corta")
         self.assertIn("no terminó", errores2.getvalue(), "no se explica el corte por tope")
+
+    def test_the_streams_printed_before_the_timeout_are_still_shown(self):
+        self.reescribir_falso(
+            "#!/usr/bin/env python3\n"
+            "import sys, time\n"
+            "print('Plan: 1 to create, 0 to change, 0 unchanged, 0 to delete.', flush=True)\n"
+            "print('aviso: conexión pendiente', file=sys.stderr, flush=True)\n"
+            "time.sleep(30)\n"
+        )
+        salida, errores = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(salida), contextlib.redirect_stderr(errores):
+            codigo = equipo.aplicar(
+                self.equipo, openmausbot=self.falso, cli=Path("openmausbot.js"), tope=1
+            )
+        self.assertNotEqual(codigo, 0, "una app que no termina parece bien")
+        self.assertIn("no terminó", errores.getvalue(), "no se explica el corte por tope")
+        self.assertIn(
+            "Plan: 1 to create",
+            salida.getvalue(),
+            "lo que la app imprimió antes del tope se descarta",
+        )
+        self.assertIn(
+            "aviso: conexión pendiente",
+            errores.getvalue(),
+            "el stderr previo al tope se descarta",
+        )
 
     def test_the_real_apply_is_held_to_the_same_plan_check(self):
         self.reescribir_falso(
