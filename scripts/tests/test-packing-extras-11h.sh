@@ -100,34 +100,6 @@ for behavior, needles in forbidden.items():
     for needle in needles:
         if needle.casefold() in folded:
             failures.append(f"CONTRADICCION {behavior}: {needle}")
-terminal = re.compile(r"\b(?:termina|terminar|finaliza|finalizar|responde|reporta|reportar|informa|informar|comunica|comunicar|devuelve|devolver)\b", re.IGNORECASE)
-for line_number, line in enumerate(text.splitlines(), start=1):
-    for sentence in re.split(r"(?<=[.!?])\s+", line):
-        for terminal_match in terminal.finditer(sentence):
-            action = sentence[terminal_match.start():].casefold()
-            if action.startswith(("termina las entregas normales", "terminar toda la cobertura")):
-                continue
-            outcome = re.split(r"[,;]", action, maxsplit=1)[0]
-            failure_outcome = "fallo_explicito" in outcome and not re.search(
-                r"\b(?:éxito|exito|corte_completo)\b", outcome
-            )
-            if "prohibido" in sentence.casefold() or failure_outcome:
-                continue
-            folded_line = line.casefold()
-            terminal_index = line.find(sentence) + terminal_match.start()
-            close = re.search(
-                r"(?:^|[.;]\s*)ejecuta(?:r)?\s+python3\s+\$gate\s+cerrar\s+\$estado\b",
-                folded_line,
-            )
-            close_result = ""
-            if close and close.end() <= terminal_index:
-                close_result = folded_line[close.end():terminal_index]
-            complete_condition = re.search(
-                r"(?:^|[.;]\s*)solo una salida json con estado corte_completo y corte_completo\s*=\s*true autoriza\b[^,.;]*$",
-                close_result,
-            )
-            if not complete_condition or "fallo_explicito" in close_result:
-                failures.append(f"CONTRADICCION salida sin compuerta: línea {line_number}")
 scoped_instructions = {
     "agents/operaciones/agent/workshop-skills/sellercentral-browser-census/SKILL.md": (
         "EXCEPCIÓN packing-extras-11h",

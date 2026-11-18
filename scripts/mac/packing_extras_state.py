@@ -119,26 +119,21 @@ def missing_content(state, name):
 
 
 def pending_orders(state):
-    return {
-        name: sorted(missing_content(state, name))
-        for name, delivery in state["entregas"].items()
-        if delivery["prevista"] and missing_content(state, name)
-    }
+    pending = {}
+    for name in state["entregas"]:
+        missing = missing_content(state, name)
+        if missing:
+            pending[name] = sorted(missing)
+    return pending
 
 
 def plan(state):
     failures = source_failures(state)
-    pending = []
     skipped = []
     pending_ids = pending_orders(state) if state["lote"] is not None else {}
     for name, delivery in state["entregas"].items():
-        if not delivery["prevista"]:
-            continue
-        status = delivery["estado"]
-        if status in {"en_curso", "indeterminado"}:
+        if delivery["estado"] in {"en_curso", "indeterminado"}:
             failures.append(f"entregas.{name}:reconciliar")
-        elif name in pending_ids:
-            pending.append(name)
     if failures:
         return emit({"estado": "FALLO_EXPLICITO", "corte_completo": False, "faltantes": failures}, 1)
     for index, name in enumerate(("telegram_gon", "telegram_isabel"), start=1):
@@ -154,7 +149,7 @@ def plan(state):
         {
             "estado": "REINTENTO_PERMITIDO",
             "corte_completo": False,
-            "entregas_pendientes": sorted(pending),
+            "entregas_pendientes": sorted(pending_ids),
             "pedidos_pendientes": pending_ids,
             "telegram_chats_pendientes": telegram_pending,
             "telegram_chats_omitidos": skipped,
@@ -166,9 +161,7 @@ def close(state):
     failures = source_failures(state)
     pending_ids = pending_orders(state) if state["lote"] is not None else {}
     for name, delivery in state["entregas"].items():
-        if not delivery["prevista"]:
-            continue
-        if delivery["estado"] != "verificado":
+        if (delivery["prevista"] or name in pending_ids) and delivery["estado"] != "verificado":
             failures.append(f"entregas.{name}")
         if name in pending_ids:
             failures.append(f"entregas.{name}:pedidos")
@@ -242,7 +235,10 @@ def read_batch(amazon_path, meli_path):
 
 def register_batch(path, amazon_path, meli_path):
     state = load_state(path)
-    state["lote"] = read_batch(amazon_path, meli_path)
+    batch = read_batch(amazon_path, meli_path)
+    if state["lote"] != batch:
+        state["artefactos"] = dict.fromkeys(ARTIFACTS, "pendiente")
+    state["lote"] = batch
     save_state(path, state)
     return emit({"estado": "LOTE_REGISTRADO", "corte_completo": False, "pedidos": sorted(state["lote"])})
 
@@ -278,6 +274,8 @@ def mark(path, kind, name, status, receipt):
             delivery["recibos"].append({"recibo": receipt, "pedidos": delivery["intento"]})
             delivery["intento"] = {}
         elif status in {"pendiente", "no_prevista"}:
+            if delivery["estado"] in {"en_curso", "indeterminado"}:
+                raise ValueError(f"entrega {name} exige reconciliación antes de cambiar su estado")
             delivery["intento"] = {}
         delivery["prevista"] = status != "no_prevista"
         delivery["estado"] = status
