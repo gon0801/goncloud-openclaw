@@ -232,6 +232,10 @@ class Store:
                 "UPDATE cuts SET sealed_revision=?,sources_complete=?,state='sealed' WHERE id=?",
                 (revision, int(complete), cut_id),
             )
+            self.con.execute(
+                "UPDATE units SET state='superseded' WHERE cut_id=? AND revision<>? AND state IN ('planned','retryable')",
+                (cut_id, revision),
+            )
 
     def sealed_assessment(self, cut_id: str) -> Dict[str, Any]:
         cut = self.get_cut(cut_id)
@@ -344,14 +348,14 @@ class Store:
 
     def summaries_blocking(self, cut_id: str) -> int:
         row = self.con.execute(
-            "SELECT COUNT(*) AS n FROM units WHERE cut_id=? AND kind='summary' AND state IN ('planned','in_flight','retryable','uncertain')",
+            "SELECT COUNT(*) AS n FROM units JOIN cuts ON cuts.id=units.cut_id AND cuts.sealed_revision=units.revision WHERE units.cut_id=? AND units.kind='summary' AND units.state IN ('planned','in_flight','retryable','uncertain')",
             (cut_id,),
         ).fetchone()
         return int(row["n"])
 
     def assigned_obligations(self) -> set:
         rows = self.con.execute(
-            "SELECT DISTINCT m.notice_id FROM unit_members m JOIN units u ON u.id=m.unit_id WHERE u.state IN ('planned','in_flight','retryable','uncertain')"
+            "SELECT DISTINCT m.notice_id FROM unit_members m JOIN units u ON u.id=m.unit_id JOIN cuts ON cuts.id=u.cut_id AND cuts.sealed_revision=u.revision WHERE u.state IN ('planned','in_flight','retryable','uncertain')"
         ).fetchall()
         return {row["notice_id"] for row in rows}
 
@@ -430,13 +434,16 @@ class Store:
 
     def pending_units(self) -> List[Dict[str, Any]]:
         rows = self.con.execute(
-            "SELECT id FROM units WHERE state IN ('planned','retryable') ORDER BY created_at,id"
+            "SELECT units.id FROM units JOIN cuts ON cuts.id=units.cut_id AND cuts.sealed_revision=units.revision WHERE units.state IN ('planned','retryable') ORDER BY units.created_at,units.id"
         ).fetchall()
         return [self.unit(row["id"]) for row in rows]
 
     def claim_unit(self, unit_id: str, worker_id: str, now: str) -> Optional[Dict[str, Any]]:
         with self.transaction():
-            row = self.con.execute("SELECT state FROM units WHERE id=?", (unit_id,)).fetchone()
+            row = self.con.execute(
+                "SELECT units.state FROM units JOIN cuts ON cuts.id=units.cut_id AND cuts.sealed_revision=units.revision WHERE units.id=?",
+                (unit_id,),
+            ).fetchone()
             if row is None or row["state"] not in {"planned", "retryable"}:
                 return None
             active = self.con.execute(

@@ -352,6 +352,30 @@ class Harness(unittest.TestCase):
         self.assertEqual(3, len({entry["unit_id"] for entry in self.hub.outbox}))
         self.assertEqual("complete", view["cut"]["state"])
 
+    def test_unsealed_plan_units_are_not_deliverable(self):
+        fixture = one_order_fixture()
+        service = self.service(fixture)
+        original = service.store.create_unit
+        checked = {"done": False}
+
+        def resume_during_plan(*args, **kwargs):
+            unit = original(*args, **kwargs)
+            if not checked["done"]:
+                checked["done"] = True
+                mid = service.resume_cut(self.cut_id(fixture))
+                assert mid["cut"]["state"] == "pending"
+                assert self.hub.outbox == []
+            return unit
+
+        service.store.create_unit = resume_during_plan
+        self.run_all(service, fixture, deliver=False)
+        self.assertIsNotNone(service.store.get_cut(self.cut_id(fixture))["sealed_revision"])
+        self.assertEqual([], self.hub.outbox)
+        view = service.resume_cut(self.cut_id(fixture))
+        self.assertEqual("complete", view["cut"]["state"])
+        self.assertEqual(3, len(self.hub.outbox))
+        self.assertEqual(3, len({entry["unit_id"] for entry in self.hub.outbox}))
+
     def test_advance_recovers_inflight_from_previous_cut(self):
         fixture = one_order_fixture()
         service = self.service(fixture)

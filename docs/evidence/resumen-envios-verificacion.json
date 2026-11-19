@@ -4,7 +4,7 @@
   "modo": "sin_red_real_sin_credenciales_sin_escrituras_de_produccion",
   "prototipo": {
     "comando": "bash scripts/tests/test-resumen-envios.sh",
-    "ensayos_unittest": 28,
+    "ensayos_unittest": 29,
     "resultado": "OK",
     "cubren": [
       "tres_cortes",
@@ -72,6 +72,7 @@
     "F2_advance_sin_recuperacion": "corregido_recover_and_deliver_en_todos_los_caminos",
     "F3_conciliacion_concurrente": "corregido_releer_intento_bajo_lock_y_regresion",
     "F5_cantidad_ausente": "corregido_fuente_incompleta_y_cantidad_por_verificar",
+    "F6_unidades_no_selladas": "corregido_solo_revision_sellada_vigente_y_borradores_superseded",
     "F4_zona_horaria": "no_aplicada_zdump_host_confirma_MST_UTC_07_verbatim_en_inventario"
   },
   "no_verificado": [
