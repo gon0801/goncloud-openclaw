@@ -79,6 +79,7 @@
       "2026-03-08T10:00:00Z: PST UTC-08:00 a PDT UTC-07:00",
       "2026-11-01T09:00:00Z: PDT UTC-07:00 a MST UTC-07:00"
     ],
+    "zdump_2026_11_01_verbatim": "America/Vancouver  Sun Nov  1 09:00:00 2026 UT = Sun Nov  1 02:00:00 2026 MST isdst=0 gmtoff=-25200",
     "regla": "Usar la zona IANA del ejecutor; no fijar offset ni convertir mediante America/Mexico_City"
   },
   "registros_vivos": {

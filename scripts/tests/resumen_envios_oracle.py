@@ -66,7 +66,8 @@ def content_problem(order):
     if not lines:
         return True
     for line in lines:
-        if not line.get("id") or not line.get("sku") or int(line.get("quantity", 0)) < 1:
+        quantity = line.get("quantity")
+        if not line.get("id") or not line.get("sku") or quantity is None or int(quantity) < 1:
             return True
         if line.get("customization") and not line["customization"].get("text"):
             return True

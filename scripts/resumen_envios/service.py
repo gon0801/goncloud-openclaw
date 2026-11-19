@@ -16,7 +16,13 @@ from .store import Store
 
 
 class CutService:
-    def __init__(self, store: Store, transports: FakeTransportHub, lock_dir: Path, holidays: Optional[Set[str]] = None):
+    def __init__(
+        self,
+        store: Store,
+        transports: FakeTransportHub,
+        lock_dir: Path,
+        holidays: Optional[Set[str]] = None,
+    ):
         self.store = store
         self.transports = transports
         self.lock_dir = Path(lock_dir)
@@ -36,7 +42,19 @@ class CutService:
             fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
             handle.close()
 
-    def advance_cut(self, kind: str, local_date: str, scheduled_at: str, reports: Iterable[SourceReport], deliver: bool = True) -> Dict[str, Any]:
+    def recover_and_deliver(self, cut_id: str) -> None:
+        runner = self.runner()
+        runner.recover()
+        runner.deliver_pending(current_cut=cut_id)
+
+    def advance_cut(
+        self,
+        kind: str,
+        local_date: str,
+        scheduled_at: str,
+        reports: Iterable[SourceReport],
+        deliver: bool = True,
+    ) -> Dict[str, Any]:
         cut_id = self.store.ensure_cut(kind, local_date)
         instant = parse_instant(scheduled_at)
         for report in reports:
@@ -44,6 +62,8 @@ class CutService:
             status, details, _ = source_assessment(report, kind, instant, self.holidays)
             self.store.save_source(cut_id, report, status, details, late)
         if self.store.get_cut(cut_id)["sealed_revision"] is not None:
+            if deliver:
+                self.recover_and_deliver(cut_id)
             self.store.close_cut(cut_id)
             return self.store.view(cut_id)
         if kind == "principal":
@@ -53,24 +73,24 @@ class CutService:
             if local_instant.time() < time(18, 30):
                 latest = self.store.latest_reports(cut_id)
                 assessment = assess_sources(latest, kind, instant, self.holidays)
-                self.store.save_assessment(cut_id, assessment.as_dict(), assessment.complete, False)
+                self.store.save_assessment(cut_id, assessment.as_dict(), assessment.complete)
                 return self.store.view(cut_id)
         with self.planning_lock():
             if self.store.get_cut(cut_id)["sealed_revision"] is not None:
+                if deliver:
+                    self.recover_and_deliver(cut_id)
                 self.store.close_cut(cut_id)
                 return self.store.view(cut_id)
             latest = self.store.latest_reports(cut_id)
             assessment = assess_sources(latest, kind, instant, self.holidays)
             seal_plan(self.store, cut_id, kind, local_date, scheduled_at, assessment)
         if deliver:
-            self.runner().deliver_pending(current_cut=cut_id)
+            self.recover_and_deliver(cut_id)
         self.store.close_cut(cut_id)
         return self.store.view(cut_id)
 
     def resume_cut(self, cut_id: str) -> Dict[str, Any]:
-        runner = self.runner()
-        runner.recover()
-        runner.deliver_pending(current_cut=cut_id)
+        self.recover_and_deliver(cut_id)
         self.store.close_cut(cut_id)
         return self.store.view(cut_id)
 

@@ -131,7 +131,7 @@ def content_defects(order: OrderObservation) -> Tuple[str, ...]:
             defects.append("linea_sin_id")
         if not line.sku:
             defects.append("linea_sin_sku_plataforma")
-        if line.quantity < 1:
+        if line.quantity is None or line.quantity < 1:
             defects.append("cantidad_invalida")
         if line.customization and not line.customization.text:
             defects.append("personalizacion_sin_texto")

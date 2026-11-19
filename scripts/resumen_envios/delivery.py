@@ -150,12 +150,15 @@ class DeliveryRunner:
             unit = self.store.unit(attempt["unit_id"])
             lock = self._lock(unit["id"])
             try:
-                outcome = self.transports.locate(unit, attempt)
+                current = self.store.attempt(attempt["id"])
+                if current["state"] != "unknown":
+                    continue
+                outcome = self.transports.locate(unit, current)
                 if outcome.outcome == "accepted":
-                    self.store.finish_attempt(attempt["id"], attempt["worker_id"], "accepted", outcome.receipt, None, self.now())
+                    self.store.finish_attempt(current["id"], current["worker_id"], "accepted", outcome.receipt, None, self.now())
                     recovered["confirmed"] += 1
                 elif outcome.outcome == "rejected":
-                    self.store.reconcile_absent(attempt["id"], self.now())
+                    self.store.reconcile_absent(current["id"], self.now())
                     recovered["retryable"] += 1
                 else:
                     recovered["uncertain"] += 1

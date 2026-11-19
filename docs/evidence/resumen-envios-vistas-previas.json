@@ -95,7 +95,7 @@
     "outbox": [
       {
         "unit_id": "34cb6e7c10d9040617ea6e91",
-        "attempt_id": "6e52047d2eab4b158ab1fd5c9546e9ad",
+        "attempt_id": "be6023bbe5f8446db628376ab6e992ff",
         "channel": "telegram",
         "recipient": "david",
         "kind": "summary",
@@ -106,41 +106,8 @@
             "kind": "order",
             "order": {
               "platform": "amazon",
-              "account": "us",
-              "native_id": "A-US"
-            },
-            "line": null,
-            "channel": "telegram",
-            "recipient": "david"
-          },
-          {
-            "kind": "order",
-            "order": {
-              "platform": "amazon",
               "account": "mx",
               "native_id": "A-PAY"
-            },
-            "line": null,
-            "channel": "telegram",
-            "recipient": "david"
-          },
-          {
-            "kind": "order",
-            "order": {
-              "platform": "amazon",
-              "account": "mx",
-              "native_id": "A-NEW"
-            },
-            "line": null,
-            "channel": "telegram",
-            "recipient": "david"
-          },
-          {
-            "kind": "order",
-            "order": {
-              "platform": "amazon",
-              "account": "mx",
-              "native_id": "A-FLEX"
             },
             "line": null,
             "channel": "telegram",
@@ -163,6 +130,39 @@
               "platform": "mercado_libre",
               "account": "mx",
               "native_id": "ML-CONF"
+            },
+            "line": null,
+            "channel": "telegram",
+            "recipient": "david"
+          },
+          {
+            "kind": "order",
+            "order": {
+              "platform": "amazon",
+              "account": "mx",
+              "native_id": "A-NEW"
+            },
+            "line": null,
+            "channel": "telegram",
+            "recipient": "david"
+          },
+          {
+            "kind": "order",
+            "order": {
+              "platform": "amazon",
+              "account": "us",
+              "native_id": "A-US"
+            },
+            "line": null,
+            "channel": "telegram",
+            "recipient": "david"
+          },
+          {
+            "kind": "order",
+            "order": {
+              "platform": "amazon",
+              "account": "mx",
+              "native_id": "A-FLEX"
             },
             "line": null,
             "channel": "telegram",
@@ -173,7 +173,7 @@
       },
       {
         "unit_id": "e215fa9bd6aa427f2efeb875",
-        "attempt_id": "240bd4d818ce43428b9e732018918356",
+        "attempt_id": "b41445d345a44a92a95c2464f5b45968",
         "channel": "telegram",
         "recipient": "isabel",
         "kind": "summary",
@@ -183,9 +183,20 @@
           {
             "kind": "order",
             "order": {
+              "platform": "amazon",
+              "account": "mx",
+              "native_id": "A-PAY"
+            },
+            "line": null,
+            "channel": "telegram",
+            "recipient": "isabel"
+          },
+          {
+            "kind": "order",
+            "order": {
               "platform": "mercado_libre",
               "account": "mx",
-              "native_id": "ML-CONF"
+              "native_id": "ML-PACK"
             },
             "line": null,
             "channel": "telegram",
@@ -207,7 +218,7 @@
             "order": {
               "platform": "mercado_libre",
               "account": "mx",
-              "native_id": "ML-PACK"
+              "native_id": "ML-CONF"
             },
             "line": null,
             "channel": "telegram",
@@ -234,52 +245,19 @@
             "line": null,
             "channel": "telegram",
             "recipient": "isabel"
-          },
-          {
-            "kind": "order",
-            "order": {
-              "platform": "amazon",
-              "account": "mx",
-              "native_id": "A-PAY"
-            },
-            "line": null,
-            "channel": "telegram",
-            "recipient": "isabel"
           }
         ],
         "receipt": "receipt-2"
       },
       {
         "unit_id": "ff7ba3e923d802d33ae4eab4",
-        "attempt_id": "4cb37b53d3d14b1d91a572eeb4f2deaf",
+        "attempt_id": "43804e2b1c4a4190bc42d2471a7ae0db",
         "channel": "email",
         "recipient": "operation",
         "kind": "summary",
         "ordinal": 1,
         "content": "<!DOCTYPE html><html><body><b>AMAZON SELF SHIP US</b><br>\n<br>\n<b>Pedido:</b> A-US<br>\n<b>Cliente:</b> Cliente US ficticio<br>\n<b>Plataforma:</b> amazon / self<br>\n<b>Plazo:</b> 2026-11-19T09:00:00-08:00<br>\n<b>Acción:</b> ship<br>\n<b>SKU:</b> SKU-US × 1<br>\n<b>SKU interno:</b> INT-US<br><br>\n<b>AMAZON SELF SHIP MX</b><br>\n<br>\n<b>Pedido:</b> A-PAY<br>\n<b>Cliente:</b> Cliente pago ficticio<br>\n<b>Plataforma:</b> amazon / self<br>\n<b>Plazo:</b> 2026-11-19T12:00:00-07:00<br>\n<b>Acción:</b> ship<br>\n<b>pago pendiente</b><br>\n<b>SKU:</b> SKU-PAY × 1<br>\n<b>SKU interno:</b> SKU interno por confirmar<br><br>\n<b>AMAZON EASY SHIP</b><br>\n<br>\n<b>Pedido:</b> A-NEW<br>\n<b>Cliente:</b> Cliente Easy ficticio<br>\n<b>Plataforma:</b> amazon / easy<br>\n<b>Plazo:</b> 2026-11-19T10:00:00-07:00<br>\n<b>Acción:</b> pending_drop_off<br>\n<b>SKU:</b> PERS-A × 1<br>\n<b>SKU interno:</b> INT-A<br>\n<b>Personalización:</b> Texto exacto L1<br>\n<b>Opciones:</b> {&#x27;color&#x27;: &#x27;dorado&#x27;}<br>\n<b>Personalización incompleta: falta imagen</b><br>\n<b>SKU:</b> PERS-B × 2<br>\n<b>SKU interno:</b> SKU interno por confirmar<br>\n<b>Personalización:</b> Texto exacto L2<br>\n<b>Opciones:</b> {&#x27;marco&#x27;: &#x27;rojo&#x27;}<br><br>\n<b>AMAZON FLEX</b><br>\n<br>\n<b>Pedido:</b> A-FLEX<br>\n<b>Cliente:</b> Cliente Flex ficticio<br>\n<b>Plataforma:</b> amazon / flex<br>\n<b>Plazo:</b> 2026-11-19T11:00:00-07:00<br>\n<b>Acción:</b> waiting_for_pickup<br>\n<b>SKU:</b> SKU-FLEX × 1<br>\n<b>SKU interno:</b> INT-FLEX<br><br>\n<b>MERCADO LIBRE — POR CONFIRMAR ENVÍO</b><br>\n<br>\n<b>Pedido:</b> PANEL-CONF<br>\n<b>Cliente:</b> Cliente confirmar ficticio<br>\n<b>Plataforma:</b> mercado_libre / ml<br>\n<b>Plazo:</b> 2026-11-19T13:00:00-06:00<br>\n<b>Acción:</b> confirm<br>\n<b>SKU:</b> SKU-CONF × 1<br>\n<b>SKU interno:</b> INT-CONF<br><br>\n<b>Pedido:</b> PANEL-PACK<br>\n<b>Cliente:</b> Cliente ML ficticio<br>\n<b>Plataforma:</b> mercado_libre / ml<br>\n<b>Plazo:</b> 2026-11-19T12:00:00-06:00<br>\n<b>Acción:</b> pack+confirm<br>\n<b>SKU:</b> SKU-ML × 1<br>\n<b>SKU interno:</b> INT-ML</body></html>",
         "members": [
-          {
-            "kind": "order",
-            "order": {
-              "platform": "amazon",
-              "account": "us",
-              "native_id": "A-US"
-            },
-            "line": null,
-            "channel": "email",
-            "recipient": "operation"
-          },
-          {
-            "kind": "order",
-            "order": {
-              "platform": "amazon",
-              "account": "mx",
-              "native_id": "A-PAY"
-            },
-            "line": null,
-            "channel": "email",
-            "recipient": "operation"
-          },
           {
             "kind": "order",
             "order": {
@@ -294,6 +272,17 @@
           {
             "kind": "order",
             "order": {
+              "platform": "amazon",
+              "account": "mx",
+              "native_id": "A-PAY"
+            },
+            "line": null,
+            "channel": "email",
+            "recipient": "operation"
+          },
+          {
+            "kind": "order",
+            "order": {
               "platform": "mercado_libre",
               "account": "mx",
               "native_id": "ML-PACK"
@@ -308,6 +297,17 @@
               "platform": "amazon",
               "account": "mx",
               "native_id": "A-FLEX"
+            },
+            "line": null,
+            "channel": "email",
+            "recipient": "operation"
+          },
+          {
+            "kind": "order",
+            "order": {
+              "platform": "amazon",
+              "account": "us",
+              "native_id": "A-US"
             },
             "line": null,
             "channel": "email",
@@ -329,7 +329,7 @@
       },
       {
         "unit_id": "02f3bff5e2b63a5b060bf30f",
-        "attempt_id": "2fa7da4b70544b559e7c78315388c84d",
+        "attempt_id": "35396dcdcc1544618de0968368f6f12a",
         "channel": "telegram",
         "recipient": "david",
         "kind": "photo",
@@ -359,7 +359,7 @@
       },
       {
         "unit_id": "3f7d8b0c7fe4299b48c5716b",
-        "attempt_id": "12fd3f45f6c64911b28d307313eb63e1",
+        "attempt_id": "bf482b14c8484967a343ef989587b38d",
         "channel": "telegram",
         "recipient": "jorge",
         "kind": "photo",
@@ -389,7 +389,7 @@
       },
       {
         "unit_id": "9247f2ad2d1d2c71c71285c2",
-        "attempt_id": "8a53c61bafa84a6a802316ba7cf1ab47",
+        "attempt_id": "b8c4679af04f462789e9c023eac96960",
         "channel": "telegram",
         "recipient": "isabel",
         "kind": "photo",
@@ -539,7 +539,7 @@
     "outbox": [
       {
         "unit_id": "262e5f1408ebab0712bac5f0",
-        "attempt_id": "a36a7d6bad594b9489e41e429ea8d577",
+        "attempt_id": "752ca71fba294b8f9f063b86ce338df9",
         "channel": "telegram",
         "recipient": "david",
         "kind": "summary",
@@ -562,29 +562,7 @@
             "order": {
               "platform": "amazon",
               "account": "mx",
-              "native_id": "A-PAY"
-            },
-            "line": null,
-            "channel": "telegram",
-            "recipient": "david"
-          },
-          {
-            "kind": "order",
-            "order": {
-              "platform": "amazon",
-              "account": "mx",
               "native_id": "A-NEW"
-            },
-            "line": null,
-            "channel": "telegram",
-            "recipient": "david"
-          },
-          {
-            "kind": "order",
-            "order": {
-              "platform": "mercado_libre",
-              "account": "mx",
-              "native_id": "ML-CONF"
             },
             "line": null,
             "channel": "telegram",
@@ -611,13 +589,35 @@
             "line": null,
             "channel": "telegram",
             "recipient": "david"
+          },
+          {
+            "kind": "order",
+            "order": {
+              "platform": "mercado_libre",
+              "account": "mx",
+              "native_id": "ML-CONF"
+            },
+            "line": null,
+            "channel": "telegram",
+            "recipient": "david"
+          },
+          {
+            "kind": "order",
+            "order": {
+              "platform": "amazon",
+              "account": "mx",
+              "native_id": "A-PAY"
+            },
+            "line": null,
+            "channel": "telegram",
+            "recipient": "david"
           }
         ],
         "receipt": "receipt-1"
       },
       {
         "unit_id": "90c4b91cb45204118bd31f88",
-        "attempt_id": "601acab5e6364516b2119cd859006b32",
+        "attempt_id": "5740c8704d2f43839b68b58084c10ffa",
         "channel": "telegram",
         "recipient": "isabel",
         "kind": "summary",
@@ -629,40 +629,7 @@
             "order": {
               "platform": "amazon",
               "account": "mx",
-              "native_id": "A-PAY"
-            },
-            "line": null,
-            "channel": "telegram",
-            "recipient": "isabel"
-          },
-          {
-            "kind": "order",
-            "order": {
-              "platform": "amazon",
-              "account": "mx",
               "native_id": "A-FLEX"
-            },
-            "line": null,
-            "channel": "telegram",
-            "recipient": "isabel"
-          },
-          {
-            "kind": "order",
-            "order": {
-              "platform": "amazon",
-              "account": "us",
-              "native_id": "A-US"
-            },
-            "line": null,
-            "channel": "telegram",
-            "recipient": "isabel"
-          },
-          {
-            "kind": "order",
-            "order": {
-              "platform": "amazon",
-              "account": "mx",
-              "native_id": "A-NEW"
             },
             "line": null,
             "channel": "telegram",
@@ -689,19 +656,63 @@
             "line": null,
             "channel": "telegram",
             "recipient": "isabel"
+          },
+          {
+            "kind": "order",
+            "order": {
+              "platform": "amazon",
+              "account": "us",
+              "native_id": "A-US"
+            },
+            "line": null,
+            "channel": "telegram",
+            "recipient": "isabel"
+          },
+          {
+            "kind": "order",
+            "order": {
+              "platform": "amazon",
+              "account": "mx",
+              "native_id": "A-PAY"
+            },
+            "line": null,
+            "channel": "telegram",
+            "recipient": "isabel"
+          },
+          {
+            "kind": "order",
+            "order": {
+              "platform": "amazon",
+              "account": "mx",
+              "native_id": "A-NEW"
+            },
+            "line": null,
+            "channel": "telegram",
+            "recipient": "isabel"
           }
         ],
         "receipt": "receipt-2"
       },
       {
         "unit_id": "f9ce19143db94745e5fbe18e",
-        "attempt_id": "64cc79d4137441748f5c3fa5d4fff345",
+        "attempt_id": "4766b23e34744b9cb5281d621e964f1c",
         "channel": "email",
         "recipient": "operation",
         "kind": "summary",
         "ordinal": 1,
         "content": "<!DOCTYPE html><html><body><b>AMAZON SELF SHIP US</b><br>\n<br>\n<b>Pedido:</b> A-US<br>\n<b>Cliente:</b> Cliente US ficticio<br>\n<b>Plataforma:</b> amazon / self<br>\n<b>Plazo:</b> 2026-11-19T09:00:00-08:00<br>\n<b>Acción:</b> ship<br>\n<b>SKU:</b> SKU-US × 1<br>\n<b>SKU interno:</b> INT-US<br><br>\n<b>AMAZON SELF SHIP MX</b><br>\n<br>\n<b>Pedido:</b> A-PAY<br>\n<b>Cliente:</b> Cliente pago ficticio<br>\n<b>Plataforma:</b> amazon / self<br>\n<b>Plazo:</b> 2026-11-19T12:00:00-07:00<br>\n<b>Acción:</b> ship<br>\n<b>pago pendiente</b><br>\n<b>SKU:</b> SKU-PAY × 1<br>\n<b>SKU interno:</b> SKU interno por confirmar<br><br>\n<b>AMAZON EASY SHIP</b><br>\n<br>\n<b>Pedido:</b> A-NEW<br>\n<b>Cliente:</b> Cliente Easy ficticio<br>\n<b>Plataforma:</b> amazon / easy<br>\n<b>Plazo:</b> 2026-11-19T10:00:00-07:00<br>\n<b>Acción:</b> pending_drop_off<br>\n<b>SKU:</b> PERS-A × 1<br>\n<b>SKU interno:</b> INT-A<br>\n<b>Personalización:</b> Texto exacto L1<br>\n<b>Opciones:</b> {&#x27;color&#x27;: &#x27;dorado&#x27;}<br>\n<b>Personalización incompleta: falta imagen</b><br>\n<b>SKU:</b> PERS-B × 2<br>\n<b>SKU interno:</b> SKU interno por confirmar<br>\n<b>Personalización:</b> Texto exacto L2<br>\n<b>Opciones:</b> {&#x27;marco&#x27;: &#x27;rojo&#x27;}<br><br>\n<b>AMAZON FLEX</b><br>\n<br>\n<b>Pedido:</b> A-FLEX<br>\n<b>Cliente:</b> Cliente Flex ficticio<br>\n<b>Plataforma:</b> amazon / flex<br>\n<b>Plazo:</b> 2026-11-19T11:00:00-07:00<br>\n<b>Acción:</b> waiting_for_pickup<br>\n<b>SKU:</b> SKU-FLEX × 1<br>\n<b>SKU interno:</b> INT-FLEX</body></html>",
         "members": [
+          {
+            "kind": "order",
+            "order": {
+              "platform": "amazon",
+              "account": "mx",
+              "native_id": "A-FLEX"
+            },
+            "line": null,
+            "channel": "email",
+            "recipient": "operation"
+          },
           {
             "kind": "order",
             "order": {
@@ -718,7 +729,7 @@
             "order": {
               "platform": "amazon",
               "account": "mx",
-              "native_id": "A-FLEX"
+              "native_id": "A-NEW"
             },
             "line": null,
             "channel": "email",
@@ -734,24 +745,13 @@
             "line": null,
             "channel": "email",
             "recipient": "operation"
-          },
-          {
-            "kind": "order",
-            "order": {
-              "platform": "amazon",
-              "account": "mx",
-              "native_id": "A-NEW"
-            },
-            "line": null,
-            "channel": "email",
-            "recipient": "operation"
           }
         ],
         "receipt": "receipt-3"
       },
       {
         "unit_id": "6273e9a8b6bfb1617a9f039f",
-        "attempt_id": "a314e84cc66144c4b655c98cf6aad3b1",
+        "attempt_id": "6dbfbb7eec6a4aeab8893a456cc9b45a",
         "channel": "telegram",
         "recipient": "david",
         "kind": "photo",
@@ -781,7 +781,7 @@
       },
       {
         "unit_id": "cb8f6d4e14a442b585f683f7",
-        "attempt_id": "8b2ec1ca022145198e4aee241bc7d078",
+        "attempt_id": "e9ff18385384447f947af0a61676f5c7",
         "channel": "telegram",
         "recipient": "isabel",
         "kind": "photo",
@@ -811,7 +811,7 @@
       },
       {
         "unit_id": "e568df2d9cb2e50f41e3df3e",
-        "attempt_id": "32a6081b8077433fab7346ca3d62b898",
+        "attempt_id": "0b9b209f31e348719aa8addf3aa585ae",
         "channel": "telegram",
         "recipient": "jorge",
         "kind": "photo",
@@ -961,13 +961,35 @@
     "outbox": [
       {
         "unit_id": "4cccdf94da15f7a3b3c3d882",
-        "attempt_id": "22ed1a65aad2426d8253729f2fd91e55",
+        "attempt_id": "b2e4ab2ca4484452a3f3bf56b5163e08",
         "channel": "telegram",
         "recipient": "isabel",
         "kind": "summary",
         "ordinal": 1,
         "content": "<b>AMAZON SELF SHIP US</b>\n\n<b>Pedido:</b> A-US\n<b>Cliente:</b> Cliente US ficticio\n<b>Plataforma:</b> amazon / self\n<b>Plazo:</b> 2026-11-19T09:00:00-08:00\n<b>Acción:</b> ship\n<b>SKU:</b> SKU-US × 1\n<b>SKU interno:</b> INT-US\n\n<b>AMAZON SELF SHIP MX</b>\n\n<b>Pedido:</b> A-PAY\n<b>Cliente:</b> Cliente pago ficticio\n<b>Plataforma:</b> amazon / self\n<b>Plazo:</b> 2026-11-19T12:00:00-07:00\n<b>Acción:</b> ship\n<b>pago pendiente</b>\n<b>SKU:</b> SKU-PAY × 1\n<b>SKU interno:</b> SKU interno por confirmar\n\n<b>AMAZON EASY SHIP</b>\n\n<b>Pedido:</b> A-NEW\n<b>Cliente:</b> Cliente Easy ficticio\n<b>Plataforma:</b> amazon / easy\n<b>Plazo:</b> 2026-11-19T10:00:00-07:00\n<b>Acción:</b> pending_drop_off\n<b>SKU:</b> PERS-A × 1\n<b>SKU interno:</b> INT-A\n<b>Personalización:</b> Texto exacto L1\n<b>Opciones:</b> {&#x27;color&#x27;: &#x27;dorado&#x27;}\n<b>Personalización incompleta: falta imagen</b>\n<b>SKU:</b> PERS-B × 2\n<b>SKU interno:</b> SKU interno por confirmar\n<b>Personalización:</b> Texto exacto L2\n<b>Opciones:</b> {&#x27;marco&#x27;: &#x27;rojo&#x27;}\n\n<b>AMAZON FLEX</b>\n\n<b>Pedido:</b> A-FLEX\n<b>Cliente:</b> Cliente Flex ficticio\n<b>Plataforma:</b> amazon / flex\n<b>Plazo:</b> 2026-11-19T11:00:00-07:00\n<b>Acción:</b> waiting_for_pickup\n<b>SKU:</b> SKU-FLEX × 1\n<b>SKU interno:</b> INT-FLEX\n\n<b>MERCADO LIBRE — POR CONFIRMAR ENVÍO</b>\n\n<b>Pedido:</b> PANEL-CONF\n<b>Cliente:</b> Cliente confirmar ficticio\n<b>Plataforma:</b> mercado_libre / ml\n<b>Plazo:</b> 2026-11-19T13:00:00-06:00\n<b>Acción:</b> confirm\n<b>SKU:</b> SKU-CONF × 1\n<b>SKU interno:</b> INT-CONF\n\n<b>Pedido:</b> PANEL-PACK\n<b>Cliente:</b> Cliente ML ficticio\n<b>Plataforma:</b> mercado_libre / ml\n<b>Plazo:</b> 2026-11-19T12:00:00-06:00\n<b>Acción:</b> pack+confirm\n<b>SKU:</b> SKU-ML × 1\n<b>SKU interno:</b> INT-ML",
         "members": [
+          {
+            "kind": "order",
+            "order": {
+              "platform": "amazon",
+              "account": "mx",
+              "native_id": "A-FLEX"
+            },
+            "line": null,
+            "channel": "telegram",
+            "recipient": "isabel"
+          },
+          {
+            "kind": "order",
+            "order": {
+              "platform": "mercado_libre",
+              "account": "mx",
+              "native_id": "ML-PACK"
+            },
+            "line": null,
+            "channel": "telegram",
+            "recipient": "isabel"
+          },
           {
             "kind": "order",
             "order": {
@@ -995,17 +1017,6 @@
             "order": {
               "platform": "amazon",
               "account": "mx",
-              "native_id": "A-PAY"
-            },
-            "line": null,
-            "channel": "telegram",
-            "recipient": "isabel"
-          },
-          {
-            "kind": "order",
-            "order": {
-              "platform": "amazon",
-              "account": "mx",
               "native_id": "A-NEW"
             },
             "line": null,
@@ -1015,20 +1026,9 @@
           {
             "kind": "order",
             "order": {
-              "platform": "mercado_libre",
-              "account": "mx",
-              "native_id": "ML-PACK"
-            },
-            "line": null,
-            "channel": "telegram",
-            "recipient": "isabel"
-          },
-          {
-            "kind": "order",
-            "order": {
               "platform": "amazon",
               "account": "mx",
-              "native_id": "A-FLEX"
+              "native_id": "A-PAY"
             },
             "line": null,
             "channel": "telegram",
@@ -1039,7 +1039,7 @@
       },
       {
         "unit_id": "56d33a9efaac84255ddfbc34",
-        "attempt_id": "66bb23f036e24cd8a8a2f2c5d92ad730",
+        "attempt_id": "0d67938c0e5e4c2fa1942c974ccffde7",
         "channel": "email",
         "recipient": "operation",
         "kind": "summary",
@@ -1051,7 +1051,7 @@
             "order": {
               "platform": "amazon",
               "account": "mx",
-              "native_id": "A-NEW"
+              "native_id": "A-FLEX"
             },
             "line": null,
             "channel": "email",
@@ -1073,7 +1073,7 @@
             "order": {
               "platform": "amazon",
               "account": "mx",
-              "native_id": "A-FLEX"
+              "native_id": "A-NEW"
             },
             "line": null,
             "channel": "email",
@@ -1095,13 +1095,35 @@
       },
       {
         "unit_id": "e141b5063eff0a22ed0eed0b",
-        "attempt_id": "13c70e4fdcac42ceb2f1b38f7c206a2e",
+        "attempt_id": "9613210c2d444fe29f8237fd56824883",
         "channel": "telegram",
         "recipient": "david",
         "kind": "summary",
         "ordinal": 1,
         "content": "<b>AMAZON SELF SHIP US</b>\n\n<b>Pedido:</b> A-US\n<b>Cliente:</b> Cliente US ficticio\n<b>Plataforma:</b> amazon / self\n<b>Plazo:</b> 2026-11-19T09:00:00-08:00\n<b>Acción:</b> ship\n<b>SKU:</b> SKU-US × 1\n<b>SKU interno:</b> INT-US\n\n<b>AMAZON SELF SHIP MX</b>\n\n<b>Pedido:</b> A-PAY\n<b>Cliente:</b> Cliente pago ficticio\n<b>Plataforma:</b> amazon / self\n<b>Plazo:</b> 2026-11-19T12:00:00-07:00\n<b>Acción:</b> ship\n<b>pago pendiente</b>\n<b>SKU:</b> SKU-PAY × 1\n<b>SKU interno:</b> SKU interno por confirmar\n\n<b>AMAZON EASY SHIP</b>\n\n<b>Pedido:</b> A-NEW\n<b>Cliente:</b> Cliente Easy ficticio\n<b>Plataforma:</b> amazon / easy\n<b>Plazo:</b> 2026-11-19T10:00:00-07:00\n<b>Acción:</b> pending_drop_off\n<b>SKU:</b> PERS-A × 1\n<b>SKU interno:</b> INT-A\n<b>Personalización:</b> Texto exacto L1\n<b>Opciones:</b> {&#x27;color&#x27;: &#x27;dorado&#x27;}\n<b>Personalización incompleta: falta imagen</b>\n<b>SKU:</b> PERS-B × 2\n<b>SKU interno:</b> SKU interno por confirmar\n<b>Personalización:</b> Texto exacto L2\n<b>Opciones:</b> {&#x27;marco&#x27;: &#x27;rojo&#x27;}\n\n<b>AMAZON FLEX</b>\n\n<b>Pedido:</b> A-FLEX\n<b>Cliente:</b> Cliente Flex ficticio\n<b>Plataforma:</b> amazon / flex\n<b>Plazo:</b> 2026-11-19T11:00:00-07:00\n<b>Acción:</b> waiting_for_pickup\n<b>SKU:</b> SKU-FLEX × 1\n<b>SKU interno:</b> INT-FLEX\n\n<b>MERCADO LIBRE — POR CONFIRMAR ENVÍO</b>\n\n<b>Pedido:</b> PANEL-CONF\n<b>Cliente:</b> Cliente confirmar ficticio\n<b>Plataforma:</b> mercado_libre / ml\n<b>Plazo:</b> 2026-11-19T13:00:00-06:00\n<b>Acción:</b> confirm\n<b>SKU:</b> SKU-CONF × 1\n<b>SKU interno:</b> INT-CONF\n\n<b>Pedido:</b> PANEL-PACK\n<b>Cliente:</b> Cliente ML ficticio\n<b>Plataforma:</b> mercado_libre / ml\n<b>Plazo:</b> 2026-11-19T12:00:00-06:00\n<b>Acción:</b> pack+confirm\n<b>SKU:</b> SKU-ML × 1\n<b>SKU interno:</b> INT-ML",
         "members": [
+          {
+            "kind": "order",
+            "order": {
+              "platform": "amazon",
+              "account": "mx",
+              "native_id": "A-PAY"
+            },
+            "line": null,
+            "channel": "telegram",
+            "recipient": "david"
+          },
+          {
+            "kind": "order",
+            "order": {
+              "platform": "amazon",
+              "account": "mx",
+              "native_id": "A-FLEX"
+            },
+            "line": null,
+            "channel": "telegram",
+            "recipient": "david"
+          },
           {
             "kind": "order",
             "order": {
@@ -1118,7 +1140,7 @@
             "order": {
               "platform": "amazon",
               "account": "mx",
-              "native_id": "A-FLEX"
+              "native_id": "A-NEW"
             },
             "line": null,
             "channel": "telegram",
@@ -1145,35 +1167,13 @@
             "line": null,
             "channel": "telegram",
             "recipient": "david"
-          },
-          {
-            "kind": "order",
-            "order": {
-              "platform": "amazon",
-              "account": "mx",
-              "native_id": "A-NEW"
-            },
-            "line": null,
-            "channel": "telegram",
-            "recipient": "david"
-          },
-          {
-            "kind": "order",
-            "order": {
-              "platform": "amazon",
-              "account": "mx",
-              "native_id": "A-PAY"
-            },
-            "line": null,
-            "channel": "telegram",
-            "recipient": "david"
           }
         ],
         "receipt": "receipt-3"
       },
       {
         "unit_id": "19e2b540214b40d637cb52b8",
-        "attempt_id": "d4baaf8fd7464fb5a3f7db1da581479a",
+        "attempt_id": "709a801696354a799afd47ca6c388264",
         "channel": "telegram",
         "recipient": "jorge",
         "kind": "photo",
@@ -1203,7 +1203,7 @@
       },
       {
         "unit_id": "3e753d5df74c2dba783bad7e",
-        "attempt_id": "084c2717bd894c89b03ece516e48a2d7",
+        "attempt_id": "55e033a9e62543078db0b1b87f4b8fd7",
         "channel": "telegram",
         "recipient": "isabel",
         "kind": "photo",
@@ -1233,7 +1233,7 @@
       },
       {
         "unit_id": "496963a777d7cdd5902784be",
-        "attempt_id": "c9ae7031aa5c44e39b7e523d5747823c",
+        "attempt_id": "6187679a852c4dabaa65e470efca1cdc",
         "channel": "telegram",
         "recipient": "david",
         "kind": "photo",

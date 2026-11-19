@@ -122,7 +122,9 @@ class Store:
     def __init__(self, path: Path):
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.con = sqlite3.connect(str(self.path), timeout=30, isolation_level=None, check_same_thread=False)
+        self.con = sqlite3.connect(
+            str(self.path), timeout=30, isolation_level=None, check_same_thread=False
+        )
         self.con.row_factory = sqlite3.Row
         self.con.execute("PRAGMA journal_mode=WAL")
         self.con.execute("PRAGMA foreign_keys=ON")
@@ -160,7 +162,9 @@ class Store:
             raise KeyError(cut_id)
         return dict(row)
 
-    def save_source(self, cut_id: str, report: SourceReport, status: str, details: Mapping[str, Any], late: bool) -> int:
+    def save_source(
+        self, cut_id: str, report: SourceReport, status: str, details: Mapping[str, Any], late: bool
+    ) -> int:
         with self.transaction():
             row = self.con.execute(
                 "SELECT COALESCE(MAX(revision),0)+1 AS revision FROM sources WHERE cut_id=? AND source_key=?",
@@ -169,7 +173,16 @@ class Store:
             revision = int(row["revision"])
             self.con.execute(
                 "INSERT INTO sources(cut_id,source_key,revision,status,details_json,report_json,received_at,late) VALUES(?,?,?,?,?,?,?,?)",
-                (cut_id, report.key, revision, status, dumps(details), dumps(report.as_dict()), report.received_at, int(late)),
+                (
+                    cut_id,
+                    report.key,
+                    revision,
+                    status,
+                    dumps(details),
+                    dumps(report.as_dict()),
+                    report.received_at,
+                    int(late),
+                ),
             )
         return revision
 
@@ -180,22 +193,45 @@ class Store:
         ).fetchall()
         return [SourceReport.from_dict(json.loads(row["report_json"])) for row in rows]
 
-    def save_assessment(self, cut_id: str, assessment: Mapping[str, Any], complete: bool, sealed: bool) -> int:
+    def save_assessment(self, cut_id: str, assessment: Mapping[str, Any], complete: bool) -> int:
         with self.transaction():
-            row = self.con.execute("SELECT COALESCE(MAX(revision),0)+1 AS revision FROM plans WHERE cut_id=?", (cut_id,)).fetchone()
+            row = self.con.execute(
+                "SELECT COALESCE(MAX(revision),0)+1 AS revision FROM plans WHERE cut_id=?",
+                (cut_id,),
+            ).fetchone()
             revision = int(row["revision"])
             self.con.execute(
                 "INSERT INTO plans(cut_id,revision,sealed,sources_complete,assessment_json) VALUES(?,?,?,?,?)",
-                (cut_id, revision, int(sealed), int(complete), dumps(assessment)),
+                (cut_id, revision, 0, int(complete), dumps(assessment)),
             )
-            if sealed:
-                self.con.execute(
-                    "UPDATE cuts SET sealed_revision=?,sources_complete=?,state='sealed' WHERE id=?",
-                    (revision, int(complete), cut_id),
-                )
-            else:
-                self.con.execute("UPDATE cuts SET draft_json=?,state='assembling' WHERE id=?", (dumps(assessment), cut_id))
+            self.con.execute(
+                "UPDATE cuts SET draft_json=?,state='assembling' WHERE id=?",
+                (dumps(assessment), cut_id),
+            )
         return revision
+
+    def seal_assessment(self, cut_id: str, revision: int, complete: bool) -> None:
+        with self.transaction():
+            plan = self.con.execute(
+                "SELECT sealed FROM plans WHERE cut_id=? AND revision=?", (cut_id, revision)
+            ).fetchone()
+            if plan is None:
+                raise ValueError("la revisión a sellar no existe")
+            cut = self.con.execute(
+                "SELECT sealed_revision FROM cuts WHERE id=?", (cut_id,)
+            ).fetchone()
+            if cut["sealed_revision"] == revision:
+                return
+            if cut["sealed_revision"] is not None:
+                raise ValueError("otra revisión ya fue sellada")
+            self.con.execute(
+                "UPDATE plans SET sealed=1,sources_complete=? WHERE cut_id=? AND revision=?",
+                (int(complete), cut_id, revision),
+            )
+            self.con.execute(
+                "UPDATE cuts SET sealed_revision=?,sources_complete=?,state='sealed' WHERE id=?",
+                (revision, int(complete), cut_id),
+            )
 
     def sealed_assessment(self, cut_id: str) -> Dict[str, Any]:
         cut = self.get_cut(cut_id)
@@ -215,8 +251,12 @@ class Store:
             )
 
     def import_notice(self, notice: NoticeKey, state: str, reason: str, source_hash: str) -> None:
-        confidence = {"satisfied": "CONFIRMED_EXACT", "open": "OPEN_KNOWN", "unknown": "AMBIGUOUS"}[state]
-        assertion_id = hashlib.sha256(dumps([notice.text(), confidence, reason, source_hash]).encode("utf-8")).hexdigest()
+        confidence = {"satisfied": "CONFIRMED_EXACT", "open": "OPEN_KNOWN", "unknown": "AMBIGUOUS"}[
+            state
+        ]
+        assertion_id = hashlib.sha256(
+            dumps([notice.text(), confidence, reason, source_hash]).encode("utf-8")
+        ).hexdigest()
         with self.transaction():
             self.con.execute(
                 "INSERT OR REPLACE INTO history_assertions(id,notice_id,confidence,reason,source_hash) VALUES(?,?,?,?,?)",
@@ -228,9 +268,15 @@ class Store:
             )
 
     def coverage(self, notice: NoticeKey, first_seen_at: str) -> str:
-        row = self.con.execute("SELECT state FROM obligations WHERE notice_json=?", (notice.text(),)).fetchone()
+        row = self.con.execute(
+            "SELECT state FROM obligations WHERE notice_json=?", (notice.text(),)
+        ).fetchone()
         if row:
-            return "CONFIRMED" if row["state"] in {"satisfied", "closed_not_required"} else ("UNKNOWN" if row["state"] == "unknown" else "OPEN_KNOWN")
+            return (
+                "CONFIRMED"
+                if row["state"] in {"satisfied", "closed_not_required"}
+                else ("UNKNOWN" if row["state"] == "unknown" else "OPEN_KNOWN")
+            )
         ambiguous = self.con.execute(
             "SELECT 1 FROM history_assertions WHERE notice_id=? AND confidence IN ('AMBIGUOUS','CONTRADICTORY','UNREADABLE') LIMIT 1",
             (notice.text(),),
@@ -245,9 +291,13 @@ class Store:
             return "NOT_OPENED_VERIFIED"
         return "UNKNOWN"
 
-    def open_obligation(self, notice: NoticeKey, cut_id: str, state: str = "open", asset_ref: Optional[str] = None) -> str:
+    def open_obligation(
+        self, notice: NoticeKey, cut_id: str, state: str = "open", asset_ref: Optional[str] = None
+    ) -> str:
         with self.transaction():
-            row = self.con.execute("SELECT id,state FROM obligations WHERE notice_json=?", (notice.text(),)).fetchone()
+            row = self.con.execute(
+                "SELECT id,state FROM obligations WHERE notice_json=?", (notice.text(),)
+            ).fetchone()
             if row is None:
                 obligation_id = uuid4().hex
                 self.con.execute(
@@ -257,25 +307,40 @@ class Store:
             else:
                 obligation_id = row["id"]
                 if row["state"] == "awaiting_asset" and state == "open":
-                    self.con.execute("UPDATE obligations SET state='open',asset_ref=? WHERE id=?", (asset_ref, obligation_id))
+                    self.con.execute(
+                        "UPDATE obligations SET state='open',asset_ref=? WHERE id=?",
+                        (asset_ref, obligation_id),
+                    )
                 elif asset_ref and row["state"] == "open":
-                    self.con.execute("UPDATE obligations SET asset_ref=? WHERE id=?", (asset_ref, obligation_id))
-            self.con.execute("INSERT OR IGNORE INTO cut_obligations(cut_id,notice_id) VALUES(?,?)", (cut_id, obligation_id))
+                    self.con.execute(
+                        "UPDATE obligations SET asset_ref=? WHERE id=?", (asset_ref, obligation_id)
+                    )
+            self.con.execute(
+                "INSERT OR IGNORE INTO cut_obligations(cut_id,notice_id) VALUES(?,?)",
+                (cut_id, obligation_id),
+            )
         return obligation_id
 
     def obligation_state(self, notice: NoticeKey) -> Optional[str]:
-        row = self.con.execute("SELECT state FROM obligations WHERE notice_json=?", (notice.text(),)).fetchone()
+        row = self.con.execute(
+            "SELECT state FROM obligations WHERE notice_json=?", (notice.text(),)
+        ).fetchone()
         return row["state"] if row else None
 
     def obligation_id(self, notice: NoticeKey) -> Optional[str]:
-        row = self.con.execute("SELECT id FROM obligations WHERE notice_json=?", (notice.text(),)).fetchone()
+        row = self.con.execute(
+            "SELECT id FROM obligations WHERE notice_json=?", (notice.text(),)
+        ).fetchone()
         return row["id"] if row else None
 
     def link_obligation(self, cut_id: str, notice: NoticeKey) -> None:
         obligation_id = self.obligation_id(notice)
         if obligation_id:
             with self.transaction():
-                self.con.execute("INSERT OR IGNORE INTO cut_obligations(cut_id,notice_id) VALUES(?,?)", (cut_id, obligation_id))
+                self.con.execute(
+                    "INSERT OR IGNORE INTO cut_obligations(cut_id,notice_id) VALUES(?,?)",
+                    (cut_id, obligation_id),
+                )
 
     def summaries_blocking(self, cut_id: str) -> int:
         row = self.con.execute(
@@ -297,23 +362,56 @@ class Store:
                 (cut_id, kind, subject, reason),
             ).fetchone()
             if not exists:
-                self.con.execute("INSERT INTO issues(cut_id,kind,subject,reason) VALUES(?,?,?,?)", (cut_id, kind, subject, reason))
+                self.con.execute(
+                    "INSERT INTO issues(cut_id,kind,subject,reason) VALUES(?,?,?,?)",
+                    (cut_id, kind, subject, reason),
+                )
 
-    def create_unit(self, cut_id: str, revision: int, channel: str, recipient: str, kind: str, ordinal: int, content: str, notices: Sequence[NoticeKey], created_at: str) -> str:
+    def create_unit(
+        self,
+        cut_id: str,
+        revision: int,
+        channel: str,
+        recipient: str,
+        kind: str,
+        ordinal: int,
+        content: str,
+        notices: Sequence[NoticeKey],
+        created_at: str,
+    ) -> str:
         identity = dumps([cut_id, revision, channel, recipient, kind, ordinal])
         unit_id = hashlib.sha256(identity.encode("utf-8")).hexdigest()[:24]
         content_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
         with self.transaction():
             self.con.execute(
                 "INSERT INTO units(id,cut_id,revision,channel,recipient,kind,ordinal,content,content_hash,state,created_at) VALUES(?,?,?,?,?,?,?,?,?,'planned',?)",
-                (unit_id, cut_id, revision, channel, recipient, kind, ordinal, content, content_hash, created_at),
+                (
+                    unit_id,
+                    cut_id,
+                    revision,
+                    channel,
+                    recipient,
+                    kind,
+                    ordinal,
+                    content,
+                    content_hash,
+                    created_at,
+                ),
             )
             for notice in notices:
-                obligation = self.con.execute("SELECT id FROM obligations WHERE notice_json=?", (notice.text(),)).fetchone()
+                obligation = self.con.execute(
+                    "SELECT id FROM obligations WHERE notice_json=?", (notice.text(),)
+                ).fetchone()
                 if obligation is None:
                     raise ValueError("obligación inexistente en unidad")
-                self.con.execute("INSERT INTO unit_members(unit_id,notice_id) VALUES(?,?)", (unit_id, obligation["id"]))
-                self.con.execute("INSERT OR IGNORE INTO cut_obligations(cut_id,notice_id) VALUES(?,?)", (cut_id, obligation["id"]))
+                self.con.execute(
+                    "INSERT INTO unit_members(unit_id,notice_id) VALUES(?,?)",
+                    (unit_id, obligation["id"]),
+                )
+                self.con.execute(
+                    "INSERT OR IGNORE INTO cut_obligations(cut_id,notice_id) VALUES(?,?)",
+                    (cut_id, obligation["id"]),
+                )
         return unit_id
 
     def unit(self, unit_id: str) -> Dict[str, Any]:
@@ -321,11 +419,19 @@ class Store:
         if row is None:
             raise KeyError(unit_id)
         result = dict(row)
-        result["members"] = [notice_from_text(row["notice_json"]).as_dict() for row in self.con.execute("SELECT o.notice_json FROM unit_members m JOIN obligations o ON o.id=m.notice_id WHERE m.unit_id=?", (unit_id,)).fetchall()]
+        result["members"] = [
+            notice_from_text(row["notice_json"]).as_dict()
+            for row in self.con.execute(
+                "SELECT o.notice_json FROM unit_members m JOIN obligations o ON o.id=m.notice_id WHERE m.unit_id=?",
+                (unit_id,),
+            ).fetchall()
+        ]
         return result
 
     def pending_units(self) -> List[Dict[str, Any]]:
-        rows = self.con.execute("SELECT id FROM units WHERE state IN ('planned','retryable') ORDER BY created_at,id").fetchall()
+        rows = self.con.execute(
+            "SELECT id FROM units WHERE state IN ('planned','retryable') ORDER BY created_at,id"
+        ).fetchall()
         return [self.unit(row["id"]) for row in rows]
 
     def claim_unit(self, unit_id: str, worker_id: str, now: str) -> Optional[Dict[str, Any]]:
@@ -333,10 +439,15 @@ class Store:
             row = self.con.execute("SELECT state FROM units WHERE id=?", (unit_id,)).fetchone()
             if row is None or row["state"] not in {"planned", "retryable"}:
                 return None
-            active = self.con.execute("SELECT 1 FROM attempts WHERE unit_id=? AND state='in_flight'", (unit_id,)).fetchone()
+            active = self.con.execute(
+                "SELECT 1 FROM attempts WHERE unit_id=? AND state='in_flight'", (unit_id,)
+            ).fetchone()
             if active:
                 return None
-            fencing_row = self.con.execute("SELECT COALESCE(MAX(fencing),0)+1 AS fencing FROM attempts WHERE unit_id=?", (unit_id,)).fetchone()
+            fencing_row = self.con.execute(
+                "SELECT COALESCE(MAX(fencing),0)+1 AS fencing FROM attempts WHERE unit_id=?",
+                (unit_id,),
+            ).fetchone()
             attempt_id = uuid4().hex
             fencing = int(fencing_row["fencing"])
             self.con.execute("UPDATE units SET state='in_flight' WHERE id=?", (unit_id,))
@@ -344,7 +455,13 @@ class Store:
                 "INSERT INTO attempts(id,unit_id,worker_id,fencing,state,started_at) VALUES(?,?,?,?,'in_flight',?)",
                 (attempt_id, unit_id, worker_id, fencing, now),
             )
-        return {"id": attempt_id, "unit_id": unit_id, "worker_id": worker_id, "fencing": fencing, "state": "in_flight"}
+        return {
+            "id": attempt_id,
+            "unit_id": unit_id,
+            "worker_id": worker_id,
+            "fencing": fencing,
+            "state": "in_flight",
+        }
 
     def attempt(self, attempt_id: str) -> Dict[str, Any]:
         row = self.con.execute("SELECT * FROM attempts WHERE id=?", (attempt_id,)).fetchone()
@@ -354,16 +471,34 @@ class Store:
 
     def attempts(self, states: Sequence[str]) -> List[Dict[str, Any]]:
         placeholders = ",".join("?" for _ in states)
-        rows = self.con.execute(f"SELECT * FROM attempts WHERE state IN ({placeholders}) ORDER BY started_at,id", states).fetchall()
+        rows = self.con.execute(
+            f"SELECT * FROM attempts WHERE state IN ({placeholders}) ORDER BY started_at,id", states
+        ).fetchall()
         return [dict(row) for row in rows]
 
-    def finish_attempt(self, attempt_id: str, worker_id: str, outcome: str, receipt: Optional[str], error: Optional[str], now: str) -> None:
-        unit_state = {"accepted": "confirmed", "rejected": "retryable", "unknown": "uncertain"}[outcome]
+    def finish_attempt(
+        self,
+        attempt_id: str,
+        worker_id: str,
+        outcome: str,
+        receipt: Optional[str],
+        error: Optional[str],
+        now: str,
+    ) -> None:
+        unit_state = {"accepted": "confirmed", "rejected": "retryable", "unknown": "uncertain"}[
+            outcome
+        ]
         with self.transaction():
-            attempt = self.con.execute("SELECT * FROM attempts WHERE id=?", (attempt_id,)).fetchone()
+            attempt = self.con.execute(
+                "SELECT * FROM attempts WHERE id=?", (attempt_id,)
+            ).fetchone()
             if attempt is None or attempt["worker_id"] != worker_id:
                 raise ValueError("intento o propietario inválido")
-            if attempt["state"] == "accepted" and outcome == "accepted" and attempt["receipt"] == receipt:
+            if (
+                attempt["state"] == "accepted"
+                and outcome == "accepted"
+                and attempt["receipt"] == receipt
+            ):
                 return
             if attempt["state"] not in {"in_flight", "unknown"}:
                 raise ValueError("intento ya resuelto")
@@ -371,7 +506,9 @@ class Store:
                 "UPDATE attempts SET state=?,receipt=?,error=?,finished_at=? WHERE id=?",
                 (outcome, receipt, error, now, attempt_id),
             )
-            self.con.execute("UPDATE units SET state=? WHERE id=?", (unit_state, attempt["unit_id"]))
+            self.con.execute(
+                "UPDATE units SET state=? WHERE id=?", (unit_state, attempt["unit_id"])
+            )
             if outcome == "accepted":
                 self.con.execute(
                     "UPDATE obligations SET state='satisfied' WHERE id IN (SELECT notice_id FROM unit_members WHERE unit_id=?)",
@@ -380,17 +517,29 @@ class Store:
 
     def mark_attempt_unknown(self, attempt_id: str, now: str) -> None:
         with self.transaction():
-            attempt = self.con.execute("SELECT state,unit_id FROM attempts WHERE id=?", (attempt_id,)).fetchone()
+            attempt = self.con.execute(
+                "SELECT state,unit_id FROM attempts WHERE id=?", (attempt_id,)
+            ).fetchone()
             if attempt and attempt["state"] == "in_flight":
-                self.con.execute("UPDATE attempts SET state='unknown',error='resultado_perdido',finished_at=? WHERE id=?", (now, attempt_id))
-                self.con.execute("UPDATE units SET state='uncertain' WHERE id=?", (attempt["unit_id"],))
+                self.con.execute(
+                    "UPDATE attempts SET state='unknown',error='resultado_perdido',finished_at=? WHERE id=?",
+                    (now, attempt_id),
+                )
+                self.con.execute(
+                    "UPDATE units SET state='uncertain' WHERE id=?", (attempt["unit_id"],)
+                )
 
     def reconcile_absent(self, attempt_id: str, now: str) -> None:
         with self.transaction():
-            attempt = self.con.execute("SELECT state,unit_id FROM attempts WHERE id=?", (attempt_id,)).fetchone()
+            attempt = self.con.execute(
+                "SELECT state,unit_id FROM attempts WHERE id=?", (attempt_id,)
+            ).fetchone()
             if attempt is None or attempt["state"] not in {"unknown", "in_flight"}:
                 raise ValueError("solo un intento incierto puede marcarse ausente")
-            self.con.execute("UPDATE attempts SET state='rejected',error='ausencia_confirmada',finished_at=? WHERE id=?", (now, attempt_id))
+            self.con.execute(
+                "UPDATE attempts SET state='rejected',error='ausencia_confirmada',finished_at=? WHERE id=?",
+                (now, attempt_id),
+            )
             self.con.execute("UPDATE units SET state='retryable' WHERE id=?", (attempt["unit_id"],))
 
     def close_cut(self, cut_id: str) -> str:
@@ -406,7 +555,9 @@ class Store:
                 "SELECT COUNT(*) AS n FROM units WHERE cut_id=? AND state IN ('planned','in_flight','retryable','uncertain')",
                 (cut_id,),
             ).fetchone()["n"]
-            issues = self.con.execute("SELECT COUNT(*) AS n FROM issues WHERE cut_id=? AND resolved=0", (cut_id,)).fetchone()["n"]
+            issues = self.con.execute(
+                "SELECT COUNT(*) AS n FROM issues WHERE cut_id=? AND resolved=0", (cut_id,)
+            ).fetchone()["n"]
             if cut["sealed_revision"] is None:
                 state = "pending"
             elif not cut["sources_complete"]:
@@ -424,13 +575,39 @@ class Store:
             "SELECT s.source_key,s.status,s.details_json,s.late FROM sources s JOIN (SELECT source_key,MAX(revision) AS revision FROM sources WHERE cut_id=? GROUP BY source_key) latest ON latest.source_key=s.source_key AND latest.revision=s.revision WHERE s.cut_id=?",
             (cut_id, cut_id),
         ).fetchall()
-        units = [dict(row) for row in self.con.execute("SELECT id,cut_id,revision,channel,recipient,kind,ordinal,content_hash,state,created_at FROM units WHERE cut_id=? ORDER BY revision,channel,recipient,kind,ordinal", (cut_id,)).fetchall()]
-        obligations = [dict(row) for row in self.con.execute("SELECT o.notice_json,o.state,o.opened_cut FROM cut_obligations c JOIN obligations o ON o.id=c.notice_id WHERE c.cut_id=?", (cut_id,)).fetchall()]
-        issues = [dict(row) for row in self.con.execute("SELECT id,kind,subject,reason,resolved FROM issues WHERE cut_id=?", (cut_id,)).fetchall()]
+        units = [
+            dict(row)
+            for row in self.con.execute(
+                "SELECT id,cut_id,revision,channel,recipient,kind,ordinal,content_hash,state,created_at FROM units WHERE cut_id=? ORDER BY revision,channel,recipient,kind,ordinal",
+                (cut_id,),
+            ).fetchall()
+        ]
+        obligations = [
+            dict(row)
+            for row in self.con.execute(
+                "SELECT o.notice_json,o.state,o.opened_cut FROM cut_obligations c JOIN obligations o ON o.id=c.notice_id WHERE c.cut_id=?",
+                (cut_id,),
+            ).fetchall()
+        ]
+        issues = [
+            dict(row)
+            for row in self.con.execute(
+                "SELECT id,kind,subject,reason,resolved FROM issues WHERE cut_id=?", (cut_id,)
+            ).fetchall()
+        ]
         return {
             "cut": cut,
-            "sources": [{"source_key": row["source_key"], "status": row["status"], "details": json.loads(row["details_json"]), "late": bool(row["late"])} for row in source_rows],
-            "assessment": self.sealed_assessment(cut_id) or (json.loads(cut["draft_json"]) if cut["draft_json"] else {}),
+            "sources": [
+                {
+                    "source_key": row["source_key"],
+                    "status": row["status"],
+                    "details": json.loads(row["details_json"]),
+                    "late": bool(row["late"]),
+                }
+                for row in source_rows
+            ],
+            "assessment": self.sealed_assessment(cut_id)
+            or (json.loads(cut["draft_json"]) if cut["draft_json"] else {}),
             "units": units,
             "obligations": obligations,
             "issues": issues,

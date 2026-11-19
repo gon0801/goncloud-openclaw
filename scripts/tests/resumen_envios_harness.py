@@ -352,6 +352,22 @@ class Harness(unittest.TestCase):
         self.assertEqual(3, len({entry["unit_id"] for entry in self.hub.outbox}))
         self.assertEqual("complete", view["cut"]["state"])
 
+    def test_advance_recovers_inflight_from_previous_cut(self):
+        fixture = one_order_fixture()
+        service = self.service(fixture)
+        self.run_all(service, fixture, deliver=False)
+        first = sorted(
+            service.store.pending_units(), key=lambda unit: (unit["created_at"], unit["id"])
+        )[0]
+        self.hub.rules[first["id"]] = "crash_after_accept"
+        with self.assertRaises(SimulatedCrash):
+            service.runner().deliver_pending(current_cut=self.cut_id(fixture))
+        self.assertEqual(1, len(service.store.attempts(("in_flight",))))
+        view = self.run_all(service, fixture)
+        self.assertEqual(3, len(self.hub.outbox))
+        self.assertEqual(3, len({entry["unit_id"] for entry in self.hub.outbox}))
+        self.assertEqual("complete", view["cut"]["state"])
+
     def test_uncertain_delivery_blocks_automatic_retry(self):
         fixture = one_order_fixture()
         service = self.service(fixture)
@@ -412,6 +428,31 @@ class Harness(unittest.TestCase):
 
         def work(name):
             store = Store(self.root / "first.sqlite")
+            self.stores.append(store)
+            service = CutService(store, self.hub, self.root / "locks")
+            barrier.wait()
+            return service.resume_cut(self.cut_id(fixture))
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            list(executor.map(work, ("a", "b")))
+        self.assertEqual(3, len(self.hub.outbox))
+        self.assertEqual(3, len({entry["unit_id"] for entry in self.hub.outbox}))
+
+    def test_concurrent_reconciliation_rechecks_attempt_under_lock(self):
+        fixture = one_order_fixture()
+        first_service = self.service(fixture, "reconcile.sqlite")
+        self.run_all(first_service, fixture, deliver=False)
+        email = next(
+            unit for unit in first_service.store.pending_units() if unit["channel"] == "email"
+        )
+        self.hub.rules[email["id"]] = "unknown_without_accept"
+        first_service.runner().deliver_pending(current_cut=self.cut_id(fixture))
+        self.hub.rules[email["id"]] = "accepted"
+        first_service.store.close()
+        barrier = threading.Barrier(2)
+
+        def work(_):
+            store = Store(self.root / "reconcile.sqlite")
             self.stores.append(store)
             service = CutService(store, self.hub, self.root / "locks")
             barrier.wait()
@@ -501,6 +542,21 @@ class Harness(unittest.TestCase):
         self.assertIn("plazo por verificar", self.summaries("david")[0]["content"])
         self.assertIn("SKU interno por confirmar", self.summaries("david")[0]["content"])
 
+    def test_missing_quantity_is_defect_not_a_fictitious_one(self):
+        fixture = one_order_fixture()
+        del fixture["sources"][1]["orders"][0]["lines"][0]["quantity"]
+        view = self.run_all(self.service(fixture), fixture)
+        expected = oracle.evaluate(fixture)
+        self.assertEqual("incomplete", view["assessment"]["source_statuses"]["amazon_mx_self"])
+        self.assertEqual(expected["source_statuses"], view["assessment"]["source_statuses"])
+        self.assertEqual("partial", view["cut"]["state"])
+        summaries = self.summaries()
+        self.assertTrue(summaries)
+        text = "\n".join(entry["content"] for entry in summaries)
+        self.assertIn("Cantidad:</b> por verificar", text)
+        self.assertNotIn("× 0", text)
+        self.assertNotIn("× 1", text)
+
     def test_non_durable_source_is_incomplete(self):
         fixture = load_fixture()
         fixture["sources"][2]["durable"] = False
@@ -574,6 +630,30 @@ class Harness(unittest.TestCase):
         self.assertEqual(
             2, store.con.execute("SELECT COUNT(*) FROM plans WHERE sealed=1").fetchone()[0]
         )
+
+    def test_failure_during_plan_does_not_leave_sealed_without_units(self):
+        fixture = one_order_fixture()
+        service = self.service(fixture)
+        original = service.store.create_unit
+        calls = {"count": 0}
+
+        def fail_on_second_unit(*args, **kwargs):
+            calls["count"] += 1
+            if calls["count"] == 2:
+                raise RuntimeError("fallo ficticio durante el plan")
+            return original(*args, **kwargs)
+
+        service.store.create_unit = fail_on_second_unit
+        with self.assertRaises(RuntimeError):
+            self.run_all(service, fixture, deliver=False)
+        self.assertIsNone(service.store.get_cut(self.cut_id(fixture))["sealed_revision"])
+        service.store.create_unit = original
+        self.run_all(service, fixture, deliver=False)
+        self.assertIsNotNone(service.store.get_cut(self.cut_id(fixture))["sealed_revision"])
+        self.assertEqual(3, len(service.store.pending_units()))
+        view = service.resume_cut(self.cut_id(fixture))
+        self.assertEqual("complete", view["cut"]["state"])
+        self.assertEqual(3, len({entry["unit_id"] for entry in self.hub.outbox}))
 
     def test_timezone_transitions_and_business_calendar(self):
         order = amazon_order("TZ", "2026-03-09")

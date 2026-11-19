@@ -133,7 +133,7 @@ class LineObservation:
     key: LineKey
     sku: str
     internal_sku: Optional[str]
-    quantity: int
+    quantity: Optional[int]
     customization: Optional[Customization] = None
 
     @classmethod
@@ -143,7 +143,7 @@ class LineObservation:
             key=LineKey(order=order, native_line_id=str(raw["id"])),
             sku=str(raw.get("sku", "")),
             internal_sku=raw.get("internal_sku"),
-            quantity=int(raw.get("quantity", 1)),
+            quantity=int(raw["quantity"]) if raw.get("quantity") is not None else None,
             customization=Customization.from_dict(customization) if customization else None,
         )
 

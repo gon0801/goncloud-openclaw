@@ -7,7 +7,8 @@ from .domain import LineObservation, NoticeKey, OrderObservation, SOURCE_KEYS
 
 
 def line_text(line: LineObservation) -> str:
-    fields = [f"<b>SKU:</b> {escape(line.sku)} × {line.quantity}"]
+    quantity = f" × {line.quantity}" if line.quantity is not None else "\n<b>Cantidad:</b> por verificar"
+    fields = [f"<b>SKU:</b> {escape(line.sku)}{quantity}"]
     fields.append(f"<b>SKU interno:</b> {escape(line.internal_sku) if line.internal_sku else 'SKU interno por confirmar'}")
     if line.customization:
         customization = line.customization
