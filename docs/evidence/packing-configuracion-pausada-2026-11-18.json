@@ -1,0 +1,465 @@
+{
+  "capturado_en_utc": "2026-11-19T02:09:43Z",
+  "modo_inspeccion": "solo_lectura",
+  "automatizacion_pausada_confirmada": true,
+  "zona_horaria_referencia_pedido": "America/Vancouver",
+  "nota_deriva_dst": "Los 6 crons pausados estaban programados en America/Mexico_City (UTC-6 fijo sin horario de verano). Eso equivale a 18:00/18:15/18:30, 05:00 y 09:00 America/Vancouver solo en invierno (PST, UTC-8); durante PDT (UTC-7, marzo a noviembre) se desplazaban una hora tarde en Vancouver (19:00/19:15/19:30, 06:00 y 10:00).",
+  "trabajos_pausados": [
+    {
+      "job_id": "f4b33b14-8af2-487c-82d8-10fa103ca9a3",
+      "name": "packing-digest-faseA-censo",
+      "corte_pedido": "principal_revision_18_00",
+      "enabled": false,
+      "agent_id": "operaciones",
+      "schedule": {
+        "kind": "cron",
+        "expr": "0 20 * * 0-4",
+        "tz": "America/Mexico_City"
+      },
+      "equivalente_vancouver_pst": "0 18 * * 0-4 (domingo a jueves 18:00)",
+      "session_target": "isolated",
+      "wake_mode": "now",
+      "delivery": {
+        "mode": "none",
+        "channel": "last"
+      },
+      "timeout_seconds": 3000,
+      "model_override": null,
+      "message_chars": 7485,
+      "message_sha256": "5be80a70dc35c04b1b9da46228c7d1588d9124ca311510ca1b725d904725ee6d",
+      "updated_at_ms": 1795050697326,
+      "updated_at_utc": "2026-11-19T01:11:37.326000+00:00",
+      "ultimas_corridas": [
+        {
+          "status": "ok",
+          "started_at_utc": "2026-11-18T02:00:00.325000+00:00",
+          "finished_at_utc": "2026-11-18T02:44:55.661000+00:00",
+          "duration_seconds": 2695.3
+        },
+        {
+          "status": "ok",
+          "started_at_utc": "2026-11-17T02:00:00.435000+00:00",
+          "finished_at_utc": "2026-11-17T02:46:00.786000+00:00",
+          "duration_seconds": 2760.4
+        }
+      ]
+    },
+    {
+      "job_id": "3feb7c34-3fba-42f3-96db-c770ff5abd60",
+      "name": "packing-digest-faseB-armado",
+      "corte_pedido": "principal_armado_18_15",
+      "enabled": false,
+      "agent_id": "operaciones",
+      "schedule": {
+        "kind": "cron",
+        "expr": "15 20 * * 0-4",
+        "tz": "America/Mexico_City"
+      },
+      "equivalente_vancouver_pst": "15 18 * * 0-4 (domingo a jueves 18:15)",
+      "session_target": "isolated",
+      "wake_mode": "now",
+      "delivery": {
+        "mode": "none",
+        "channel": "last"
+      },
+      "timeout_seconds": 3300,
+      "model_override": null,
+      "message_chars": 4490,
+      "message_sha256": "dd42ee4b16e09d157056dede12a6d38d8b0fbd88c4a469cf33149918499c5374",
+      "updated_at_ms": 1795050697492,
+      "updated_at_utc": "2026-11-19T01:11:37.492000+00:00",
+      "ultimas_corridas": [
+        {
+          "status": "ok",
+          "started_at_utc": "2026-11-18T02:15:00.362000+00:00",
+          "finished_at_utc": "2026-11-18T02:44:55.866000+00:00",
+          "duration_seconds": 1795.5
+        },
+        {
+          "status": "ok",
+          "started_at_utc": "2026-11-17T02:15:00.311000+00:00",
+          "finished_at_utc": "2026-11-17T02:46:38.241000+00:00",
+          "duration_seconds": 1897.9
+        }
+      ]
+    },
+    {
+      "job_id": "7ad289a8-6c80-44f0-8bc4-220ba5e051e3",
+      "name": "packing-digest-faseC-envio",
+      "corte_pedido": "principal_envio_18_30",
+      "enabled": false,
+      "agent_id": "operaciones",
+      "schedule": {
+        "kind": "cron",
+        "expr": "30 20 * * 0-4",
+        "tz": "America/Mexico_City"
+      },
+      "equivalente_vancouver_pst": "30 18 * * 0-4 (domingo a jueves 18:30)",
+      "session_target": "isolated",
+      "wake_mode": "now",
+      "delivery": {
+        "mode": "none",
+        "channel": "last"
+      },
+      "timeout_seconds": 3600,
+      "model_override": null,
+      "message_chars": 4538,
+      "message_sha256": "c2d719d9db26222b9a72f23fc311cc6859efdd0b1563fbfaa7ddf593c04af0c7",
+      "updated_at_ms": 1795050697150,
+      "updated_at_utc": "2026-11-19T01:11:37.150000+00:00",
+      "ultimas_corridas": [
+        {
+          "status": "ok",
+          "started_at_utc": "2026-11-18T02:30:00.278000+00:00",
+          "finished_at_utc": "2026-11-18T02:52:44.427000+00:00",
+          "duration_seconds": 1364.1
+        },
+        {
+          "status": "ok",
+          "started_at_utc": "2026-11-17T02:30:00.318000+00:00",
+          "finished_at_utc": "2026-11-17T02:56:16.910000+00:00",
+          "duration_seconds": 1576.6
+        }
+      ]
+    },
+    {
+      "job_id": "7bb5fac4-a1bb-4b85-b4ed-7ceeb187cbc3",
+      "name": "packing-extras-7h",
+      "corte_pedido": "temprano_05_00",
+      "enabled": false,
+      "agent_id": "operaciones",
+      "schedule": {
+        "kind": "cron",
+        "expr": "0 7 * * 1-5",
+        "tz": "America/Mexico_City",
+        "staggerMs": 0
+      },
+      "equivalente_vancouver_pst": "0 5 * * 1-5 (lunes a viernes 05:00)",
+      "session_target": "isolated",
+      "wake_mode": "now",
+      "delivery": {
+        "mode": "none",
+        "channel": "last"
+      },
+      "timeout_seconds": 3600,
+      "model_override": null,
+      "message_chars": 12891,
+      "message_sha256": "86faac55cf0509d881b7650ef3af7a610f4e76af3b2c223580261bf56b43e459",
+      "updated_at_ms": 1795050697655,
+      "updated_at_utc": "2026-11-19T01:11:37.655000+00:00",
+      "ultimas_corridas": [
+        {
+          "status": "ok",
+          "started_at_utc": "2026-11-18T13:00:00.019000+00:00",
+          "finished_at_utc": "2026-11-18T13:04:22.694000+00:00",
+          "duration_seconds": 262.7
+        },
+        {
+          "status": "ok",
+          "started_at_utc": "2026-11-17T13:00:00.439000+00:00",
+          "finished_at_utc": "2026-11-17T13:17:52.932000+00:00",
+          "duration_seconds": 1072.5
+        }
+      ]
+    },
+    {
+      "job_id": "9386486d-37d6-4ae1-bf7b-12892527f2d9",
+      "name": "packing-extras-11h",
+      "corte_pedido": "ultimo_09_00",
+      "enabled": false,
+      "agent_id": "operaciones",
+      "schedule": {
+        "kind": "cron",
+        "expr": "0 11 * * 1-5",
+        "tz": "America/Mexico_City",
+        "staggerMs": 0
+      },
+      "equivalente_vancouver_pst": "0 9 * * 1-5 (lunes a viernes 09:00)",
+      "session_target": "isolated",
+      "wake_mode": "now",
+      "delivery": {
+        "mode": "none",
+        "channel": "last"
+      },
+      "timeout_seconds": 3600,
+      "model_override": null,
+      "message_chars": 13070,
+      "message_sha256": "adb3a7f2869333b562b8943593717567fe2f22c080e7075f037ce6ff45e372ac",
+      "updated_at_ms": 1795050697818,
+      "updated_at_utc": "2026-11-19T01:11:37.818000+00:00",
+      "ultimas_corridas": [
+        {
+          "status": "ok",
+          "started_at_utc": "2026-11-18T17:00:00.310000+00:00",
+          "finished_at_utc": "2026-11-18T17:01:25.310000+00:00",
+          "duration_seconds": 85.0
+        },
+        {
+          "status": "ok",
+          "started_at_utc": "2026-11-17T17:00:00.007000+00:00",
+          "finished_at_utc": "2026-11-17T17:05:58.957000+00:00",
+          "duration_seconds": 359.0
+        }
+      ]
+    },
+    {
+      "job_id": "0aa73c30-19b4-4f06-ac8e-6661a7e1dfb3",
+      "name": "verif-digest-20h",
+      "corte_pedido": "vigia_principal",
+      "enabled": false,
+      "agent_id": "main",
+      "schedule": {
+        "kind": "cron",
+        "expr": "35 21 * * 0-4",
+        "tz": "America/Mexico_City",
+        "staggerMs": 0
+      },
+      "equivalente_vancouver_pst": "35 19 * * 0-4 (domingo a jueves 19:35)",
+      "session_target": "isolated",
+      "wake_mode": "now",
+      "delivery": {
+        "mode": "none",
+        "channel": "last"
+      },
+      "timeout_seconds": 600,
+      "model_override": "anthropic/claude-sonnet-5-5",
+      "fallbacks_override": [
+        "zai/glm-5.3",
+        "xai/grok-4.7",
+        "opencode-go-2/deepseek-v4.1-flash"
+      ],
+      "message_chars": 6341,
+      "message_sha256": "8b77d3dfa1f57cbb4942fbab40218c55ff7f14b4b33ea888faed3b7a27954974",
+      "updated_at_ms": 1795050710044,
+      "updated_at_utc": "2026-11-19T01:11:50.044000+00:00",
+      "ultimas_corridas": [
+        {
+          "status": "ok",
+          "started_at_utc": "2026-11-18T03:35:00.439000+00:00",
+          "finished_at_utc": "2026-11-18T03:35:22.025000+00:00",
+          "duration_seconds": 21.6
+        },
+        {
+          "status": "ok",
+          "started_at_utc": "2026-11-17T03:35:00.433000+00:00",
+          "finished_at_utc": "2026-11-17T03:35:17.489000+00:00",
+          "duration_seconds": 17.1
+        }
+      ]
+    }
+  ],
+  "agentes_openclaw_relacionados": {
+    "operaciones": {
+      "primary": "anthropic/claude-sonnet-5-5",
+      "fallbacks": [
+        "openai/gpt-6.1-terra",
+        "xai/grok-4.7",
+        "opencode-go-2/deepseek-v4.1-flash",
+        "zai/glm-5.3"
+      ]
+    },
+    "amazon": {
+      "primary": "anthropic/claude-sonnet-5-5",
+      "fallbacks": [
+        "openai/gpt-6.1-terra",
+        "xai/grok-4.7",
+        "opencode-go-2/deepseek-v4.1-flash",
+        "zai/glm-5.3"
+      ]
+    },
+    "meli": {
+      "primary": "anthropic/claude-sonnet-5-5",
+      "fallbacks": [
+        "openai/gpt-6.1-terra",
+        "xai/grok-4.7",
+        "opencode-go-2/deepseek-v4.1-flash",
+        "zai/glm-5.3"
+      ]
+    },
+    "odoo": {
+      "primary": "anthropic/claude-sonnet-5-5",
+      "fallbacks": [
+        "openai/gpt-6.1-terra",
+        "xai/grok-4.7",
+        "opencode-go-2/deepseek-v4.1-flash",
+        "zai/glm-5.3"
+      ]
+    },
+    "pers": {
+      "primary": "anthropic/claude-sonnet-5-5",
+      "fallbacks": [
+        "openai/gpt-6.1-terra",
+        "xai/grok-4.7",
+        "opencode-go-2/deepseek-v4.1-flash",
+        "zai/glm-5.3"
+      ]
+    },
+    "mail": {
+      "primary": "opencode-go-2/deepseek-v4.1-flash",
+      "fallbacks": [
+        "anthropic/claude-haiku-5-5",
+        "openai/gpt-6-luna",
+        "xai/grok-4.7",
+        "zai/glm-5.3-flash"
+      ]
+    },
+    "main": {
+      "primary": "anthropic/claude-opus-5-5",
+      "fallbacks": [
+        "openai/gpt-6.2-sol",
+        "kimi/k3.1-pro",
+        "xai/grok-4.7",
+        "opencode-go-2/deepseek-v4.1-flash"
+      ]
+    }
+  },
+  "artefactos_gateway_mac_mini": [
+    {
+      "path": "/Users/gon/.openclaw/workspace-operaciones/packing/RUNBOOK-20h.md",
+      "bytes": 31706,
+      "sha256": "cbf2b6d204dead9f664ba3c073f4447ac1271d96192d1906fda43a210077a4a3"
+    },
+    {
+      "path": "/Users/gon/.openclaw/workspace-operaciones/packing/meli_census_directo.py",
+      "bytes": 19139,
+      "sha256": "bae406bd4aaaa231ae995169a356ceed50555eb954111faaeb1af729d6f69b7e"
+    },
+    {
+      "path": "/Users/gon/.openclaw/workspace-operaciones/packing/tmp/build_faseb_v7.py",
+      "bytes": 15271,
+      "sha256": "e93fa92073b5b92d0676244987e4f3481ac50fd9ef8bb607294eca5b9c9b5b47"
+    },
+    {
+      "path": "/Users/gon/.openclaw/workspace-operaciones/packing/tmp/fase_wait_artefacto.sh",
+      "bytes": 2746,
+      "sha256": "cf6fd6cfd9e06c155a060f39d666a34da341bd4e286cabf4becd4e0c19025f2e"
+    },
+    {
+      "path": "/Users/gon/.openclaw/workspace-operaciones/packing/tmp/faseC_marca.sh",
+      "bytes": 1074,
+      "sha256": "2d232b0d2810e0882ffe777ac23350a35578a481f7a3d04640aa933d73674a9f"
+    },
+    {
+      "path": "/Users/gon/.openclaw/workspace-operaciones/packing/tmp/census_sc_resume.py",
+      "bytes": 4388,
+      "sha256": "d8ddf26da495c8d134d3d3d8177809407d61c7cf073f16c3107e68b3a1490361"
+    }
+  ],
+  "artefactos_gonserver": [
+    {
+      "path": "/home/claw/send_sales_digest.sh",
+      "bytes": 2335,
+      "sha256": "b0bea2da9013454845460c5f10f4472e2f773d67af2435cec969f8569d42047f",
+      "coincide_con_repo_main": true
+    },
+    {
+      "path": "/home/claw/packing/send_pers_photo.sh",
+      "bytes": 5751,
+      "sha256": "3611375834edcd1c0c18d8acd30de796b64e70d3848079fc820287749d217371",
+      "coincide_con_repo_main": false,
+      "nota": "En gonserver corre v3 (acepta archivo de caption, valida prefijo /tmp/ y longitud >=20, soporta PERS_DRYRUN=1); en main esta v2 (4714 bytes)."
+    },
+    {
+      "path": "/home/claw/packing/meli_census_directo.py",
+      "bytes": 19139,
+      "sha256": "bae406bd4aaaa231ae995169a356ceed50555eb954111faaeb1af729d6f69b7e",
+      "coincide_con_repo_main": false,
+      "nota": "Idéntico a workspace-operaciones/packing/meli_census_directo.py en Mac mini; no versionado aún en el repo."
+    },
+    {
+      "path": "/home/claw/packing/census_v2_pipe.sh",
+      "bytes": 7606,
+      "sha256": "0be4d0da617faedd3392fdc53c098e559b3a0c7c9599a14bc9373c8a38316750",
+      "coincide_con_repo_main": false,
+      "nota": "Variante instalada en gonserver respecto a scripts/gonserver/census_v2_pipe.sh (7370 bytes en main)."
+    }
+  ],
+  "destinatarios_pausados": {
+    "principal_con_pedidos": {
+      "correo": [
+        "ehventasmx@gmail.com"
+      ],
+      "telegram_resumen": [
+        "David (TELEGRAM_CHAT_ID)",
+        "Isabel (TELEGRAM_CHAT_ID_2)"
+      ],
+      "telegram_excluidos_resumen": [
+        "Jorge (TELEGRAM_CHAT_ID_CUSTOM)"
+      ]
+    },
+    "principal_sin_pedidos_fuentes_completas": {
+      "correo": [],
+      "telegram_aviso_corto": [
+        "David (TELEGRAM_CHAT_ID)",
+        "Isabel (TELEGRAM_CHAT_ID_2)"
+      ],
+      "fotos": []
+    },
+    "repasos_con_extras": {
+      "correo_solo_si_hay_extras_amazon": [
+        "ehventasmx@gmail.com"
+      ],
+      "telegram_resumen": [
+        "David (TELEGRAM_CHAT_ID)",
+        "Isabel (TELEGRAM_CHAT_ID_2)"
+      ],
+      "telegram_excluidos_resumen": [
+        "Jorge (TELEGRAM_CHAT_ID_CUSTOM)"
+      ]
+    },
+    "repasos_sin_extras_fuentes_completas": {
+      "correo": [],
+      "telegram_resumen": [],
+      "fotos": []
+    },
+    "fotos_personalizadas_amazon": {
+      "momento": "envio separado 5 minutos despues del resumen normal",
+      "telegram_sendphoto": [
+        "David (TELEGRAM_CHAT_ID)",
+        "Isabel (TELEGRAM_CHAT_ID_2)",
+        "Jorge (TELEGRAM_CHAT_ID_CUSTOM)"
+      ]
+    }
+  },
+  "registros_vivos_de_entregas": [
+    {
+      "ubicacion": "/Users/gon/.openclaw/workspace-operaciones/envios-del-dia/<D>-amazon.html y <D>-meli.html",
+      "funcion": "Linea base del corte principal por dia de despacho D, con comentario <!-- meli_order_id=<id> --> en tarjetas de Mercado Libre."
+    },
+    {
+      "ubicacion": "/Users/gon/.openclaw/workspace-operaciones/envios-del-dia/<D>-extras-amazon.html, <D>-extras-meli.html, <D>-extras11-amazon.html y <D>-extras11-meli.html",
+      "funcion": "Historial de pedidos extras ya reportados en los repasos de las 07:00 y 11:00 CDMX."
+    },
+    {
+      "ubicacion": "/Users/gon/.openclaw/workspace-operaciones/packing/tmp/faseC_marcas/<D>_{telegram,mail,fotos}.done",
+      "funcion": "Marcas por canal del envio nocturno (contienen marca temporal UTC y msg_ids o uid de Enviados)."
+    },
+    {
+      "ubicacion": "gonserver:/home/claw/packing/personalizadas-sent.json",
+      "funcion": "Registro bajo flock de fotos de personalizadas enviadas a los 3 chats (71 entradas al 2026-11-18T02:52:30Z, incluida 702-2506388-8128230-marco2)."
+    },
+    {
+      "ubicacion": "/Users/gon/.openclaw/state/openclaw.sqlite (cron_run_receipts y cron_job_scratch)",
+      "funcion": "Recibos de ejecucion de crons y resumenes scratch por job_id."
+    }
+  ],
+  "evaluacion_pr_386": {
+    "pr_numero": 386,
+    "rama": "encargo/enc_4d384e148abccc69",
+    "head_sha": "1890868f3f0313fe6b72f3c149d1672e86bdd622",
+    "aplicado_en_produccion": false,
+    "reutilizar": [
+      "Cobertura de la vista Seller Central orders-v3/mfn/shipped/easyship?shipByDate=all&page=1 incluyendo solo Waiting for Pick Up y Pending Drop off y excluyendo Picked Up, Dropped off, entregados y cancelados.",
+      "Seleccion individual de destinatario en Telegram mediante TG_SOLO_CHATS en send_sales_digest.sh para enviar contenido diferencial distinto a David e Isabel sin mezclarlos.",
+      "Modelo de recibos por destinatario vinculados a pedidos y huellas SHA-256, mas bloqueo de reenvio automatico cuando una entrega queda en_curso o indeterminado."
+    ],
+    "descartar": [
+      "Prohibicion absoluta de consultar Odoo incluso para equivalencia de SKU interno, lo que contradice usar Odoo en solo lectura para cotejar equivalencia de SKU.",
+      "Aborto obligatorio cuando falta el par nocturno <D>-amazon.html y <D>-meli.html, lo que contradice recuperar pedidos en los repasos aunque falte la lista principal.",
+      "Rechazo total de envios parciales cuando falla o se retrasa una fuente, lo que contradice emitir Resumen parcial con la parte comprobada.",
+      "Detencion del pedido personalizado sin vista previa en lugar de incluir el pedido con Personalizacion incompleta: falta imagen y enviar despues solo la foto recuperada.",
+      "Identificacion de personalizadas solo por order_id sin distinguir multiples lineas personalizadas dentro de un mismo pedido ni recibos por parte (hasta 50 partes) en Telegram.",
+      "Bateria de contrato por expresiones regulares sobre texto de prompt (test-packing-extras-11h.sh)."
+    ]
+  }
+}
