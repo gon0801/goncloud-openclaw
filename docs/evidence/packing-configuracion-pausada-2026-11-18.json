@@ -3,7 +3,24 @@
   "modo_inspeccion": "solo_lectura",
   "automatizacion_pausada_confirmada": true,
   "zona_horaria_referencia_pedido": "America/Vancouver",
-  "nota_deriva_dst": "Los 6 crons pausados estaban programados en America/Mexico_City (UTC-06:00 fijo todo el año). En tzdata vigente, America/Vancouver opera en UTC-07:00 permanente desde el 2026-03-08 (solo estuvo en PST, UTC-08:00, antes de esa fecha y no regresó a UTC-08:00 en noviembre de 2026). Por eso, en noviembre de 2026 los seis trabajos se ejecutaban una hora después de los cortes pedidos en America/Vancouver: 19:00, 19:15, 19:30 y 20:35 (domingo a jueves), y 06:00 y 10:00 (lunes a viernes).",
+  "nota_deriva_dst": "Los 6 crons pausados estaban programados en America/Mexico_City (UTC-06:00 fijo todo el año). En el host Gons-Mac-Mini (tzdata 2026f en /usr/share/zoneinfo/+VERSION -> /var/db/timezone/tz/2026f.1.0), America/Vancouver opera en UTC-07:00 permanente desde el 2026-03-08: según zdump -v America/Vancouver, el 2026-11-01T09:00:00Z pasa de PDT (isdst=1, gmtoff=-25200) a MST (isdst=0, gmtoff=-25200) sin regresar a PST (UTC-08:00) ni registrar transiciones posteriores. Por eso, en noviembre de 2026 los cinco cortes con hora pedida corrían 60 minutos después en America/Vancouver (19:00, 19:15, 19:30, 06:00 y 10:00 frente a 18:00, 18:15, 18:30, 05:00 y 09:00) y el vigía 35 21 * * 0-4 CDMX corría a las 20:35 de Vancouver.",
+  "evidencia_tzdata_vancouver": {
+    "host": "Gons-Mac-Mini",
+    "tzdata_version_file": "/usr/share/zoneinfo/+VERSION",
+    "tzdata_version": "2026f",
+    "zoneinfo_bundle": "/var/db/timezone/tz/2026f.1.0",
+    "zoneinfo_path": "/usr/share/zoneinfo/America/Vancouver",
+    "zoneinfo_bytes": 2590,
+    "zoneinfo_sha256": "e182e20ec67c46a7dd0aedb3d45fb1395edcb14ff2af2ac694a5776b307bed31",
+    "node_intl_2026_11_18T02_00_00Z": "2026-11-17 19:00:00 GMT−07:00",
+    "zdump_v_2026_verbatim": [
+      "America/Vancouver  Sun Mar  8 09:59:59 2026 UT = Sun Mar  8 01:59:59 2026 PST isdst=0 gmtoff=-28800",
+      "America/Vancouver  Sun Mar  8 10:00:00 2026 UT = Sun Mar  8 03:00:00 2026 PDT isdst=1 gmtoff=-25200",
+      "America/Vancouver  Sun Nov  1 08:59:59 2026 UT = Sun Nov  1 01:59:59 2026 PDT isdst=1 gmtoff=-25200",
+      "America/Vancouver  Sun Nov  1 09:00:00 2026 UT = Sun Nov  1 02:00:00 2026 MST isdst=0 gmtoff=-25200",
+      "America/Vancouver  Wed Dec 31 23:59:59 2147485547 UT = Wed Dec 31 16:59:59 2147485547 MST isdst=0 gmtoff=-25200"
+    ]
+  },
   "trabajos_pausados": [
     {
       "job_id": "f4b33b14-8af2-487c-82d8-10fa103ca9a3",
