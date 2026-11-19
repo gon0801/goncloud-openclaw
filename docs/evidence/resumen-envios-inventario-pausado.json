@@ -1,0 +1,115 @@
+{
+  "schema_version": 1,
+  "capturado_en_utc": "2026-11-19T06:56:57Z",
+  "modo": "solo_lectura_sin_cambios_en_vivo",
+  "base_git": "84617a1817fa75423df2913975f3527699cbb83f",
+  "trabajos": [
+    {
+      "job_id": "f4b33b14-8af2-487c-82d8-10fa103ca9a3",
+      "name": "packing-digest-faseA-censo",
+      "enabled_db": 0,
+      "enabled_json": false,
+      "schedule": {"kind": "cron", "expr": "0 20 * * 0-4", "tz": "America/Mexico_City"},
+      "agent_id": "operaciones",
+      "timeout_seconds": 3000,
+      "message_sha256": "5be80a70dc35c04b1b9da46228c7d1588d9124ca311510ca1b725d904725ee6d",
+      "ultima_corrida": {"started_at_utc": "2026-11-18T02:00:00.325Z", "finished_at_utc": "2026-11-18T02:44:55.661Z", "status": "ok"}
+    },
+    {
+      "job_id": "3feb7c34-3fba-42f3-96db-c770ff5abd60",
+      "name": "packing-digest-faseB-armado",
+      "enabled_db": 0,
+      "enabled_json": false,
+      "schedule": {"kind": "cron", "expr": "15 20 * * 0-4", "tz": "America/Mexico_City"},
+      "agent_id": "operaciones",
+      "timeout_seconds": 3300,
+      "message_sha256": "dd42ee4b16e09d157056dede12a6d38d8b0fbd88c4a469cf33149918499c5374",
+      "ultima_corrida": {"started_at_utc": "2026-11-18T02:15:00.362Z", "finished_at_utc": "2026-11-18T02:44:55.866Z", "status": "ok"}
+    },
+    {
+      "job_id": "7ad289a8-6c80-44f0-8bc4-220ba5e051e3",
+      "name": "packing-digest-faseC-envio",
+      "enabled_db": 0,
+      "enabled_json": false,
+      "schedule": {"kind": "cron", "expr": "30 20 * * 0-4", "tz": "America/Mexico_City"},
+      "agent_id": "operaciones",
+      "timeout_seconds": 3600,
+      "message_sha256": "c2d719d9db26222b9a72f23fc311cc6859efdd0b1563fbfaa7ddf593c04af0c7",
+      "ultima_corrida": {"started_at_utc": "2026-11-18T02:30:00.278Z", "finished_at_utc": "2026-11-18T02:52:44.427Z", "status": "ok"}
+    },
+    {
+      "job_id": "7bb5fac4-a1bb-4b85-b4ed-7ceeb187cbc3",
+      "name": "packing-extras-7h",
+      "enabled_db": 0,
+      "enabled_json": false,
+      "schedule": {"kind": "cron", "expr": "0 7 * * 1-5", "tz": "America/Mexico_City", "staggerMs": 0},
+      "agent_id": "operaciones",
+      "timeout_seconds": 3600,
+      "message_sha256": "86faac55cf0509d881b7650ef3af7a610f4e76af3b2c223580261bf56b43e459",
+      "ultima_corrida": {"started_at_utc": "2026-11-18T13:00:00.019Z", "finished_at_utc": "2026-11-18T13:04:22.694Z", "status": "ok"}
+    },
+    {
+      "job_id": "9386486d-37d6-4ae1-bf7b-12892527f2d9",
+      "name": "packing-extras-11h",
+      "enabled_db": 0,
+      "enabled_json": false,
+      "schedule": {"kind": "cron", "expr": "0 11 * * 1-5", "tz": "America/Mexico_City", "staggerMs": 0},
+      "agent_id": "operaciones",
+      "timeout_seconds": 3600,
+      "message_sha256": "adb3a7f2869333b562b8943593717567fe2f22c080e7075f037ce6ff45e372ac",
+      "ultima_corrida": {"started_at_utc": "2026-11-18T17:00:00.310Z", "finished_at_utc": "2026-11-18T17:01:25.310Z", "status": "ok"}
+    },
+    {
+      "job_id": "0aa73c30-19b4-4f06-ac8e-6661a7e1dfb3",
+      "name": "verif-digest-20h",
+      "enabled_db": 0,
+      "enabled_json": false,
+      "schedule": {"kind": "cron", "expr": "35 21 * * 0-4", "tz": "America/Mexico_City", "staggerMs": 0},
+      "agent_id": "main",
+      "timeout_seconds": 600,
+      "message_sha256": "8b77d3dfa1f57cbb4942fbab40218c55ff7f14b4b33ea888faed3b7a27954974",
+      "ultima_corrida": {"started_at_utc": "2026-11-18T03:35:00.439Z", "finished_at_utc": "2026-11-18T03:35:22.025Z", "status": "ok"}
+    }
+  ],
+  "zona_horaria": {
+    "zona_propuesta": "America/Vancouver",
+    "fuente": "zoneinfo y /usr/sbin/zdump en el host pausado",
+    "transiciones_comprobadas": [
+      "2025-11-02T09:00:00Z: PDT UTC-07:00 a PST UTC-08:00",
+      "2026-03-08T10:00:00Z: PST UTC-08:00 a PDT UTC-07:00",
+      "2026-11-01T09:00:00Z: PDT UTC-07:00 a MST UTC-07:00"
+    ],
+    "zdump_2026_11_01_verbatim": "America/Vancouver  Sun Nov  1 09:00:00 2026 UT = Sun Nov  1 02:00:00 2026 MST isdst=0 gmtoff=-25200",
+    "regla": "Usar la zona IANA del ejecutor; no fijar offset ni convertir mediante America/Mexico_City"
+  },
+  "registros_vivos": {
+    "envios_del_dia": {"ubicacion": "workspace-operaciones/envios-del-dia", "archivos_observados": 179, "conservar": true, "limitacion": "sin cobertura fiable por destinatario"},
+    "faseC_marcas": {"ubicacion": "workspace-operaciones/packing/tmp/faseC_marcas", "archivos_observados": 60, "conservar": true, "limitacion": "marcas por fecha/canal, no por destinatario y parte"},
+    "personalizadas_sent": {"ubicacion": "gonserver:/home/claw/packing/personalizadas-sent.json", "entradas_observadas": 71, "formas_observadas": {"msg_ids_ok3_partial_sent_at_utc": 66, "sin_partial": 4, "otra_forma_historica": 1}, "conservar": true},
+    "openclaw_sqlite": {"tablas": ["cron_jobs", "cron_run_receipts", "cron_job_scratch"], "conservar": true},
+    "packing_estado_nuevo": {"existe": false}
+  },
+  "helpers": {
+    "send_sales_digest_instalado": {"bytes": 2335, "selecciona_destinatario": false, "comprueba": "ok:true y message_id por chat"},
+    "send_pers_photo_instalado": {"bytes": 5751, "difiere_de_main": true, "conservar": true, "comprueba": "recibos parciales por indice bajo flock"},
+    "gmail": {"comprueba": "borrador ausente y fila en Enviados con asunto/destinatario", "cierre_compose_es_recibo": false}
+  },
+  "destinatarios_propuestos_para_aprobacion": {
+    "principal": {"correo": ["OPERACION"], "telegram_resumen": ["DAVID", "ISABEL"], "telegram_fotos": ["DAVID", "ISABEL", "JORGE"]},
+    "repaso": {"correo_solo_amazon": ["OPERACION"], "telegram_resumen": ["DAVID", "ISABEL"], "telegram_fotos": ["DAVID", "ISABEL", "JORGE"]},
+    "aviso_revision_incompleta_sin_pedidos_comprobados": {"telegram": ["DAVID", "ISABEL"], "correo": [], "pendiente_aprobacion": true}
+  },
+  "retorno_minimo": {
+    "accion": "mantener_o_dejar_enabled_0_en_los_seis_trabajos_juntos",
+    "job_ids": [
+      "f4b33b14-8af2-487c-82d8-10fa103ca9a3",
+      "3feb7c34-3fba-42f3-96db-c770ff5abd60",
+      "7ad289a8-6c80-44f0-8bc4-220ba5e051e3",
+      "7bb5fac4-a1bb-4b85-b4ed-7ceeb187cbc3",
+      "9386486d-37d6-4ae1-bf7b-12892527f2d9",
+      "0aa73c30-19b4-4f06-ac8e-6661a7e1dfb3"
+    ],
+    "conservar_sin_truncar": ["envios-del-dia", "faseC_marcas", "personalizadas-sent.json", "openclaw.sqlite"],
+    "aplicado": false
+  }
+}

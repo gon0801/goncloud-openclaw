@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "head": "1890868f3f0313fe6b72f3c149d1672e86bdd622",
+  "modo": "mock_local_sin_red_real",
+  "bateria_propia": {"pruebas": 13, "fallos": 0},
+  "caso_adicional_espacios": {
+    "entrada_TG_SOLO_CHATS": "1, 2",
+    "destinatarios_esperados": 2,
+    "posts_observados": 1,
+    "exit_observado": 0,
+    "resultado": "exito_incorrecto_falta_un_destinatario"
+  },
+  "caso_cambio_pago": {
+    "antes_de_quitar_pago_pendiente": {"pedidos_pendientes": {}},
+    "despues_de_quitar_pago_pendiente": {"correo": ["701-0000000-0000003"], "telegram_gon": ["701-0000000-0000003"], "telegram_isabel": ["701-0000000-0000003"]},
+    "resultado": "reabre_tres_entregas_confirmadas_por_cambiar_la_huella"
+  },
+  "decision": "reutilizar_solo_ideas_acotadas_tras_ensayo_no_el_helper_ni_el_estado_sin_corregir"
+}

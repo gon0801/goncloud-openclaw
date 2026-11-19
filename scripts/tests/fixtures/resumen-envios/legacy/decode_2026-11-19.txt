@@ -1,0 +1,7 @@
+113-0000000-0000001|COR-ITA-DOR|Producto US ficticio
+702-0000000-0000002|PERS-COR-ITA-DOR|Producto Easy ficticio
+701-0000000-0000003|COR-ITA-PLA|Producto Self ficticio
+702-0000000-0000004|CEN-ITA-DOR|Producto fecha ficticio
+701-0000000-0000005|SAN-ITA-PLA|Producto Flex ficticio
+2000000000000001|PEZ-ITA-DOR|Producto ML ficticio
+2000000000000002|PEZ-ITA-PLA|Producto confirmar ficticio

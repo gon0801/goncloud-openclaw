@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "modo": "datos_ficticios_sin_red_sin_escrituras_de_produccion",
+  "legacy_sha256": "e93fa92073b5b92d0676244987e4f3481ac50fd9ef8bb607294eca5b9c9b5b47",
+  "entrada": "scripts/tests/fixtures/resumen-envios/legacy",
+  "resultado_observado": {
+    "conteos": {
+      "amazon_self_us": 1,
+      "amazon_self_mx": 1,
+      "amazon_easy_mx": 2,
+      "amazon_flex": 1,
+      "meli_por_empacar": 1,
+      "meli_por_confirmar": 1,
+      "total": 6
+    },
+    "partes_chars": [574, 790, 237],
+    "ml_por_confirmar_visible_en_alguna_parte": false,
+    "pedido_con_shipby_ilegible_recibio_fecha_del_corte": true,
+    "pago_pendiente_visible": true
+  },
+  "conclusion": "El armado anterior no sirve como oraculo del nuevo contrato: omite ML por confirmar y adivina la fecha cuando ship-by es ilegible."
+}

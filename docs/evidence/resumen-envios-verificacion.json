@@ -1,0 +1,84 @@
+{
+  "schema_version": 1,
+  "base": "84617a1817fa75423df2913975f3527699cbb83f",
+  "modo": "sin_red_real_sin_credenciales_sin_escrituras_de_produccion",
+  "prototipo": {
+    "comando": "bash scripts/tests/test-resumen-envios.sh",
+    "ensayos_unittest": 29,
+    "resultado": "OK",
+    "cubren": [
+      "tres_cortes",
+      "fuentes_y_contadores_incompletos",
+      "duplicados_y_conflictos_entre_vistas",
+      "pago_pendiente_y_cambio_de_contenido",
+      "personalizacion_multilinea_y_foto_tardia",
+      "parcial_y_recuperacion_sin_lista_principal",
+      "entrega_asimetrica_A_luego_B",
+      "capacidad_50_y_overflow",
+      "interrupcion_y_reinicio",
+      "fallo_al_guardar",
+      "entrega_incierta_y_ausencia_confirmada",
+      "concurrencia_de_cortes_y_workers",
+      "historial_ambiguo",
+      "transiciones_horarias",
+      "fallo_durante_sellado_y_replanificacion",
+      "recuperacion_en_advance_cut",
+      "conciliacion_concurrente_bajo_lock",
+      "cantidad_ausente_como_defecto_no_inventado"
+    ]
+  },
+  "vistas_previas": {
+    "comando": "python3 -m scripts.tests.resumen_envios_previews > docs/evidence/resumen-envios-vistas-previas.json",
+    "cortes": ["principal", "temprano", "ultimo"],
+    "eligible_matches_oracle": true,
+    "sources_match_oracle": true,
+    "transportes": "simulados"
+  },
+  "comparacion_legado": {
+    "comando": "bash scripts/tests/test-resumen-envios-legado.sh",
+    "resultado": "COMPARACION_REPRODUCIDA",
+    "ml_confirmar_visible_en_legado": false,
+    "fecha_ilegible_sustituida_en_legado": true
+  },
+  "pr386": {
+    "bateria_mock_propia": {"pruebas": 13, "fallos": 0},
+    "espacios_seleccion_chats": {"exit": 0, "posts": 1, "esperados": 2},
+    "quitar_pago_pendiente_reabre_entregas": true,
+    "decision": "nucleo_nuevo_sin_importar_helper_ni_estado"
+  },
+  "estatico": {
+    "ruff": "All checks passed",
+    "gitleaks_staged": "no leaks found",
+    "git_diff_check": "limpio",
+    "cli_sin_dryrun": {"exit": 2, "crea_base": false}
+  },
+  "bateria_estandar": {
+    "comando": "bash tests/run.sh",
+    "entrypoints_nuevos": {
+      "test-resumen-envios.sh": "OK",
+      "test-resumen-envios-legado.sh": "OK"
+    },
+    "resultado_global": "4 fallos previos de la base",
+    "fallos_previos": [
+      "test-ci-una-vez-por-bloque.sh",
+      "test-contrato-dispatch.sh",
+      "test-plans-fila-check.sh",
+      "test-summa-gate-quality-entrypoints.sh"
+    ],
+    "regresiones_nuevas_observadas": 0
+  },
+  "revision_801aa5e": {
+    "F1_sellado_prematuro": "corregido_sellar_al_final_y_regresion_por_fallo_intermedio",
+    "F2_advance_sin_recuperacion": "corregido_recover_and_deliver_en_todos_los_caminos",
+    "F3_conciliacion_concurrente": "corregido_releer_intento_bajo_lock_y_regresion",
+    "F5_cantidad_ausente": "corregido_fuente_incompleta_y_cantidad_por_verificar",
+    "F6_unidades_no_selladas": "corregido_solo_revision_sellada_vigente_y_borradores_superseded",
+    "F4_zona_horaria": "no_aplicada_zdump_host_confirma_MST_UTC_07_verbatim_en_inventario"
+  },
+  "no_verificado": [
+    "pedidos_actuales_en_plataformas_en_vivo",
+    "gmail_o_telegram_reales",
+    "margen_real_09_00_frente_a_11_00_por_falta_de_preparacion_y_recolecciones",
+    "interpretacion_exhaustiva_de_todos_los_registros_historicos"
+  ]
+}
