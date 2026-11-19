@@ -1,6 +1,8 @@
 <!-- project: github.com/gon0801/goncloud-openclaw -->
 # Odoo census cross-check (`census_v2_pipe.sh`)
 
+No aplica al job 9386486d-37d6-4ae1-bf7b-12892527f2d9. Ese corte sigue `docs/cron-messages/packing-extras-11h.v17.txt`, usa la vista Seller Central de Easy Ship etiquetados y prohíbe Q3, el helper MELI heredado y toda vía Odoo. Esta excepción no cambia los demás cortes.
+
 Read this before running, debugging, or modifying `packing/tmp/census_v2_pipe.sh <D>` in the operations workspace — the script behind the SKILL.md rule that a zero/silence conclusion must be backed by Odoo, not queue counters.
 
 ## Which sections still feed the digest

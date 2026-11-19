@@ -53,6 +53,7 @@ run_sut() { # [$1=env] corre el SUT contra el mock; salida en $TMPD/out, exit en
 }
 nposts() { wc -l < "$TMPD/mock.log" 2>/dev/null || echo 0; }
 post_ids() { python3 -c "import json;print(' '.join(json.loads(l)['chat_id'] for l in open('$TMPD/mock.log')))" 2>/dev/null; }
+post_hashes() { python3 -c "import json;print(' '.join(json.loads(l)['text_sha'] for l in open('$TMPD/mock.log')))" 2>/dev/null; }
 
 echo "### T2 caso 1: destinos + ok:true en ambos (esperado: 11111,22222,DIGEST_OK2,exit 0)"
 start_mock ok; run_sut; stop_mock
@@ -127,6 +128,36 @@ start_mock ok; run_sut "$TMPD/dirty.env"; stop_mock
 [ "$(post_ids)" = "11111 22222" ] && grep -q DIGEST_OK2 "$TMPD/out" \
   && ok "chat ids limpios" \
   || bad "ids=[$(post_ids)] out=[$(head -c 120 "$TMPD/out")]"
+
+echo "### T2 caso 11: reintento parcial omite el chat con recibo verificado"
+start_mock fail-second; run_sut; stop_mock
+[ "$RC" -eq 1 ] && [ "$(post_ids)" = "11111 22222" ] \
+  && ok "primer intento parcial conserva el recibo de Gon en la salida" \
+  || bad "preparacion parcial: ids=[$(post_ids)] rc=$RC"
+start_mock ok
+TG_SKIP_CHATS_CON_RECIBO=1 TG_SCHEME=http TG_API_HOST="127.0.0.1:$MOCK_PORT" TG_ENV="$TMPD/tg_test.env" \
+  bash "$SUT" "$TMPD/digest.txt" > "$TMPD/out" 2>&1; RC=$?; stop_mock
+[ "$(nposts)" -eq 1 ] && [ "$(post_ids)" = "22222" ] && [ "$RC" -eq 0 ] \
+  && grep -q 'DIGEST_OMITIDO chat#1' "$TMPD/out" && grep -q DIGEST_OK2 "$TMPD/out" \
+  && ok "reintento envia solo a Isabel y no duplica a Gon" \
+  || bad "reintento parcial: posts=$(nposts) ids=[$(post_ids)] rc=$RC out=[$(head -c 180 "$TMPD/out")]"
+
+echo "### T2 caso 12: cada chat pendiente recibe su propio contenido diferencial"
+printf 'pedido B' > "$TMPD/gon.txt"
+printf 'pedidos A y B' > "$TMPD/isabel.txt"
+start_mock ok
+TG_SOLO_CHATS=1 TG_SCHEME=http TG_API_HOST="127.0.0.1:$MOCK_PORT" TG_ENV="$TMPD/tg_test.env" \
+  bash "$SUT" "$TMPD/gon.txt" > "$TMPD/out.gon" 2>&1; RC_GON=$?
+TG_SOLO_CHATS=2 TG_SCHEME=http TG_API_HOST="127.0.0.1:$MOCK_PORT" TG_ENV="$TMPD/tg_test.env" \
+  bash "$SUT" "$TMPD/isabel.txt" > "$TMPD/out.isabel" 2>&1; RC_ISABEL=$?
+stop_mock
+[ "$(nposts)" -eq 2 ] && [ "$(post_ids)" = "11111 22222" ] \
+  && [ "$(post_hashes | awk '{print $1}')" != "$(post_hashes | awk '{print $2}')" ] \
+  && [ "$RC_GON" -eq 0 ] && [ "$RC_ISABEL" -eq 0 ] \
+  && grep -q 'DIGEST_OK_SELECCION chats:1' "$TMPD/out.gon" \
+  && grep -q 'DIGEST_OK_SELECCION chats:2' "$TMPD/out.isabel" \
+  && ok "Gon recibe solo B e Isabel recibe A+B en llamadas independientes" \
+  || bad "diferencial: posts=$(nposts) ids=[$(post_ids)] rc_gon=$RC_GON rc_isabel=$RC_ISABEL"
 
 echo "### T2 resultado: PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]
