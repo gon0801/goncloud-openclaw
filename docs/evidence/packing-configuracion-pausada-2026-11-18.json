@@ -3,7 +3,7 @@
   "modo_inspeccion": "solo_lectura",
   "automatizacion_pausada_confirmada": true,
   "zona_horaria_referencia_pedido": "America/Vancouver",
-  "nota_deriva_dst": "Los 6 crons pausados estaban programados en America/Mexico_City (UTC-6 fijo sin horario de verano). Eso equivale a 18:00/18:15/18:30, 05:00 y 09:00 America/Vancouver solo en invierno (PST, UTC-8); durante PDT (UTC-7, marzo a noviembre) se desplazaban una hora tarde en Vancouver (19:00/19:15/19:30, 06:00 y 10:00).",
+  "nota_deriva_dst": "Los 6 crons pausados estaban programados en America/Mexico_City (UTC-06:00 fijo todo el año). En tzdata vigente, America/Vancouver opera en UTC-07:00 permanente desde el 2026-03-08 (solo estuvo en PST, UTC-08:00, antes de esa fecha y no regresó a UTC-08:00 en noviembre de 2026). Por eso, en noviembre de 2026 los seis trabajos se ejecutaban una hora después de los cortes pedidos en America/Vancouver: 19:00, 19:15, 19:30 y 20:35 (domingo a jueves), y 06:00 y 10:00 (lunes a viernes).",
   "trabajos_pausados": [
     {
       "job_id": "f4b33b14-8af2-487c-82d8-10fa103ca9a3",
@@ -16,7 +16,7 @@
         "expr": "0 20 * * 0-4",
         "tz": "America/Mexico_City"
       },
-      "equivalente_vancouver_pst": "0 18 * * 0-4 (domingo a jueves 18:00)",
+      "equivalente_vancouver": "0 19 * * 0-4 (domingo a jueves 19:00, UTC-07:00)",
       "session_target": "isolated",
       "wake_mode": "now",
       "delivery": {
@@ -55,7 +55,7 @@
         "expr": "15 20 * * 0-4",
         "tz": "America/Mexico_City"
       },
-      "equivalente_vancouver_pst": "15 18 * * 0-4 (domingo a jueves 18:15)",
+      "equivalente_vancouver": "15 19 * * 0-4 (domingo a jueves 19:15, UTC-07:00)",
       "session_target": "isolated",
       "wake_mode": "now",
       "delivery": {
@@ -94,7 +94,7 @@
         "expr": "30 20 * * 0-4",
         "tz": "America/Mexico_City"
       },
-      "equivalente_vancouver_pst": "30 18 * * 0-4 (domingo a jueves 18:30)",
+      "equivalente_vancouver": "30 19 * * 0-4 (domingo a jueves 19:30, UTC-07:00)",
       "session_target": "isolated",
       "wake_mode": "now",
       "delivery": {
@@ -134,7 +134,7 @@
         "tz": "America/Mexico_City",
         "staggerMs": 0
       },
-      "equivalente_vancouver_pst": "0 5 * * 1-5 (lunes a viernes 05:00)",
+      "equivalente_vancouver": "0 6 * * 1-5 (lunes a viernes 06:00, UTC-07:00)",
       "session_target": "isolated",
       "wake_mode": "now",
       "delivery": {
@@ -174,7 +174,7 @@
         "tz": "America/Mexico_City",
         "staggerMs": 0
       },
-      "equivalente_vancouver_pst": "0 9 * * 1-5 (lunes a viernes 09:00)",
+      "equivalente_vancouver": "0 10 * * 1-5 (lunes a viernes 10:00, UTC-07:00)",
       "session_target": "isolated",
       "wake_mode": "now",
       "delivery": {
@@ -214,7 +214,7 @@
         "tz": "America/Mexico_City",
         "staggerMs": 0
       },
-      "equivalente_vancouver_pst": "35 19 * * 0-4 (domingo a jueves 19:35)",
+      "equivalente_vancouver": "35 20 * * 0-4 (domingo a jueves 20:35, UTC-07:00)",
       "session_target": "isolated",
       "wake_mode": "now",
       "delivery": {
@@ -230,6 +230,21 @@
       ],
       "message_chars": 6341,
       "message_sha256": "8b77d3dfa1f57cbb4942fbab40218c55ff7f14b4b33ea888faed3b7a27954974",
+      "reglas_vigia_pausado": {
+        "version_prompt": "VERIF DIGEST 20H v2",
+        "diferencia_con_antecedente_repo": "docs/crons/verif-digest-20h.md documenta v1 (c812d541-bc38-4a5d-9bef-49239a9cee03, 45 20 * * 0-4 CDMX en Windows sobre eeae2a74-6389-4e83-a80a-d0ae6cdc7988). El trabajo pausado real (0aa73c30-19b4-4f06-ac8e-6661a7e1dfb3, 35 21 * * 0-4 CDMX = 20:35 Vancouver, aunque su encabezado textual dice 20:45 CDMX) corre en Gons-Mac-Mini sobre los artefactos de faseB/faseC e incorpora A4 para sin_pedidos:true.",
+        "comprobaciones": [
+          "packing/tmp/faseB_<D>.json (ok:true, sin_pedidos, partes 0..50), envios-del-dia/<D>-amazon.html, <D>-meli.html y packing/tmp/digest_<D>_pN.txt",
+          "gmail2 en cuenta ehventasmx para subject:\"Ventas para <D>\" en [Gmail]/Enviados y [Gmail]/Borradores",
+          "faseC_marca.sh get <D> telegram|mail|fotos y openclaw cron runs / sessions_history de 7ad289a8-6c80-44f0-8bc4-220ba5e051e3"
+        ],
+        "casos": {
+          "CASO_A_OK": "Silencio total (no avisa a nadie) si se cumple A1 (mail en Enviados + Telegram msg_ids o marca HECHO + al menos un HTML), A2 (sentinels legados Q1..Q3/CENSUS_V2_OK), A3 (par HTML o faseB_<D>.json ok:true con mtime >= 20:00 CDMX sin exigir cron ok) o A4 (sin_pedidos:true + Telegram corto confirmado).",
+          "CASO_B_EN_CURSO": "Si faseB o faseC siguen en ejecucion o tuvieron actividad en los ultimos 10 min sin cierre e INTENTO < 3/3, agenda one-shot +15 min (20:50 y 21:05 Vancouver, deleteAfterRun, agente main); en INTENTO 3/3 sin cierre escala a CASO C.",
+          "CASO_C_FALLA": "Envia un unico mensaje por Telegram solo a David (TELEGRAM_CHAT_ID), maximo 6 lineas, con 'El digest de packing de las 20h NO salio' o 'no se puede comprobar', causa de una linea, hora CDMX y 'Quieres que lo corra ahora? Responde SI y lo lanzo.' (salvo prefijo MODO PRUEBA). Correo, Isabel y Jorge no reciben aviso."
+        },
+        "relacion_con_corte_incompleto": "En la configuracion pausada, un corte principal incompleto dejaba a Isabel y correo sin aviso mientras David podia recibir alertas de faseA, faseB, faseC y verif-digest-20h v2. Si se emitiera el nuevo aviso de revision incompleta sin pedidos comprobados con verif-digest-20h v2 activo, este clasificaria CASO C (sin mail en Enviados ni sin_pedidos:true) enviando un segundo aviso contradictorio a David; ademas A1 no distingue Resumen parcial de corte completo y A3 aprueba por mtime sin verificar entrega a Isabel."
+      },
       "updated_at_ms": 1795050710044,
       "updated_at_utc": "2026-11-19T01:11:50.044000+00:00",
       "ultimas_corridas": [
@@ -419,12 +434,36 @@
         "Isabel (TELEGRAM_CHAT_ID_2)",
         "Jorge (TELEGRAM_CHAT_ID_CUSTOM)"
       ]
+    },
+    "principal_incompleto_o_fallo_fases_a_b_c": {
+      "correo": [],
+      "telegram_alerta_tecnica": [
+        "David (TELEGRAM_CHAT_ID)"
+      ],
+      "condicion": "MELI_CENSUS_FAIL o falta CENSUS_V2_OK en faseA, abort:true o FASE_TIMEOUT en faseB/faseC (igual en abortos de packing-extras-7h/11h)",
+      "sin_notificacion": [
+        "ehventasmx@gmail.com",
+        "Isabel (TELEGRAM_CHAT_ID_2)",
+        "Jorge (TELEGRAM_CHAT_ID_CUSTOM)"
+      ]
+    },
+    "vigia_verif_digest_20h_caso_c": {
+      "correo": [],
+      "telegram_alerta_vigia": [
+        "David (TELEGRAM_CHAT_ID)"
+      ],
+      "reintentos_caso_b": "hasta 2 one-shots a +15 min (INTENTO 2/3 a las 20:50 Vancouver e INTENTO 3/3 a las 21:05 Vancouver)",
+      "sin_notificacion": [
+        "ehventasmx@gmail.com",
+        "Isabel (TELEGRAM_CHAT_ID_2)",
+        "Jorge (TELEGRAM_CHAT_ID_CUSTOM)"
+      ]
     }
   },
   "registros_vivos_de_entregas": [
     {
       "ubicacion": "/Users/gon/.openclaw/workspace-operaciones/envios-del-dia/<D>-amazon.html y <D>-meli.html",
-      "funcion": "Linea base del corte principal por dia de despacho D, con comentario <!-- meli_order_id=<id> --> en tarjetas de Mercado Libre."
+      "funcion": "Linea base compartida del corte principal por dia de despacho D, con comentario <!-- meli_order_id=<id> --> en tarjetas de Mercado Libre; carece de granularidad por destinatario, por lo que el retorno exige mantener pausados los crons legados hasta conciliar o aislar cualquier entrega asimetrica."
     },
     {
       "ubicacion": "/Users/gon/.openclaw/workspace-operaciones/envios-del-dia/<D>-extras-amazon.html, <D>-extras-meli.html, <D>-extras11-amazon.html y <D>-extras11-meli.html",
@@ -451,9 +490,10 @@
     "reutilizar": [
       "Cobertura de la vista Seller Central orders-v3/mfn/shipped/easyship?shipByDate=all&page=1 incluyendo solo Waiting for Pick Up y Pending Drop off y excluyendo Picked Up, Dropped off, entregados y cancelados.",
       "Seleccion individual de destinatario en Telegram mediante TG_SOLO_CHATS en send_sales_digest.sh para enviar contenido diferencial distinto a David e Isabel sin mezclarlos.",
-      "Modelo de recibos por destinatario vinculados a pedidos y huellas SHA-256, mas bloqueo de reenvio automatico cuando una entrega queda en_curso o indeterminado."
+      "Recibos por destinatario con bloqueo de reenvio automatico cuando un intento queda en_curso o indeterminado, conservando la huella SHA-256 solo como evidencia inmutable de lo enviado mientras la obligacion pendiente se evalua por identidad estable (plataforma, cuenta, pedido) (y linea en fotos personalizadas), de modo que quitar pago pendiente al confirmarse el pago o pasar a atrasado por si solo no reabra ni repita un pedido ya confirmado."
     ],
     "descartar": [
+      "Reapertura de entregas ya confirmadas en scripts/mac/packing_extras_state.py (missing_content en lineas 115-118 y read_batch en lineas 211-233; anclas :118 y :229) al comparar delivered.get(order_id) != fingerprint sobre el bloque completo, lo que reenvia el pedido a quienes ya lo recibieron cuando se confirma el pago (quitando pago pendiente) o cambia atrasado.",
       "Prohibicion absoluta de consultar Odoo incluso para equivalencia de SKU interno, lo que contradice usar Odoo en solo lectura para cotejar equivalencia de SKU.",
       "Aborto obligatorio cuando falta el par nocturno <D>-amazon.html y <D>-meli.html, lo que contradice recuperar pedidos en los repasos aunque falte la lista principal.",
       "Rechazo total de envios parciales cuando falla o se retrasa una fuente, lo que contradice emitir Resumen parcial con la parte comprobada.",
