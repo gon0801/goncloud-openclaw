@@ -1,0 +1,143 @@
+{
+  "cut": {"kind": "principal", "local_date": "2026-11-18", "at": "2026-11-18T18:30:00-07:00"},
+  "times": ["2026-11-18T18:00:00-07:00", "2026-11-18T18:15:00-07:00", "2026-11-18T18:30:00-07:00"],
+  "history": {"complete_since": "2026-01-01T00:00:00Z"},
+  "sources": [
+    {
+      "key": "amazon_mx_easy",
+      "received_at": "2026-11-18T18:05:00-07:00",
+      "checks": [
+        {"name": "unshipped", "ok": true, "verified": "cola completa"},
+        {"name": "pending", "ok": true, "verified": "cola completa"},
+        {"name": "guides", "ok": true, "verified": "guías completas"}
+      ],
+      "orders": [
+        {
+          "platform": "amazon", "account": "mx", "id": "A-NEW", "visible_id": "A-NEW",
+          "client": "Cliente Easy ficticio", "modality": "easy", "action": "pending_drop_off", "state": "pending",
+          "deadline": {"raw": "2026-11-19T10:00:00-07:00", "timezone": "America/Vancouver", "local_date": "2026-11-19"},
+          "first_seen_at": "2026-11-18T18:05:00-07:00",
+          "lines": [
+            {"id": "L1", "sku": "PERS-A", "internal_sku": "INT-A", "quantity": 1, "customization": {"text": "Texto exacto L1", "options": {"color": "dorado"}, "preview": null, "publication_photo": "fixture://foto-prohibida"}},
+            {"id": "L2", "sku": "PERS-B", "internal_sku": null, "quantity": 2, "customization": {"text": "Texto exacto L2", "options": {"marco": "rojo"}, "preview": "fixture://preview-line-2"}}
+          ]
+        },
+        {
+          "platform": "amazon", "account": "mx", "id": "A-NEW", "visible_id": "A-NEW",
+          "client": "Cliente Easy ficticio", "modality": "easy", "action": "pending_drop_off", "state": "pending",
+          "deadline": {"raw": "2026-11-19T10:00:00-07:00", "timezone": "America/Vancouver", "local_date": "2026-11-19"},
+          "first_seen_at": "2026-11-18T18:05:00-07:00",
+          "lines": [
+            {"id": "L1", "sku": "PERS-A", "internal_sku": "INT-A", "quantity": 1, "customization": {"text": "Texto exacto L1", "options": {"color": "dorado"}, "preview": null, "publication_photo": "fixture://foto-prohibida"}},
+            {"id": "L2", "sku": "PERS-B", "internal_sku": null, "quantity": 2, "customization": {"text": "Texto exacto L2", "options": {"marco": "rojo"}, "preview": "fixture://preview-line-2"}}
+          ]
+        },
+        {
+          "platform": "amazon", "account": "mx", "id": "A-DONE", "visible_id": "A-DONE",
+          "client": "Cliente entregado ficticio", "modality": "easy", "action": "pending_drop_off", "state": "delivered_to_carrier",
+          "deadline": {"raw": "2026-11-19T10:00:00-07:00", "timezone": "America/Vancouver", "local_date": "2026-11-19"},
+          "first_seen_at": "2026-11-18T18:05:00-07:00",
+          "lines": [{"id": "L1", "sku": "SKU-DONE", "internal_sku": "INT-DONE", "quantity": 1}]
+        }
+      ]
+    },
+    {
+      "key": "amazon_mx_self",
+      "received_at": "2026-11-18T18:06:00-07:00",
+      "checks": [{"name": "unshipped", "ok": true, "verified": "cola completa"}, {"name": "pending", "ok": true, "verified": "cola completa"}],
+      "orders": [
+        {
+          "platform": "amazon", "account": "mx", "id": "A-PAY", "visible_id": "A-PAY",
+          "client": "Cliente pago ficticio", "modality": "self", "action": "ship", "state": "pending", "payment_pending": true,
+          "deadline": {"raw": "2026-11-19T12:00:00-07:00", "timezone": "America/Vancouver", "local_date": "2026-11-19"},
+          "first_seen_at": "2026-11-18T18:06:00-07:00",
+          "lines": [{"id": "L1", "sku": "SKU-PAY", "internal_sku": null, "quantity": 1}]
+        },
+        {
+          "platform": "amazon", "account": "mx", "id": "A-FUTURE", "visible_id": "A-FUTURE",
+          "client": "Cliente futuro ficticio", "modality": "self", "action": "ship", "state": "pending",
+          "deadline": {"raw": "2026-11-20T12:00:00-07:00", "timezone": "America/Vancouver", "local_date": "2026-11-20"},
+          "first_seen_at": "2026-11-18T18:06:00-07:00",
+          "lines": [{"id": "L1", "sku": "SKU-FUTURE", "internal_sku": "INT-FUTURE", "quantity": 1}]
+        }
+      ]
+    },
+    {
+      "key": "amazon_us_self",
+      "received_at": "2026-11-18T18:07:00-07:00",
+      "checks": [{"name": "unshipped", "ok": true, "verified": "cola completa"}, {"name": "pending", "ok": true, "verified": "cola completa"}],
+      "orders": [
+        {
+          "platform": "amazon", "account": "us", "id": "A-US", "visible_id": "A-US",
+          "client": "Cliente US ficticio", "modality": "self", "action": "ship", "state": "pending",
+          "deadline": {"raw": "2026-11-19T09:00:00-08:00", "timezone": "America/Vancouver", "local_date": "2026-11-19"},
+          "first_seen_at": "2026-11-18T18:07:00-07:00",
+          "lines": [{"id": "L1", "sku": "SKU-US", "internal_sku": "INT-US", "quantity": 1}]
+        }
+      ]
+    },
+    {
+      "key": "amazon_seller_flex",
+      "received_at": "2026-11-18T18:08:00-07:00",
+      "checks": [{"name": "flex_all", "ok": true, "verified": "Flex completo"}],
+      "orders": [
+        {
+          "platform": "amazon", "account": "mx", "id": "A-FLEX", "visible_id": "A-FLEX",
+          "client": "Cliente Flex ficticio", "modality": "flex", "action": "waiting_for_pickup", "state": "pending",
+          "deadline": {"raw": "2026-11-19T11:00:00-07:00", "timezone": "America/Vancouver", "local_date": "2026-11-19"},
+          "first_seen_at": "2026-11-18T18:08:00-07:00",
+          "lines": [{"id": "L1", "sku": "SKU-FLEX", "internal_sku": "INT-FLEX", "quantity": 1}]
+        }
+      ]
+    },
+    {
+      "key": "ml_pack",
+      "received_at": "2026-11-18T18:09:00-07:00",
+      "checks": [{"name": "to_pack", "ok": true, "verified": "por empacar completo", "expected_count": 2, "observed_count": 2}],
+      "orders": [
+        {
+          "platform": "mercado_libre", "account": "mx", "id": "ML-PACK", "visible_id": "PANEL-PACK",
+          "client": "Cliente ML ficticio", "modality": "ml", "action": "pack", "state": "pending",
+          "deadline": {"raw": "2026-11-19T12:00:00-06:00", "timezone": "America/Mexico_City", "local_date": "2026-11-19"},
+          "first_seen_at": "2026-11-18T18:09:00-07:00",
+          "lines": [{"id": "ML-L1", "sku": "SKU-ML", "internal_sku": "INT-ML", "quantity": 1}]
+        },
+        {
+          "platform": "mercado_libre", "account": "mx", "id": "ML-CANCEL", "visible_id": "PANEL-CANCEL",
+          "client": "Cliente cancelado ficticio", "modality": "ml", "action": "pack", "state": "cancelled",
+          "deadline": {"raw": "2026-11-19T12:00:00-06:00", "timezone": "America/Mexico_City", "local_date": "2026-11-19"},
+          "first_seen_at": "2026-11-18T18:09:00-07:00",
+          "lines": [{"id": "ML-L1", "sku": "SKU-CANCEL", "internal_sku": "INT-CANCEL", "quantity": 1}]
+        }
+      ]
+    },
+    {
+      "key": "ml_confirm",
+      "received_at": "2026-11-18T18:10:00-07:00",
+      "checks": [{"name": "to_confirm", "ok": true, "verified": "por confirmar completo", "expected_count": 3, "observed_count": 3}],
+      "orders": [
+        {
+          "platform": "mercado_libre", "account": "mx", "id": "ML-PACK", "visible_id": "PANEL-PACK",
+          "client": "Cliente ML ficticio", "modality": "ml", "action": "confirm", "state": "pending",
+          "deadline": {"raw": "2026-11-19T12:00:00-06:00", "timezone": "America/Mexico_City", "local_date": "2026-11-19"},
+          "first_seen_at": "2026-11-18T18:09:00-07:00",
+          "lines": [{"id": "ML-L1", "sku": "SKU-ML", "internal_sku": "INT-ML", "quantity": 1}]
+        },
+        {
+          "platform": "mercado_libre", "account": "mx", "id": "ML-CONF", "visible_id": "PANEL-CONF",
+          "client": "Cliente confirmar ficticio", "modality": "ml", "action": "confirm", "state": "pending",
+          "deadline": {"raw": "2026-11-19T13:00:00-06:00", "timezone": "America/Mexico_City", "local_date": "2026-11-19"},
+          "first_seen_at": "2026-11-18T18:10:00-07:00",
+          "lines": [{"id": "ML-L2", "sku": "SKU-CONF", "internal_sku": "INT-CONF", "quantity": 1}]
+        },
+        {
+          "platform": "mercado_libre", "account": "mx", "id": "ML-SHIPPED", "visible_id": "PANEL-SHIPPED",
+          "client": "Cliente despachado ficticio", "modality": "ml", "action": "confirm", "state": "shipped",
+          "deadline": {"raw": "2026-11-19T13:00:00-06:00", "timezone": "America/Mexico_City", "local_date": "2026-11-19"},
+          "first_seen_at": "2026-11-18T18:10:00-07:00",
+          "lines": [{"id": "ML-L3", "sku": "SKU-SHIPPED", "internal_sku": "INT-SHIPPED", "quantity": 1}]
+        }
+      ]
+    }
+  ]
+}

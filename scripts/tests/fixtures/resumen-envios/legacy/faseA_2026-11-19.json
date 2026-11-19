@@ -1,0 +1,22 @@
+{
+  "D": "2026-11-19",
+  "amazon_us": [
+    {"order": "113-0000000-0000001", "buyer": "Cliente US ficticio", "shipby": "Thu, Nov 19, 2026, 10:00 AM", "source_queue": "selfship", "pago_pendiente": false}
+  ],
+  "amazon_mx": [
+    {"order": "702-0000000-0000002", "buyer": "Cliente Easy ficticio", "shipby": "Thu, Nov 19, 2026, 10:00 AM", "source_queue": "easyship", "modalidad": "Pending Drop off", "carrier": "Paqueteria ficticia", "ventana": "10:00 AM CST", "pago_pendiente": false},
+    {"order": "701-0000000-0000003", "buyer": "Cliente Self ficticio", "shipby": "Thu, Nov 19, 2026, 10:00 AM", "source_queue": "selfship", "pago_pendiente": true},
+    {"order": "702-0000000-0000004", "buyer": "Cliente fecha ilegible", "shipby": null, "source_queue": "easyship", "modalidad": "Waiting for Pick Up", "pago_pendiente": false}
+  ],
+  "amazon_flex": [
+    {"order": "701-0000000-0000005", "buyer": "Cliente Flex ficticio", "shipby": "Thu, Nov 19, 2026, 10:00 AM", "envio_id": "FLEX-FICTICIO", "pago_pendiente": false}
+  ],
+  "meli_por_empacar": [
+    {"order": "2000000000000001", "venta_panel": "2000000000000099", "buyer": "Cliente ML ficticio", "estado": "paid", "compra": "2026-11-18 12:00"}
+  ],
+  "meli_por_confirmar": [
+    {"order": "2000000000000002", "venta_panel": "2000000000000098", "buyer": "Cliente confirmar ficticio", "estado": "ready_to_confirm", "compra": "2026-11-18 12:05"}
+  ],
+  "meli_resumen": {"por_empacar": 1, "por_confirmar": 1, "alerta_48h": 0},
+  "q3": []
+}
